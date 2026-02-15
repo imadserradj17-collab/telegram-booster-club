@@ -38,27 +38,36 @@ function daysRemaining(expiresAt: string): number {
   return Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86400000));
 }
 
-// ─── STATE MANAGEMENT ───
-// Track what the bot is waiting for from each chat
-// Format: chatId -> { state, data, timestamp }
-const pendingStates = new Map<number, { state: string; data?: any; ts: number }>();
-
-function setState(chatId: number, state: string, data?: any) {
-  pendingStates.set(chatId, { state, data, ts: Date.now() });
+// ─── STATE MANAGEMENT (Database-backed) ───
+async function setState(chatId: number, botTokenId: string, state: string, data?: any) {
+  const sb = supabaseAdmin();
+  await sb.from("bot_pending_states").upsert(
+    { chat_id: chatId, bot_token_id: botTokenId, state, data: data || {} },
+    { onConflict: "chat_id,bot_token_id" }
+  );
 }
 
-function getState(chatId: number) {
-  const s = pendingStates.get(chatId);
-  // Expire after 5 minutes
-  if (s && Date.now() - s.ts > 5 * 60 * 1000) {
-    pendingStates.delete(chatId);
-    return null;
-  }
-  return s || null;
+async function getState(chatId: number, botTokenId: string) {
+  const sb = supabaseAdmin();
+  // Clean up expired states (older than 5 minutes)
+  await sb.from("bot_pending_states")
+    .delete()
+    .lt("created_at", new Date(Date.now() - 5 * 60 * 1000).toISOString());
+
+  const { data } = await sb.from("bot_pending_states")
+    .select("state, data")
+    .eq("chat_id", chatId)
+    .eq("bot_token_id", botTokenId)
+    .maybeSingle();
+  return data ? { state: data.state, data: data.data } : null;
 }
 
-function clearState(chatId: number) {
-  pendingStates.delete(chatId);
+async function clearState(chatId: number, botTokenId: string) {
+  const sb = supabaseAdmin();
+  await sb.from("bot_pending_states")
+    .delete()
+    .eq("chat_id", chatId)
+    .eq("bot_token_id", botTokenId);
 }
 
 // Main admin keyboard
@@ -156,7 +165,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
 
     // /start command
     if (text === "/start") {
-      clearState(chatId);
+      await clearState(chatId, botToken);
       if (isAdmin) {
         const { data: subs } = await sb.from("telegram_subscribers").select("id, is_permanent, expires_at").eq("owner_id", ownerId);
         const { data: channels } = await sb.from("telegram_channels").select("id").eq("owner_id", ownerId);
@@ -209,7 +218,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
 
     // /cancel command
     if (text === "/cancel" || text === "إلغاء") {
-      clearState(chatId);
+      await clearState(chatId, botToken);
       if (isAdmin) {
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
@@ -241,7 +250,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
     }
 
     // ─── ADMIN STATE HANDLING ───
-    const currentState = getState(chatId);
+    const currentState = await getState(chatId, botToken);
 
     if (currentState) {
       switch (currentState.state) {
@@ -299,7 +308,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
             existingInfo = `\n\n⚠️ *مشترك حالياً:* ${status}\nسيتم تحديث الاشتراك.`;
           }
 
-          setState(chatId, "await_sub_days", { telegramUserId, telegramUsername });
+          await setState(chatId, botToken, "await_sub_days", { telegramUserId, telegramUsername });
 
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
@@ -324,7 +333,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
             return;
           }
 
-          clearState(chatId);
+          await clearState(chatId, botToken);
           const expiresAt = isPermanent ? null : new Date(Date.now() + days! * 86400000).toISOString();
 
           const { error } = await sb.from("telegram_subscribers").upsert(
@@ -391,7 +400,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
             }
           }
 
-          clearState(chatId);
+          await clearState(chatId, botToken);
 
           const chatInfo = await tg(botToken, "getChat", { chat_id: channelId });
           const channelName = chatInfo.ok ? chatInfo.result.title || `قناة ${channelId}` : `قناة ${channelId}`;
@@ -443,7 +452,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
 
         // ── BROADCAST ──
         case "await_broadcast": {
-          clearState(chatId);
+          await clearState(chatId, botToken);
           const { data: subs } = await sb.from("telegram_subscribers").select("telegram_user_id, is_permanent, expires_at").eq("owner_id", ownerId);
           const activeSubs = (subs || []).filter((s: any) => s.is_permanent || (s.expires_at && new Date(s.expires_at) > new Date()));
 
@@ -472,7 +481,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
 
         // ── SEARCH SUBSCRIBER ──
         case "await_search": {
-          clearState(chatId);
+          await clearState(chatId, botToken);
           const input = text.trim().replace(/^@/, "");
           const parsed = parseInt(input);
 
@@ -501,7 +510,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
 
         // ── DELETE SUBSCRIBER ──
         case "await_delete_sub": {
-          clearState(chatId);
+          await clearState(chatId, botToken);
           const parsed = parseInt(text.trim());
           if (isNaN(parsed)) {
             await tg(botToken, "sendMessage", { chat_id: chatId, text: "❌ أرسل رقم ID فقط.", reply_markup: adminKeyboard() });
@@ -567,7 +576,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
 
     switch (data) {
       case "add_subscriber": {
-        setState(chatId, "await_sub_id");
+        await setState(chatId, botToken, "await_sub_id");
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
           text: "👤 *إضافة مشترك*\n\nأرسل معرف المستخدم بإحدى الطرق:\n\n1️⃣ الـ Telegram ID (رقم)\n2️⃣ حوّل (Forward) رسالة منه\n\n💡 يمكنه معرفة ID بإرسال /id للبوت\n\n_أرسل /cancel للإلغاء_",
@@ -577,7 +586,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
       }
 
       case "list_subscribers": {
-        clearState(chatId);
+        await clearState(chatId, botToken);
         const { data: subs } = await sb.from("telegram_subscribers").select("*").eq("owner_id", ownerId).order("created_at", { ascending: false }).limit(20);
         if (!subs || subs.length === 0) {
           await tg(botToken, "sendMessage", { chat_id: chatId, text: "📋 لا يوجد مشتركون حالياً.", reply_markup: adminKeyboard() });
@@ -593,7 +602,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
       }
 
       case "manage_channels": {
-        clearState(chatId);
+        await clearState(chatId, botToken);
         const { data: channels } = await sb.from("telegram_channels").select("*").eq("owner_id", ownerId);
         if (!channels || channels.length === 0) {
           await tg(botToken, "sendMessage", { chat_id: chatId, text: "📺 لا توجد قنوات.", reply_markup: adminKeyboard() });
@@ -611,7 +620,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
       }
 
       case "add_channel": {
-        setState(chatId, "await_channel");
+        await setState(chatId, botToken, "await_channel");
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
           text: "📺 *إضافة قناة*\n\nأرسل بإحدى الطرق:\n\n1️⃣ معرف القناة (رقم سالب)\n2️⃣ @username القناة\n3️⃣ حوّل رسالة من القناة\n\n⚠️ البوت يجب أن يكون مسؤولاً!\n\n_أرسل /cancel للإلغاء_",
@@ -623,7 +632,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
       case "broadcast": {
         const { data: subs } = await sb.from("telegram_subscribers").select("is_permanent, expires_at").eq("owner_id", ownerId);
         const active = (subs || []).filter((s: any) => s.is_permanent || (s.expires_at && new Date(s.expires_at) > new Date())).length;
-        setState(chatId, "await_broadcast");
+        await setState(chatId, botToken, "await_broadcast");
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
           text: `📢 *رسالة جماعية*\n\nسيتم إرسالها لـ *${active}* مشترك نشط.\n\nأرسل الرسالة الآن (نص، صورة، فيديو...):\n\n_أرسل /cancel للإلغاء_`,
@@ -633,7 +642,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
       }
 
       case "search_subscriber": {
-        setState(chatId, "await_search");
+        await setState(chatId, botToken, "await_search");
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
           text: "🔍 *بحث عن مشترك*\n\nأرسل الـ ID أو @username:\n\n_أرسل /cancel للإلغاء_",
@@ -643,7 +652,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
       }
 
       case "delete_subscriber": {
-        setState(chatId, "await_delete_sub");
+        await setState(chatId, botToken, "await_delete_sub");
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
           text: "🗑 *حذف مشترك*\n\nأرسل الـ ID الرقمي للمشترك:\n\n⚠️ سيتم طرده من القنوات نهائياً.\n\n_أرسل /cancel للإلغاء_",
@@ -653,7 +662,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
       }
 
       case "stats": {
-        clearState(chatId);
+        await clearState(chatId, botToken);
         const { data: subs } = await sb.from("telegram_subscribers").select("*").eq("owner_id", ownerId);
         const { data: channels } = await sb.from("telegram_channels").select("*").eq("owner_id", ownerId);
         const total = subs?.length || 0;
@@ -671,7 +680,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
       }
 
       case "back": {
-        clearState(chatId);
+        await clearState(chatId, botToken);
         await tg(botToken, "sendMessage", { chat_id: chatId, text: "🤖 *لوحة التحكم*", parse_mode: "Markdown", reply_markup: adminKeyboard() });
         break;
       }
