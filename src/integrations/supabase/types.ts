@@ -16,21 +16,30 @@ export type Database = {
     Tables: {
       bot_tokens: {
         Row: {
+          admin_telegram_id: number | null
           created_at: string
           id: string
+          non_subscriber_message: string
           token: string
+          token_updated_at: string
           user_id: string
         }
         Insert: {
+          admin_telegram_id?: number | null
           created_at?: string
           id?: string
+          non_subscriber_message?: string
           token: string
+          token_updated_at?: string
           user_id: string
         }
         Update: {
+          admin_telegram_id?: number | null
           created_at?: string
           id?: string
+          non_subscriber_message?: string
           token?: string
+          token_updated_at?: string
           user_id?: string
         }
         Relationships: []

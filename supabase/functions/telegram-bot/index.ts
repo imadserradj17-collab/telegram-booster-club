@@ -22,14 +22,14 @@ async function getBotToken(ownerId: string): Promise<string | null> {
   return data?.token || null;
 }
 
-// Get bot token by token value (for webhook matching)
-async function getOwnerByToken(token: string): Promise<string | null> {
+// Get bot settings by token value (for webhook matching)
+async function getBotSettingsByToken(token: string): Promise<{ user_id: string; admin_telegram_id: number | null; non_subscriber_message: string } | null> {
   const { data } = await supabaseAdmin()
     .from("bot_tokens")
-    .select("user_id")
+    .select("user_id, admin_telegram_id, non_subscriber_message")
     .eq("token", token)
     .maybeSingle();
-  return data?.user_id || null;
+  return data || null;
 }
 
 // Telegram API call
@@ -58,7 +58,8 @@ function adminKeyboard() {
 }
 
 // Handle incoming updates
-async function handleUpdate(update: any, botToken: string, ownerId: string) {
+async function handleUpdate(update: any, botToken: string, ownerId: string, adminTelegramId: number | null, nonSubMessage: string) {
+  const sb = supabaseAdmin();
   const sb = supabaseAdmin();
 
   // Handle chat join requests - AUTO APPROVE
@@ -97,6 +98,11 @@ async function handleUpdate(update: any, botToken: string, ownerId: string) {
         chat_id: chatId,
         user_id: telegramUserId,
       });
+      // Send custom non-subscriber message
+      await tg(botToken, "sendMessage", {
+        chat_id: telegramUserId,
+        text: nonSubMessage,
+      });
     }
     return;
   }
@@ -108,15 +114,31 @@ async function handleUpdate(update: any, botToken: string, ownerId: string) {
     const text = msg.text || "";
     const fromId = msg.from.id;
 
-    // Check if this is the admin (bot owner's telegram - we use a state approach)
-    // For simplicity, anyone who sends /start to the bot can be the admin if they match
+    // Check if sender is the admin
+    const isAdmin = !adminTelegramId || fromId === adminTelegramId;
 
     if (text === "/start") {
+      if (isAdmin) {
+        await tg(botToken, "sendMessage", {
+          chat_id: chatId,
+          text: "🤖 *لوحة تحكم بوت الاشتراكات*\n\nمرحباً بك في نظام إدارة اشتراكات القنوات.\nاختر أحد الخيارات:",
+          parse_mode: "Markdown",
+          reply_markup: adminKeyboard(),
+        });
+      } else {
+        await tg(botToken, "sendMessage", {
+          chat_id: chatId,
+          text: nonSubMessage,
+        });
+      }
+      return;
+    }
+
+    // Only admin can use other commands
+    if (!isAdmin) {
       await tg(botToken, "sendMessage", {
         chat_id: chatId,
-        text: "🤖 *لوحة تحكم بوت الاشتراكات*\n\nمرحباً بك في نظام إدارة اشتراكات القنوات.\nاختر أحد الخيارات:",
-        parse_mode: "Markdown",
-        reply_markup: adminKeyboard(),
+        text: nonSubMessage,
       });
       return;
     }
@@ -313,7 +335,15 @@ async function handleUpdate(update: any, botToken: string, ownerId: string) {
   if (update.callback_query) {
     const cb = update.callback_query;
     const chatId = cb.message.chat.id;
+    const cbFromId = cb.from.id;
     const data = cb.data;
+
+    // Only admin can use callback buttons
+    const isCbAdmin = !adminTelegramId || cbFromId === adminTelegramId;
+    if (!isCbAdmin) {
+      await tg(botToken, "answerCallbackQuery", { callback_query_id: cb.id, text: "⛔ غير مصرح لك" });
+      return;
+    }
 
     await tg(botToken, "answerCallbackQuery", { callback_query_id: cb.id });
 
@@ -537,8 +567,8 @@ Deno.serve(async (req) => {
 
     if (req.method === "POST" && tokenFromPath && tokenFromPath.includes(":")) {
       // This is a webhook call from Telegram
-      const ownerId = await getOwnerByToken(tokenFromPath);
-      if (!ownerId) {
+      const settings = await getBotSettingsByToken(tokenFromPath);
+      if (!settings) {
         return new Response(JSON.stringify({ error: "Invalid token" }), {
           status: 404,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -546,7 +576,7 @@ Deno.serve(async (req) => {
       }
 
       const update = await req.json();
-      await handleUpdate(update, tokenFromPath, ownerId);
+      await handleUpdate(update, tokenFromPath, settings.user_id, settings.admin_telegram_id, settings.non_subscriber_message);
       return new Response("ok", { headers: corsHeaders });
     }
 

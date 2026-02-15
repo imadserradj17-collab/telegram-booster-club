@@ -2,9 +2,12 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import {
-  Send, LogOut, Plus, Trash2, RefreshCw, Users, Zap, Settings, Bot, Hash, UserPlus, Clock,
+  Send, LogOut, Plus, Trash2, RefreshCw, Users, Zap, Bot, Hash, UserPlus, Clock,
+  Settings, Key, Shield, MessageSquare, Save, Loader2,
 } from "lucide-react";
 
 interface TelegramChannel {
@@ -24,14 +27,29 @@ interface TelegramSubscriber {
   created_at: string;
 }
 
+interface BotSettings {
+  id: string;
+  token: string;
+  token_updated_at: string;
+  admin_telegram_id: number | null;
+  non_subscriber_message: string;
+}
+
 const Dashboard = () => {
   const [channels, setChannels] = useState<TelegramChannel[]>([]);
   const [subscribers, setSubscribers] = useState<TelegramSubscriber[]>([]);
+  const [botSettings, setBotSettings] = useState<BotSettings | null>(null);
   const [newChannelId, setNewChannelId] = useState("");
   const [newChannelName, setNewChannelName] = useState("");
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
-  const [activeTab, setActiveTab] = useState<"channels" | "subscribers">("channels");
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [activeTab, setActiveTab] = useState<"channels" | "subscribers" | "settings">("channels");
+
+  // Settings form state
+  const [newToken, setNewToken] = useState("");
+  const [adminId, setAdminId] = useState("");
+  const [nonSubMessage, setNonSubMessage] = useState("");
 
   useEffect(() => {
     fetchData();
@@ -39,14 +57,96 @@ const Dashboard = () => {
 
   const fetchData = async () => {
     setLoading(true);
-    const [channelsRes, subsRes] = await Promise.all([
+    const [channelsRes, subsRes, settingsRes] = await Promise.all([
       supabase.from("telegram_channels").select("*").order("created_at", { ascending: false }),
       supabase.from("telegram_subscribers").select("*").order("created_at", { ascending: false }),
+      supabase.from("bot_tokens").select("*").maybeSingle(),
     ]);
 
     if (channelsRes.data) setChannels(channelsRes.data);
     if (subsRes.data) setSubscribers(subsRes.data);
+    if (settingsRes.data) {
+      setBotSettings(settingsRes.data as BotSettings);
+      setAdminId(settingsRes.data.admin_telegram_id?.toString() || "");
+      setNonSubMessage(settingsRes.data.non_subscriber_message || "");
+    }
     setLoading(false);
+  };
+
+  const canChangeToken = () => {
+    if (!botSettings?.token_updated_at) return true;
+    const lastUpdate = new Date(botSettings.token_updated_at);
+    const threeDaysLater = new Date(lastUpdate.getTime() + 3 * 24 * 60 * 60 * 1000);
+    return new Date() >= threeDaysLater;
+  };
+
+  const getTokenCooldownRemaining = () => {
+    if (!botSettings?.token_updated_at) return "";
+    const lastUpdate = new Date(botSettings.token_updated_at);
+    const threeDaysLater = new Date(lastUpdate.getTime() + 3 * 24 * 60 * 60 * 1000);
+    const diff = threeDaysLater.getTime() - Date.now();
+    if (diff <= 0) return "";
+    const days = Math.floor(diff / 86400000);
+    const hours = Math.floor((diff % 86400000) / 3600000);
+    return `${days} يوم و ${hours} ساعة`;
+  };
+
+  const handleChangeToken = async () => {
+    if (!newToken.trim() || !canChangeToken()) return;
+
+    setSavingSettings(true);
+    try {
+      const { error } = await supabase
+        .from("bot_tokens")
+        .update({ token: newToken.trim(), token_updated_at: new Date().toISOString() })
+        .eq("id", botSettings!.id);
+
+      if (error) throw error;
+
+      // Re-register webhook with new token
+      const { data: webhookRes, error: webhookErr } = await supabase.functions.invoke("telegram-bot", {
+        body: { action: "setup_webhook", bot_token: newToken.trim() },
+      });
+
+      if (webhookErr) throw webhookErr;
+
+      toast({ title: "تم تغيير التوكن وتحديث الويب هوك ✅" });
+      setNewToken("");
+      fetchData();
+    } catch (error: any) {
+      toast({ title: "خطأ", description: error.message, variant: "destructive" });
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    if (!botSettings) return;
+
+    setSavingSettings(true);
+    try {
+      const updates: any = {
+        non_subscriber_message: nonSubMessage.trim(),
+      };
+      if (adminId.trim()) {
+        updates.admin_telegram_id = parseInt(adminId.trim());
+      } else {
+        updates.admin_telegram_id = null;
+      }
+
+      const { error } = await supabase
+        .from("bot_tokens")
+        .update(updates)
+        .eq("id", botSettings.id);
+
+      if (error) throw error;
+      toast({ title: "تم حفظ الإعدادات ✅" });
+      fetchData();
+    } catch (error: any) {
+      toast({ title: "خطأ", description: error.message, variant: "destructive" });
+    } finally {
+      setSavingSettings(false);
+    }
   };
 
   const addChannel = async (e: React.FormEvent) => {
@@ -142,24 +242,22 @@ const Dashboard = () => {
 
         {/* Tabs */}
         <div className="flex gap-2 mb-6">
-          <Button
-            variant={activeTab === "channels" ? "default" : "ghost"}
-            size="sm"
-            onClick={() => setActiveTab("channels")}
-            className={activeTab === "channels" ? "gradient-telegram text-primary-foreground" : "text-muted-foreground"}
-          >
-            <Hash className="w-4 h-4 ml-1" />
-            القنوات
-          </Button>
-          <Button
-            variant={activeTab === "subscribers" ? "default" : "ghost"}
-            size="sm"
-            onClick={() => setActiveTab("subscribers")}
-            className={activeTab === "subscribers" ? "gradient-telegram text-primary-foreground" : "text-muted-foreground"}
-          >
-            <Users className="w-4 h-4 ml-1" />
-            المشتركون
-          </Button>
+          {([
+            { key: "channels", icon: Hash, label: "القنوات" },
+            { key: "subscribers", icon: Users, label: "المشتركون" },
+            { key: "settings", icon: Settings, label: "الإعدادات" },
+          ] as const).map(({ key, icon: Icon, label }) => (
+            <Button
+              key={key}
+              variant={activeTab === key ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setActiveTab(key)}
+              className={activeTab === key ? "gradient-telegram text-primary-foreground" : "text-muted-foreground"}
+            >
+              <Icon className="w-4 h-4 ml-1" />
+              {label}
+            </Button>
+          ))}
           <Button variant="ghost" size="sm" onClick={fetchData} className="text-muted-foreground mr-auto">
             <RefreshCw className="w-4 h-4" />
           </Button>
@@ -207,11 +305,7 @@ const Dashboard = () => {
                 </div>
               ) : (
                 channels.map((ch, i) => (
-                  <div
-                    key={ch.id}
-                    className="glass-card p-4 flex items-center justify-between animate-fade-in"
-                    style={{ animationDelay: `${i * 0.05}s` }}
-                  >
+                  <div key={ch.id} className="glass-card p-4 flex items-center justify-between animate-fade-in" style={{ animationDelay: `${i * 0.05}s` }}>
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
                         <Hash className="w-4 h-4 text-primary" />
@@ -221,12 +315,7 @@ const Dashboard = () => {
                         <p className="text-xs text-muted-foreground font-mono" dir="ltr">{ch.channel_id}</p>
                       </div>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => deleteChannel(ch.id)}
-                      className="text-muted-foreground hover:text-destructive h-8 w-8"
-                    >
+                    <Button variant="ghost" size="icon" onClick={() => deleteChannel(ch.id)} className="text-muted-foreground hover:text-destructive h-8 w-8">
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
@@ -251,23 +340,13 @@ const Dashboard = () => {
               </div>
             ) : (
               subscribers.map((sub, i) => (
-                <div
-                  key={sub.id}
-                  className="glass-card p-4 flex items-center justify-between animate-fade-in"
-                  style={{ animationDelay: `${i * 0.05}s` }}
-                >
+                <div key={sub.id} className="glass-card p-4 flex items-center justify-between animate-fade-in" style={{ animationDelay: `${i * 0.05}s` }}>
                   <div className="flex items-center gap-3">
                     <div className={`w-2 h-2 rounded-full ${isExpired(sub) ? "bg-destructive" : "bg-success"}`} />
                     <div>
-                      <p className="font-medium text-foreground font-mono text-sm" dir="ltr">
-                        {sub.telegram_user_id}
-                      </p>
+                      <p className="font-medium text-foreground font-mono text-sm" dir="ltr">{sub.telegram_user_id}</p>
                       <p className="text-xs text-muted-foreground">
-                        {sub.is_permanent
-                          ? "♾ دائم"
-                          : sub.expires_at
-                          ? `حتى ${new Date(sub.expires_at).toLocaleDateString("ar-SA")}`
-                          : "غير محدد"}
+                        {sub.is_permanent ? "♾ دائم" : sub.expires_at ? `حتى ${new Date(sub.expires_at).toLocaleDateString("ar-SA")}` : "غير محدد"}
                       </p>
                     </div>
                   </div>
@@ -275,18 +354,103 @@ const Dashboard = () => {
                     <span className={`text-xs px-2 py-1 rounded-full ${isExpired(sub) ? "bg-destructive/20 text-destructive" : "bg-success/20 text-success"}`}>
                       {isExpired(sub) ? "منتهي" : "نشط"}
                     </span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => deleteSubscriber(sub.id)}
-                      className="text-muted-foreground hover:text-destructive h-8 w-8"
-                    >
+                    <Button variant="ghost" size="icon" onClick={() => deleteSubscriber(sub.id)} className="text-muted-foreground hover:text-destructive h-8 w-8">
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
                 </div>
               ))
             )}
+          </div>
+        )}
+
+        {/* Settings Tab */}
+        {activeTab === "settings" && (
+          <div className="space-y-6">
+            {/* Change Token */}
+            <div className="glass-card p-5 space-y-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Key className="w-5 h-5 text-primary" />
+                <h3 className="font-semibold text-foreground">تغيير توكن البوت</h3>
+              </div>
+
+              {!canChangeToken() && (
+                <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 text-sm text-destructive">
+                  ⏳ لا يمكن تغيير التوكن إلا بعد <strong>{getTokenCooldownRemaining()}</strong>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label className="text-foreground/80">التوكن الجديد</Label>
+                <Input
+                  placeholder="أدخل التوكن الجديد..."
+                  value={newToken}
+                  onChange={(e) => setNewToken(e.target.value)}
+                  dir="ltr"
+                  disabled={!canChangeToken()}
+                  className="bg-secondary/50 border-border/50 text-foreground placeholder:text-muted-foreground text-left font-mono text-sm"
+                />
+              </div>
+
+              <Button
+                onClick={handleChangeToken}
+                disabled={!canChangeToken() || !newToken.trim() || savingSettings}
+                className="w-full gradient-telegram text-primary-foreground glow-primary hover:opacity-90"
+              >
+                {savingSettings ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : <Key className="w-4 h-4 ml-2" />}
+                تغيير التوكن
+              </Button>
+
+              {botSettings?.token_updated_at && (
+                <p className="text-xs text-muted-foreground text-center">
+                  آخر تغيير: {new Date(botSettings.token_updated_at).toLocaleDateString("ar-SA")}
+                </p>
+              )}
+            </div>
+
+            {/* Admin Settings */}
+            <div className="glass-card p-5 space-y-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Shield className="w-5 h-5 text-primary" />
+                <h3 className="font-semibold text-foreground">إعدادات الأدمن</h3>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-foreground/80">معرف الأدمن (Telegram ID)</Label>
+                <Input
+                  placeholder="مثال: 123456789"
+                  value={adminId}
+                  onChange={(e) => setAdminId(e.target.value)}
+                  dir="ltr"
+                  className="bg-secondary/50 border-border/50 text-foreground placeholder:text-muted-foreground text-left font-mono"
+                />
+                <p className="text-xs text-muted-foreground">فقط هذا المعرف يمكنه التحكم بالبوت عبر تلغرام</p>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-primary" />
+                  <Label className="text-foreground/80">رسالة غير المشتركين</Label>
+                </div>
+                <Textarea
+                  placeholder="الرسالة التي تظهر للأشخاص غير المشتركين..."
+                  value={nonSubMessage}
+                  onChange={(e) => setNonSubMessage(e.target.value)}
+                  rows={3}
+                  className="bg-secondary/50 border-border/50 text-foreground placeholder:text-muted-foreground resize-none"
+                />
+                <p className="text-xs text-muted-foreground">تُرسل هذه الرسالة عند رفض طلب الانضمام لشخص غير مشترك</p>
+              </div>
+
+              <Button
+                onClick={handleSaveSettings}
+                disabled={savingSettings}
+                className="w-full gradient-telegram text-primary-foreground glow-primary hover:opacity-90"
+              >
+                {savingSettings ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : <Save className="w-4 h-4 ml-2" />}
+                حفظ الإعدادات
+              </Button>
+            </div>
           </div>
         )}
       </main>
