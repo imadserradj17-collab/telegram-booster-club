@@ -865,20 +865,37 @@ Deno.serve(async (req) => {
         const { data: allTokens } = await sb.from("bot_tokens").select("*");
         if (allTokens) {
           for (const tokenRow of allTokens) {
+            // 1. Kick expired subscribers
             const { data: expiredSubs } = await sb.from("telegram_subscribers").select("*").eq("owner_id", tokenRow.user_id).eq("bot_token_id", tokenRow.id).eq("is_permanent", false).lt("expires_at", new Date().toISOString());
-            if (!expiredSubs || expiredSubs.length === 0) continue;
             const { data: channels } = await sb.from("telegram_channels").select("channel_id").eq("owner_id", tokenRow.user_id).eq("bot_token_id", tokenRow.id);
-            for (const sub of expiredSubs) {
-              if (channels) {
-                for (const ch of channels) {
-                  await tg(tokenRow.token, "banChatMember", { chat_id: ch.channel_id, user_id: sub.telegram_user_id });
-                  await tg(tokenRow.token, "unbanChatMember", { chat_id: ch.channel_id, user_id: sub.telegram_user_id, only_if_banned: true });
+            if (expiredSubs && expiredSubs.length > 0) {
+              for (const sub of expiredSubs) {
+                if (channels) {
+                  for (const ch of channels) {
+                    await tg(tokenRow.token, "banChatMember", { chat_id: ch.channel_id, user_id: sub.telegram_user_id });
+                    await tg(tokenRow.token, "unbanChatMember", { chat_id: ch.channel_id, user_id: sub.telegram_user_id, only_if_banned: true });
+                  }
                 }
+                await tg(tokenRow.token, "sendMessage", { chat_id: sub.telegram_user_id, text: "⚠️ *انتهى اشتراكك*\n\nتم إزالتك من القنوات.", parse_mode: "Markdown" });
               }
-              await tg(tokenRow.token, "sendMessage", { chat_id: sub.telegram_user_id, text: "⚠️ *انتهى اشتراكك*\n\nتم إزالتك من القنوات.", parse_mode: "Markdown" });
+              if (tokenRow.admin_telegram_id) {
+                await tg(tokenRow.token, "sendMessage", { chat_id: tokenRow.admin_telegram_id, text: `🔔 تم إزالة *${expiredSubs.length}* مشترك منتهي.`, parse_mode: "Markdown" });
+              }
             }
-            if (tokenRow.admin_telegram_id) {
-              await tg(tokenRow.token, "sendMessage", { chat_id: tokenRow.admin_telegram_id, text: `🔔 تم إزالة *${expiredSubs.length}* مشترك منتهي.`, parse_mode: "Markdown" });
+
+            // 2. Warn subscribers expiring within 24 hours
+            const now = new Date();
+            const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+            const { data: soonExpiring } = await sb.from("telegram_subscribers").select("*").eq("owner_id", tokenRow.user_id).eq("bot_token_id", tokenRow.id).eq("is_permanent", false).gt("expires_at", now.toISOString()).lt("expires_at", in24h);
+            if (soonExpiring && soonExpiring.length > 0) {
+              for (const sub of soonExpiring) {
+                const hours = Math.ceil((new Date(sub.expires_at!).getTime() - now.getTime()) / 3600000);
+                await tg(tokenRow.token, "sendMessage", {
+                  chat_id: sub.telegram_user_id,
+                  text: `⏳ *تنبيه:* اشتراكك سينتهي خلال *${hours}* ساعة تقريباً.\n\nتواصل مع المسؤول لتجديد اشتراكك قبل أن تتم إزالتك من القنوات.`,
+                  parse_mode: "Markdown",
+                });
+              }
             }
           }
         }
