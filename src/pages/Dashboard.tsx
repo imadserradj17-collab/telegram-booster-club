@@ -17,7 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   LogOut, Trash2, RefreshCw, Users, Zap, Bot, UserPlus, Clock,
   Settings, Key, Shield, MessageSquare, Save, Loader2, User, Calendar, Hash,
-  LayoutDashboard, ChevronLeft, ChevronRight, Search, AlertTriangle,
+  LayoutDashboard, ChevronLeft, ChevronRight, Search, AlertTriangle, Menu, X,
 } from "lucide-react";
 
 interface TelegramSubscriber {
@@ -49,7 +49,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
   const [newToken, setNewToken] = useState("");
@@ -59,6 +59,12 @@ const Dashboard = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Close sidebar on mobile when switching tabs
+  const switchTab = (key: TabKey) => {
+    setActiveTab(key);
+    setSidebarOpen(false);
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -182,10 +188,78 @@ const Dashboard = () => {
     );
   };
 
+  // ─── Mobile Card for subscriber ───
+  const SubCard = ({ sub }: { sub: TelegramSubscriber }) => {
+    const expired = isExpired(sub);
+    const displayName = getDisplayName(sub);
+    const remaining = sub.expires_at ? daysRemaining(sub.expires_at) : null;
+
+    return (
+      <div className="glass-card p-4">
+        <div className="flex items-start gap-3">
+          <div className="flex-shrink-0">
+            {sub.photo_url ? (
+              <img
+                src={sub.photo_url}
+                alt=""
+                className="w-10 h-10 rounded-full object-cover border border-border/50"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = "none";
+                  (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden");
+                }}
+              />
+            ) : null}
+            <div className={`w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center ${sub.photo_url ? "hidden" : ""}`}>
+              <User className="w-5 h-5 text-primary/60" />
+            </div>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <p className="font-medium text-foreground text-sm truncate">
+                {displayName || `مستخدم ${sub.telegram_user_id}`}
+              </p>
+              {expired ? (
+                <Badge variant="destructive" className="text-[10px] font-medium flex-shrink-0">منتهي</Badge>
+              ) : sub.is_permanent ? (
+                <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px] font-medium hover:bg-primary/20 flex-shrink-0">♾ دائم</Badge>
+              ) : remaining !== null && remaining <= 3 ? (
+                <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 text-[10px] font-medium hover:bg-yellow-500/20 flex-shrink-0">
+                  ⚠ {remaining} يوم
+                </Badge>
+              ) : (
+                <Badge className="bg-success/20 text-success border-success/30 text-[10px] font-medium hover:bg-success/20 flex-shrink-0">نشط</Badge>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              <span className="font-mono" dir="ltr">{sub.telegram_user_id}</span>
+              {sub.telegram_username && <span dir="ltr">@{sub.telegram_username}</span>}
+              {sub.is_permanent ? (
+                <span className="text-primary">دائم</span>
+              ) : sub.expires_at ? (
+                <span className={expired ? "text-destructive" : ""}>
+                  {expired ? `انتهى ${new Date(sub.expires_at).toLocaleDateString("ar-SA")}` : `${remaining} يوم متبقي`}
+                </span>
+              ) : null}
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => deleteSubscriber(sub.id)}
+            className="text-muted-foreground hover:text-destructive h-8 w-8 flex-shrink-0"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  // ─── Desktop Table ───
   const SubTable = ({ list }: { list: TelegramSubscriber[] }) => {
     const filtered = filterSubs(list);
     return (
-      <div className="glass-card overflow-hidden">
+      <div className="glass-card overflow-hidden hidden md:block">
         <Table>
           <TableHeader>
             <TableRow className="border-border/50 hover:bg-transparent">
@@ -210,81 +284,43 @@ const Dashboard = () => {
                 const expired = isExpired(sub);
                 const displayName = getDisplayName(sub);
                 const remaining = sub.expires_at ? daysRemaining(sub.expires_at) : null;
-
                 return (
                   <TableRow key={sub.id} className="border-border/30 hover:bg-secondary/30">
-                    {/* Avatar + Name */}
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <div className="flex-shrink-0">
                           {sub.photo_url ? (
-                            <img
-                              src={sub.photo_url}
-                              alt=""
-                              className="w-9 h-9 rounded-full object-cover border border-border/50"
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).style.display = "none";
-                                (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden");
-                              }}
-                            />
+                            <img src={sub.photo_url} alt="" className="w-9 h-9 rounded-full object-cover border border-border/50"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden"); }} />
                           ) : null}
                           <div className={`w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center ${sub.photo_url ? "hidden" : ""}`}>
                             <User className="w-4 h-4 text-primary/60" />
                           </div>
                         </div>
                         <div className="min-w-0">
-                          <p className="font-medium text-foreground text-sm truncate">
-                            {displayName || `مستخدم ${sub.telegram_user_id}`}
-                          </p>
-                          {sub.telegram_username && (
-                            <p className="text-xs text-muted-foreground" dir="ltr">@{sub.telegram_username}</p>
-                          )}
+                          <p className="font-medium text-foreground text-sm truncate">{displayName || `مستخدم ${sub.telegram_user_id}`}</p>
+                          {sub.telegram_username && <p className="text-xs text-muted-foreground" dir="ltr">@{sub.telegram_username}</p>}
                         </div>
                       </div>
                     </TableCell>
-
-                    {/* ID */}
-                    <TableCell>
-                      <span className="font-mono text-xs text-muted-foreground" dir="ltr">{sub.telegram_user_id}</span>
-                    </TableCell>
-
-                    {/* Status */}
+                    <TableCell><span className="font-mono text-xs text-muted-foreground" dir="ltr">{sub.telegram_user_id}</span></TableCell>
                     <TableCell>
                       {expired ? (
                         <Badge variant="destructive" className="text-[10px] font-medium">منتهي</Badge>
                       ) : sub.is_permanent ? (
                         <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px] font-medium hover:bg-primary/20">♾ دائم</Badge>
                       ) : remaining !== null && remaining <= 3 ? (
-                        <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 text-[10px] font-medium hover:bg-yellow-500/20">
-                          ⚠ {remaining} يوم
-                        </Badge>
+                        <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 text-[10px] font-medium hover:bg-yellow-500/20">⚠ {remaining} يوم</Badge>
                       ) : (
                         <Badge className="bg-success/20 text-success border-success/30 text-[10px] font-medium hover:bg-success/20">نشط</Badge>
                       )}
                     </TableCell>
-
-                    {/* Duration */}
                     <TableCell className="text-sm text-muted-foreground">
-                      {sub.is_permanent ? "—" : sub.expires_at ? (
-                        expired
-                          ? `انتهى ${new Date(sub.expires_at).toLocaleDateString("ar-SA")}`
-                          : `${remaining} يوم متبقي`
-                      ) : "—"}
+                      {sub.is_permanent ? "—" : sub.expires_at ? (expired ? `انتهى ${new Date(sub.expires_at).toLocaleDateString("ar-SA")}` : `${remaining} يوم متبقي`) : "—"}
                     </TableCell>
-
-                    {/* Created */}
-                    <TableCell className="text-sm text-muted-foreground">
-                      {new Date(sub.created_at).toLocaleDateString("ar-SA")}
-                    </TableCell>
-
-                    {/* Delete */}
+                    <TableCell className="text-sm text-muted-foreground">{new Date(sub.created_at).toLocaleDateString("ar-SA")}</TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => deleteSubscriber(sub.id)}
-                        className="text-muted-foreground hover:text-destructive h-8 w-8"
-                      >
+                      <Button variant="ghost" size="icon" onClick={() => deleteSubscriber(sub.id)} className="text-muted-foreground hover:text-destructive h-8 w-8">
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
                     </TableCell>
@@ -298,28 +334,61 @@ const Dashboard = () => {
     );
   };
 
+  // ─── Mobile Card List ───
+  const SubCardList = ({ list }: { list: TelegramSubscriber[] }) => {
+    const filtered = filterSubs(list);
+    return (
+      <div className="space-y-3 md:hidden">
+        {filtered.length === 0 ? (
+          <div className="text-center py-12 glass-card">
+            <UserPlus className="w-8 h-8 mx-auto mb-2 text-muted-foreground/30" />
+            <p className="text-muted-foreground">لا يوجد مشتركون</p>
+          </div>
+        ) : (
+          filtered.map((sub) => <SubCard key={sub.id} sub={sub} />)
+        )}
+      </div>
+    );
+  };
+
+  const SubList = ({ list }: { list: TelegramSubscriber[] }) => (
+    <>
+      <SubTable list={list} />
+      <SubCardList list={list} />
+    </>
+  );
+
   return (
     <div className="min-h-screen flex w-full">
-      {/* Sidebar */}
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 bg-background/60 backdrop-blur-sm z-40 md:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
+
+      {/* Sidebar - hidden on mobile by default, slide-in overlay */}
       <aside
-        className={`fixed top-0 right-0 h-full z-40 bg-card border-l border-border/50 transition-all duration-300 flex flex-col ${
-          sidebarOpen ? "w-56" : "w-16"
-        }`}
+        className={`fixed top-0 right-0 h-full z-50 bg-card border-l border-border/50 transition-all duration-300 flex flex-col
+          ${sidebarOpen ? "w-56 translate-x-0" : "md:w-16 w-0 translate-x-full md:translate-x-0"}
+        `}
       >
-        {/* Sidebar Header */}
         <div className="h-16 flex items-center gap-3 px-4 border-b border-border/50 flex-shrink-0">
           <div className="w-9 h-9 rounded-lg gradient-telegram flex items-center justify-center flex-shrink-0">
             <Bot className="w-5 h-5 text-primary-foreground" />
           </div>
           {sidebarOpen && <span className="font-bold text-foreground truncate">إدارة الاشتراكات</span>}
+          {/* Close button on mobile */}
+          {sidebarOpen && (
+            <button onClick={() => setSidebarOpen(false)} className="mr-auto md:hidden text-muted-foreground hover:text-foreground">
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
 
-        {/* Nav Items */}
-        <nav className="flex-1 py-4 px-2 space-y-1">
+        <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
           {navItems.map(({ key, icon: Icon, label, badge }) => (
             <button
               key={key}
-              onClick={() => setActiveTab(key)}
+              onClick={() => switchTab(key)}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
                 activeTab === key
                   ? "bg-primary/15 text-primary font-medium"
@@ -341,11 +410,10 @@ const Dashboard = () => {
           ))}
         </nav>
 
-        {/* Sidebar Footer */}
         <div className="p-2 border-t border-border/50 space-y-1">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
+            className="w-full hidden md:flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
           >
             {sidebarOpen ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
             {sidebarOpen && <span>طي القائمة</span>}
@@ -360,53 +428,74 @@ const Dashboard = () => {
         </div>
       </aside>
 
+      {/* Bottom Navigation - Mobile only */}
+      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-border/50 md:hidden safe-area-bottom">
+        <div className="flex items-center justify-around h-14">
+          {navItems.map(({ key, icon: Icon, label, badge }) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg transition-colors relative ${
+                activeTab === key ? "text-primary" : "text-muted-foreground"
+              }`}
+            >
+              <Icon className="w-5 h-5" />
+              <span className="text-[10px]">{label}</span>
+              {badge !== undefined && badge > 0 && (
+                <span className="absolute -top-0.5 right-0.5 bg-primary text-primary-foreground text-[8px] w-4 h-4 rounded-full flex items-center justify-center font-mono">
+                  {badge > 99 ? "99+" : badge}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </nav>
+
       {/* Main Content */}
-      <main
-        className={`flex-1 transition-all duration-300 ${sidebarOpen ? "mr-56" : "mr-16"}`}
-      >
+      <main className={`flex-1 transition-all duration-300 pb-20 md:pb-0 ${sidebarOpen ? "md:mr-56" : "md:mr-16"} mr-0`}>
         {/* Top Bar */}
-        <header className="h-16 border-b border-border/50 bg-card/30 backdrop-blur-sm sticky top-0 z-30 flex items-center px-6 gap-4">
-          <h2 className="text-lg font-bold text-foreground">
+        <header className="h-14 md:h-16 border-b border-border/50 bg-card/30 backdrop-blur-sm sticky top-0 z-30 flex items-center px-4 md:px-6 gap-3">
+          {/* Mobile menu button */}
+          <button onClick={() => setSidebarOpen(true)} className="md:hidden text-muted-foreground hover:text-foreground">
+            <Menu className="w-5 h-5" />
+          </button>
+          <h2 className="text-base md:text-lg font-bold text-foreground">
             {navItems.find((n) => n.key === activeTab)?.label}
           </h2>
           <div className="flex-1" />
-          <Button variant="ghost" size="icon" onClick={fetchData} className="text-muted-foreground">
+          <Button variant="ghost" size="icon" onClick={fetchData} className="text-muted-foreground h-9 w-9">
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
         </header>
 
-        <div className="p-6 max-w-5xl">
+        <div className="p-4 md:p-6 max-w-5xl">
           {/* ─── OVERVIEW ─── */}
           {activeTab === "overview" && (
-            <div className="space-y-6 animate-fade-in">
-              {/* Stats Grid */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="space-y-4 md:space-y-6 animate-fade-in">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
                 {[
                   { icon: Users, label: "إجمالي المشتركين", value: subscribers.length, color: "text-primary" },
                   { icon: Zap, label: "نشط", value: activeSubs.length, color: "text-success" },
                   { icon: Clock, label: "منتهي", value: expiredSubs.length, color: "text-destructive" },
                   { icon: Shield, label: "دائم", value: permanentCount, color: "text-primary" },
                 ].map(({ icon: Icon, label, value, color }, i) => (
-                  <div key={i} className="glass-card p-5">
-                    <div className="flex items-center justify-between mb-3">
-                      <Icon className={`w-5 h-5 ${color}`} />
-                    </div>
-                    <p className="text-3xl font-bold text-foreground">{value}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{label}</p>
+                  <div key={i} className="glass-card p-4 md:p-5">
+                    <Icon className={`w-4 h-4 md:w-5 md:h-5 ${color} mb-2 md:mb-3`} />
+                    <p className="text-2xl md:text-3xl font-bold text-foreground">{value}</p>
+                    <p className="text-[10px] md:text-xs text-muted-foreground mt-1">{label}</p>
                   </div>
                 ))}
               </div>
 
-              {/* Warnings */}
               {warningCount > 0 && (
-                <div className="glass-card p-4 border-yellow-500/30 bg-yellow-500/5">
+                <div className="glass-card p-3 md:p-4 border-yellow-500/30 bg-yellow-500/5">
                   <div className="flex items-center gap-3">
                     <AlertTriangle className="w-5 h-5 text-yellow-400 flex-shrink-0" />
-                    <div>
-                      <p className="text-sm font-medium text-yellow-400">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs md:text-sm font-medium text-yellow-400">
                         {warningCount} مشترك سينتهي اشتراكهم خلال 3 أيام
                       </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
+                      <p className="text-[10px] md:text-xs text-muted-foreground mt-0.5 hidden sm:block">
                         يُرسل تحذير تلقائي قبل 24 ساعة من الانتهاء
                       </p>
                     </div>
@@ -414,7 +503,7 @@ const Dashboard = () => {
                       variant="ghost"
                       size="sm"
                       onClick={() => setActiveTab("subscribers")}
-                      className="mr-auto text-yellow-400 hover:text-yellow-300 text-xs"
+                      className="text-yellow-400 hover:text-yellow-300 text-xs flex-shrink-0"
                     >
                       عرض
                     </Button>
@@ -422,10 +511,9 @@ const Dashboard = () => {
                 </div>
               )}
 
-              {/* Recent Subscribers */}
               <div>
                 <h3 className="text-sm font-semibold text-foreground mb-3">آخر المشتركين</h3>
-                <SubTable list={subscribers.slice(0, 5)} />
+                <SubList list={subscribers.slice(0, 5)} />
               </div>
             </div>
           )}
@@ -433,8 +521,8 @@ const Dashboard = () => {
           {/* ─── SUBSCRIBERS ─── */}
           {activeTab === "subscribers" && (
             <div className="space-y-4 animate-fade-in">
-              <div className="flex items-center gap-3">
-                <div className="relative flex-1 max-w-sm">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                <div className="relative flex-1">
                   <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     placeholder="بحث بالاسم أو المعرف..."
@@ -443,7 +531,7 @@ const Dashboard = () => {
                     className="pr-10 bg-secondary/50 border-border/50 text-foreground placeholder:text-muted-foreground"
                   />
                 </div>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground text-center sm:text-right">
                   {activeSubs.length} مشترك نشط
                 </p>
               </div>
@@ -452,7 +540,7 @@ const Dashboard = () => {
                   <Loader2 className="w-6 h-6 animate-spin mx-auto" />
                 </div>
               ) : (
-                <SubTable list={activeSubs} />
+                <SubList list={activeSubs} />
               )}
             </div>
           )}
@@ -460,8 +548,8 @@ const Dashboard = () => {
           {/* ─── EXPIRED ─── */}
           {activeTab === "expired" && (
             <div className="space-y-4 animate-fade-in">
-              <div className="flex items-center gap-3">
-                <div className="relative flex-1 max-w-sm">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                <div className="relative flex-1">
                   <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     placeholder="بحث بالاسم أو المعرف..."
@@ -470,7 +558,7 @@ const Dashboard = () => {
                     className="pr-10 bg-secondary/50 border-border/50 text-foreground placeholder:text-muted-foreground"
                   />
                 </div>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground text-center sm:text-right">
                   {expiredSubs.length} مشترك منتهي
                 </p>
               </div>
@@ -479,27 +567,24 @@ const Dashboard = () => {
                   <Loader2 className="w-6 h-6 animate-spin mx-auto" />
                 </div>
               ) : (
-                <SubTable list={expiredSubs} />
+                <SubList list={expiredSubs} />
               )}
             </div>
           )}
 
           {/* ─── SETTINGS ─── */}
           {activeTab === "settings" && (
-            <div className="space-y-6 max-w-xl animate-fade-in">
-              {/* Change Token */}
-              <div className="glass-card p-6 space-y-4">
+            <div className="space-y-4 md:space-y-6 max-w-xl animate-fade-in">
+              <div className="glass-card p-4 md:p-6 space-y-4">
                 <div className="flex items-center gap-2 mb-1">
                   <Key className="w-5 h-5 text-primary" />
                   <h3 className="font-semibold text-foreground">تغيير توكن البوت</h3>
                 </div>
-
                 {!canChangeToken() && (
                   <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 text-sm text-destructive">
                     ⏳ لا يمكن تغيير التوكن إلا بعد <strong>{getTokenCooldownRemaining()}</strong>
                   </div>
                 )}
-
                 <div className="space-y-2">
                   <Label className="text-foreground/80">التوكن الجديد</Label>
                   <Input
@@ -511,7 +596,6 @@ const Dashboard = () => {
                     className="bg-secondary/50 border-border/50 text-foreground placeholder:text-muted-foreground text-left font-mono text-sm"
                   />
                 </div>
-
                 <Button
                   onClick={handleChangeToken}
                   disabled={!canChangeToken() || !newToken.trim() || savingSettings}
@@ -520,7 +604,6 @@ const Dashboard = () => {
                   {savingSettings ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : <Key className="w-4 h-4 ml-2" />}
                   تغيير التوكن
                 </Button>
-
                 {botSettings?.token_updated_at && (
                   <p className="text-xs text-muted-foreground text-center">
                     آخر تغيير: {new Date(botSettings.token_updated_at).toLocaleDateString("ar-SA")}
@@ -528,13 +611,11 @@ const Dashboard = () => {
                 )}
               </div>
 
-              {/* Admin Settings */}
-              <div className="glass-card p-6 space-y-4">
+              <div className="glass-card p-4 md:p-6 space-y-4">
                 <div className="flex items-center gap-2 mb-1">
                   <Shield className="w-5 h-5 text-primary" />
                   <h3 className="font-semibold text-foreground">إعدادات الأدمن</h3>
                 </div>
-
                 <div className="space-y-2">
                   <Label className="text-foreground/80">معرف الأدمن (Telegram ID)</Label>
                   <Input
@@ -546,7 +627,6 @@ const Dashboard = () => {
                   />
                   <p className="text-xs text-muted-foreground">فقط هذا المعرف يمكنه التحكم بالبوت. اتركه فارغاً للسماح للجميع.</p>
                 </div>
-
                 <div className="space-y-2">
                   <Label className="text-foreground/80 flex items-center gap-2">
                     <MessageSquare className="w-4 h-4" />
@@ -560,7 +640,6 @@ const Dashboard = () => {
                     className="bg-secondary/50 border-border/50 text-foreground placeholder:text-muted-foreground resize-none"
                   />
                 </div>
-
                 <Button
                   onClick={handleSaveSettings}
                   disabled={savingSettings}

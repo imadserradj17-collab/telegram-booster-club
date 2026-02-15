@@ -95,4 +95,8 @@
   .animate-fade-in {
     animation: fade-in 0.5s ease-out forwards;
   }
+
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
 }
