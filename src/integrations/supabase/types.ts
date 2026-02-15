@@ -88,6 +88,7 @@ export type Database = {
       }
       telegram_channels: {
         Row: {
+          bot_token_id: string | null
           channel_id: number
           channel_name: string
           created_at: string
@@ -96,6 +97,7 @@ export type Database = {
           owner_id: string
         }
         Insert: {
+          bot_token_id?: string | null
           channel_id: number
           channel_name: string
           created_at?: string
@@ -104,6 +106,7 @@ export type Database = {
           owner_id: string
         }
         Update: {
+          bot_token_id?: string | null
           channel_id?: number
           channel_name?: string
           created_at?: string
@@ -111,10 +114,19 @@ export type Database = {
           invite_link?: string | null
           owner_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "telegram_channels_bot_token_id_fkey"
+            columns: ["bot_token_id"]
+            isOneToOne: false
+            referencedRelation: "bot_tokens"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       telegram_subscribers: {
         Row: {
+          bot_token_id: string | null
           created_at: string
           expires_at: string | null
           id: string
@@ -125,6 +137,7 @@ export type Database = {
           telegram_username: string | null
         }
         Insert: {
+          bot_token_id?: string | null
           created_at?: string
           expires_at?: string | null
           id?: string
@@ -135,6 +148,7 @@ export type Database = {
           telegram_username?: string | null
         }
         Update: {
+          bot_token_id?: string | null
           created_at?: string
           expires_at?: string | null
           id?: string
@@ -144,7 +158,15 @@ export type Database = {
           telegram_user_id?: number
           telegram_username?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "telegram_subscribers_bot_token_id_fkey"
+            columns: ["bot_token_id"]
+            isOneToOne: false
+            referencedRelation: "bot_tokens"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
