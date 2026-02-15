@@ -43,7 +43,7 @@ async function getUserPhotoUrl(token: string, userId: number): Promise<string | 
 }
 
 function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("ar-SA", { year: "numeric", month: "short", day: "numeric" });
+  return new Date(dateStr).toLocaleDateString("ar-EG", { year: "numeric", month: "short", day: "numeric" });
 }
 
 function daysRemaining(expiresAt: string): number {
