@@ -51,7 +51,7 @@ function adminKeyboard() {
       [{ text: "📺 إدارة القنوات", callback_data: "manage_channels" }],
       [{ text: "➕ إضافة قناة", callback_data: "add_channel" }],
       [{ text: "📢 رسالة جماعية", callback_data: "broadcast" }],
-      [{ text: "🔍 فحص المحظورين", callback_data: "check_blocked" }],
+      
       [{ text: "📊 إحصائيات", callback_data: "stats" }],
     ],
   };
@@ -439,63 +439,6 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
         break;
       }
 
-      case "check_blocked": {
-        const { data: subs } = await sb
-          .from("telegram_subscribers")
-          .select("*")
-          .eq("owner_id", ownerId);
-
-        if (!subs || subs.length === 0) {
-          await tg(botToken, "sendMessage", {
-            chat_id: chatId,
-            text: "لا يوجد مشتركون للفحص.",
-            reply_markup: adminKeyboard(),
-          });
-          break;
-        }
-
-        let blocked = 0;
-        for (const sub of subs) {
-          try {
-            const res = await tg(botToken, "sendChatAction", {
-              chat_id: sub.telegram_user_id,
-              action: "typing",
-            });
-            if (!res.ok && res.description?.includes("bot was blocked")) {
-              // Kick from all channels
-              const { data: channels } = await sb
-                .from("telegram_channels")
-                .select("channel_id")
-                .eq("owner_id", ownerId);
-
-              if (channels) {
-                for (const ch of channels) {
-                  await tg(botToken, "banChatMember", {
-                    chat_id: ch.channel_id,
-                    user_id: sub.telegram_user_id,
-                  });
-                }
-              }
-
-              await sb
-                .from("telegram_subscribers")
-                .delete()
-                .eq("id", sub.id);
-
-              blocked++;
-            }
-          } catch {
-            // skip
-          }
-        }
-
-        await tg(botToken, "sendMessage", {
-          chat_id: chatId,
-          text: `🔍 تم الفحص!\n🚫 محظورون تم طردهم: ${blocked}`,
-          reply_markup: adminKeyboard(),
-        });
-        break;
-      }
 
       case "stats": {
         const { data: subs } = await sb
