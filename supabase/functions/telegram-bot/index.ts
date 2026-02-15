@@ -312,8 +312,27 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
 
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
-            text: `✅ المعرف: \`${telegramUserId}\`${telegramUsername ? ` (@${telegramUsername})` : ""}${existingInfo}\n\n📅 أرسل عدد أيام الاشتراك (رقم) أو اكتب *دائم*\n\n_أرسل /cancel للإلغاء_`,
+            text: `✅ المعرف: \`${telegramUserId}\`${telegramUsername ? ` (@${telegramUsername})` : ""}${existingInfo}\n\n📅 اختر مدة الاشتراك:`,
             parse_mode: "Markdown",
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  { text: "7 أيام", callback_data: "days_7" },
+                  { text: "15 يوم", callback_data: "days_15" },
+                  { text: "30 يوم", callback_data: "days_30" },
+                ],
+                [
+                  { text: "60 يوم", callback_data: "days_60" },
+                  { text: "90 يوم", callback_data: "days_90" },
+                  { text: "180 يوم", callback_data: "days_180" },
+                ],
+                [
+                  { text: "365 يوم", callback_data: "days_365" },
+                  { text: "♾ دائم", callback_data: "days_permanent" },
+                ],
+                [{ text: "❌ إلغاء", callback_data: "cancel_action" }],
+              ],
+            },
           });
           return;
         }
@@ -679,6 +698,12 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
         break;
       }
 
+      case "cancel_action": {
+        await clearState(chatId, botToken);
+        await tg(botToken, "sendMessage", { chat_id: chatId, text: "❌ تم الإلغاء.", reply_markup: adminKeyboard() });
+        break;
+      }
+
       case "back": {
         await clearState(chatId, botToken);
         await tg(botToken, "sendMessage", { chat_id: chatId, text: "🤖 *لوحة التحكم*", parse_mode: "Markdown", reply_markup: adminKeyboard() });
@@ -686,6 +711,51 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
       }
 
       default: {
+        // ── Days selection buttons ──
+        if (data.startsWith("days_")) {
+          const currentSt = await getState(chatId, botToken);
+          if (!currentSt || currentSt.state !== "await_sub_days") {
+            await tg(botToken, "sendMessage", { chat_id: chatId, text: "⚠️ انتهت صلاحية العملية. أعد المحاولة.", reply_markup: adminKeyboard() });
+            break;
+          }
+          const { telegramUserId, telegramUsername } = currentSt.data;
+          const isPermanent = data === "days_permanent";
+          const days = isPermanent ? null : parseInt(data.replace("days_", ""));
+          await clearState(chatId, botToken);
+          const expiresAt = isPermanent ? null : new Date(Date.now() + days! * 86400000).toISOString();
+
+          const { error } = await sb.from("telegram_subscribers").upsert(
+            { owner_id: ownerId, telegram_user_id: telegramUserId, telegram_username: telegramUsername, subscription_days: days, expires_at: expiresAt, is_permanent: isPermanent },
+            { onConflict: "owner_id,telegram_user_id" }
+          );
+
+          if (error) {
+            await tg(botToken, "sendMessage", { chat_id: chatId, text: "❌ خطأ: " + error.message, reply_markup: adminKeyboard() });
+            break;
+          }
+
+          const { data: channels } = await sb.from("telegram_channels").select("channel_name, invite_link").eq("owner_id", ownerId);
+          const buttons = (channels || []).filter((ch: any) => ch.invite_link).map((ch: any) => [{ text: `📺 ${ch.channel_name}`, url: ch.invite_link }]);
+
+          if (buttons.length > 0) {
+            await tg(botToken, "sendMessage", {
+              chat_id: telegramUserId,
+              text: "🎉 *تم تفعيل اشتراكك!*\n\nاضغط على الأزرار للانضمام:",
+              parse_mode: "Markdown",
+              reply_markup: { inline_keyboard: buttons },
+            });
+          }
+
+          const subInfo = isPermanent ? "♾ دائم" : `📅 ${days} يوم (حتى ${formatDate(expiresAt!)})`;
+          await tg(botToken, "sendMessage", {
+            chat_id: chatId,
+            text: `✅ *تمت إضافة المشترك بنجاح!*\n\n🆔 المعرف: \`${telegramUserId}\`\n${subInfo}${buttons.length > 0 ? `\n📺 تم إرسال ${buttons.length} رابط للمشترك` : ""}`,
+            parse_mode: "Markdown",
+            reply_markup: adminKeyboard(),
+          });
+          break;
+        }
+
         if (data.startsWith("del_ch_")) {
           const channelId = parseInt(data.replace("del_ch_", ""));
           const { data: ch } = await sb.from("telegram_channels").select("channel_name").eq("owner_id", ownerId).eq("channel_id", channelId).maybeSingle();
