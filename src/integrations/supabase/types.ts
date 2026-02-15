@@ -77,18 +77,21 @@ export type Database = {
           created_at: string
           id: string
           is_approved: boolean
+          preferred_language: string
         }
         Insert: {
           approved_until?: string | null
           created_at?: string
           id: string
           is_approved?: boolean
+          preferred_language?: string
         }
         Update: {
           approved_until?: string | null
           created_at?: string
           id?: string
           is_approved?: boolean
+          preferred_language?: string
         }
         Relationships: []
       }
