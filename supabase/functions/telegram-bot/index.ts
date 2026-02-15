@@ -250,9 +250,22 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
           let telegramUserId: number | null = null;
           let telegramUsername: string | null = null;
 
+          // Support both old (forward_from) and new (forward_origin) Telegram API
           if (msg.forward_from) {
             telegramUserId = msg.forward_from.id;
             telegramUsername = msg.forward_from.username || null;
+          } else if (msg.forward_origin) {
+            if (msg.forward_origin.type === "user" && msg.forward_origin.sender_user) {
+              telegramUserId = msg.forward_origin.sender_user.id;
+              telegramUsername = msg.forward_origin.sender_user.username || null;
+            } else if (msg.forward_origin.type === "hidden_user") {
+              await tg(botToken, "sendMessage", {
+                chat_id: chatId,
+                text: "❌ هذا المستخدم أخفى معلوماته.\n\n💡 اطلب منه إرسال /id للبوت، أو أرسل الـ ID الرقمي مباشرة.",
+                parse_mode: "Markdown",
+              });
+              return;
+            }
           } else if (msg.forward_sender_name) {
             await tg(botToken, "sendMessage", {
               chat_id: chatId,
@@ -350,8 +363,11 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
         case "await_channel": {
           let channelId: number | null = null;
 
+          // Support both old (forward_from_chat) and new (forward_origin) Telegram API
           if (msg.forward_from_chat) {
             channelId = msg.forward_from_chat.id;
+          } else if (msg.forward_origin && (msg.forward_origin.type === "channel" || msg.forward_origin.type === "chat") && msg.forward_origin.sender_chat) {
+            channelId = msg.forward_origin.sender_chat.id;
           } else {
             const input = text.trim().replace(/^@/, "");
             const parsed = parseInt(input);
