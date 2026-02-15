@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import {
   Shield, CheckCircle, XCircle, Loader2, Users, LogOut, ArrowRight, Calendar,
 } from "lucide-react";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface UserWithEmail {
   id: string;
@@ -24,14 +26,13 @@ interface AdminPanelProps {
 }
 
 const AdminPanel = ({ onGoToDashboard }: AdminPanelProps) => {
+  const { t, lang, dir } = useLanguage();
   const [users, setUsers] = useState<UserWithEmail[]>([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
   const [daysInput, setDaysInput] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
+  useEffect(() => { fetchUsers(); }, []);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -44,51 +45,35 @@ const AdminPanel = ({ onGoToDashboard }: AdminPanelProps) => {
   const activateUser = async (userId: string) => {
     const days = parseInt(daysInput[userId] || "");
     if (isNaN(days) || days <= 0) {
-      toast({ title: "خطأ", description: "أدخل عدد أيام صحيح", variant: "destructive" });
+      toast({ title: t("common.error"), description: t("admin.invalidDays"), variant: "destructive" });
       return;
     }
     setUpdating(userId);
     try {
       const approvedUntil = new Date(Date.now() + days * 86400000).toISOString();
-      const { error } = await supabase
-        .from("profiles")
-        .update({ is_approved: true, approved_until: approvedUntil })
-        .eq("id", userId);
+      const { error } = await supabase.from("profiles").update({ is_approved: true, approved_until: approvedUntil }).eq("id", userId);
       if (error) throw error;
-      setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, is_approved: true, approved_until: approvedUntil } : u))
-      );
+      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, is_approved: true, approved_until: approvedUntil } : u)));
       setDaysInput((prev) => ({ ...prev, [userId]: "" }));
-      toast({ title: `تم تفعيل الحساب لمدة ${days} يوم ✅` });
+      toast({ title: `${t("admin.activatedMsg")} ${days} ${t("admin.daysCount")} ✅` });
     } catch (error: any) {
-      toast({ title: "خطأ", description: error.message, variant: "destructive" });
-    } finally {
-      setUpdating(null);
-    }
+      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+    } finally { setUpdating(null); }
   };
 
   const deactivateUser = async (userId: string) => {
     setUpdating(userId);
     try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({ is_approved: false, approved_until: null })
-        .eq("id", userId);
+      const { error } = await supabase.from("profiles").update({ is_approved: false, approved_until: null }).eq("id", userId);
       if (error) throw error;
-      setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, is_approved: false, approved_until: null } : u))
-      );
-      toast({ title: "تم تعطيل الحساب ❌" });
+      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, is_approved: false, approved_until: null } : u)));
+      toast({ title: t("admin.deactivatedMsg") });
     } catch (error: any) {
-      toast({ title: "خطأ", description: error.message, variant: "destructive" });
-    } finally {
-      setUpdating(null);
-    }
+      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+    } finally { setUpdating(null); }
   };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-  };
+  const handleLogout = async () => { await supabase.auth.signOut(); };
 
   const getRemainingDays = (approvedUntil: string | null) => {
     if (!approvedUntil) return null;
@@ -106,14 +91,14 @@ const AdminPanel = ({ onGoToDashboard }: AdminPanelProps) => {
   const approvedCount = users.filter((u) => u.is_approved && !isExpired(u)).length;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background" dir={dir}>
       <header className="h-16 border-b border-border/50 bg-card/30 backdrop-blur-sm sticky top-0 z-30 flex items-center px-4 md:px-6 gap-3">
         <Shield className="w-5 h-5 text-primary" />
-        <h1 className="text-lg font-bold text-foreground">لوحة الأدمن</h1>
+        <h1 className="text-lg font-bold text-foreground">{t("admin.title")}</h1>
         <div className="flex-1" />
+        <LanguageSwitcher />
         <Button variant="ghost" size="sm" onClick={onGoToDashboard} className="text-primary">
-          <ArrowRight className="w-4 h-4 ml-1" />
-          لوحة التحكم
+          <ArrowRight className="w-4 h-4 ml-1" />{t("admin.dashboard")}
         </Button>
         <Button variant="ghost" size="icon" onClick={handleLogout} className="text-muted-foreground hover:text-destructive">
           <LogOut className="w-4 h-4" />
@@ -125,19 +110,17 @@ const AdminPanel = ({ onGoToDashboard }: AdminPanelProps) => {
           <div className="glass-card p-4">
             <Users className="w-5 h-5 text-primary mb-2" />
             <p className="text-2xl font-bold text-foreground">{pendingCount}</p>
-            <p className="text-xs text-muted-foreground">في انتظار الموافقة</p>
+            <p className="text-xs text-muted-foreground">{t("admin.pendingApproval")}</p>
           </div>
           <div className="glass-card p-4">
             <CheckCircle className="w-5 h-5 text-success mb-2" />
             <p className="text-2xl font-bold text-foreground">{approvedCount}</p>
-            <p className="text-xs text-muted-foreground">مفعّل</p>
+            <p className="text-xs text-muted-foreground">{t("admin.activated")}</p>
           </div>
         </div>
 
         {loading ? (
-          <div className="text-center py-16">
-            <Loader2 className="w-6 h-6 animate-spin mx-auto text-muted-foreground" />
-          </div>
+          <div className="text-center py-16"><Loader2 className="w-6 h-6 animate-spin mx-auto text-muted-foreground" /></div>
         ) : (
           <>
             {/* Desktop Table */}
@@ -145,11 +128,11 @@ const AdminPanel = ({ onGoToDashboard }: AdminPanelProps) => {
               <Table>
                 <TableHeader>
                   <TableRow className="border-border/50 hover:bg-transparent">
-                    <TableHead className="text-right text-muted-foreground">البريد الإلكتروني</TableHead>
-                    <TableHead className="text-right text-muted-foreground">تاريخ التسجيل</TableHead>
-                    <TableHead className="text-right text-muted-foreground">الحالة</TableHead>
-                    <TableHead className="text-right text-muted-foreground">المدة المتبقية</TableHead>
-                    <TableHead className="text-right text-muted-foreground w-64">إجراء</TableHead>
+                    <TableHead className="text-muted-foreground">{t("admin.email")}</TableHead>
+                    <TableHead className="text-muted-foreground">{t("admin.regDate")}</TableHead>
+                    <TableHead className="text-muted-foreground">{t("admin.status")}</TableHead>
+                    <TableHead className="text-muted-foreground">{t("admin.remaining")}</TableHead>
+                    <TableHead className="text-muted-foreground w-64">{t("admin.action")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -158,61 +141,32 @@ const AdminPanel = ({ onGoToDashboard }: AdminPanelProps) => {
                     const expired = isExpired(user);
                     return (
                       <TableRow key={user.id} className="border-border/30 hover:bg-secondary/30">
+                        <TableCell><span className="text-sm text-foreground" dir="ltr">{user.email}</span></TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{new Date(user.created_at).toLocaleDateString(lang === "ar" ? "ar-EG" : "en-US")}</TableCell>
                         <TableCell>
-                          <span className="text-sm text-foreground" dir="ltr">{user.email}</span>
+                          {expired ? <Badge variant="destructive" className="text-[10px]">{t("admin.expired")}</Badge>
+                            : user.is_approved ? <Badge className="bg-success/20 text-success border-success/30 text-[10px] hover:bg-success/20">{t("admin.active")}</Badge>
+                            : <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px] hover:bg-primary/20">{t("admin.pending")}</Badge>}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          {new Date(user.created_at).toLocaleDateString("ar-EG")}
+                          {user.is_approved && remaining !== null ? (remaining > 0 ? `${remaining} ${t("admin.daysCount")}` : t("admin.expired")) : "—"}
                         </TableCell>
                         <TableCell>
-                          {expired ? (
-                            <Badge variant="destructive" className="text-[10px]">منتهي</Badge>
-                          ) : user.is_approved ? (
-                            <Badge className="bg-success/20 text-success border-success/30 text-[10px] hover:bg-success/20">مفعّل</Badge>
-                          ) : (
-                            <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px] hover:bg-primary/20">معلّق</Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {user.is_approved && remaining !== null ? (
-                            remaining > 0 ? `${remaining} يوم` : "منتهي"
-                          ) : user.is_approved ? "—" : "—"}
-                        </TableCell>
-                        <TableCell>
-                          {updating === user.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                          ) : user.is_approved && !expired ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => deactivateUser(user.id)}
-                              className="text-destructive hover:text-destructive text-xs h-8"
-                            >
-                              <XCircle className="w-3.5 h-3.5 ml-1" />
-                              تعطيل
-                            </Button>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <Input
-                                type="number"
-                                placeholder="عدد الأيام"
-                                value={daysInput[user.id] || ""}
-                                onChange={(e) => setDaysInput((prev) => ({ ...prev, [user.id]: e.target.value }))}
-                                className="w-24 h-8 text-xs bg-secondary/50 border-border/50 text-foreground"
-                                min={1}
-                                dir="ltr"
-                              />
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => activateUser(user.id)}
-                                className="text-success hover:text-success text-xs h-8"
-                              >
-                                <CheckCircle className="w-3.5 h-3.5 ml-1" />
-                                تفعيل
+                          {updating === user.id ? <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                            : user.is_approved && !expired ? (
+                              <Button variant="ghost" size="sm" onClick={() => deactivateUser(user.id)} className="text-destructive hover:text-destructive text-xs h-8">
+                                <XCircle className="w-3.5 h-3.5 ml-1" />{t("admin.deactivate")}
                               </Button>
-                            </div>
-                          )}
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <Input type="number" placeholder={t("admin.daysPlaceholder")} value={daysInput[user.id] || ""}
+                                  onChange={(e) => setDaysInput((prev) => ({ ...prev, [user.id]: e.target.value }))}
+                                  className="w-24 h-8 text-xs bg-secondary/50 border-border/50 text-foreground" min={1} dir="ltr" />
+                                <Button variant="ghost" size="sm" onClick={() => activateUser(user.id)} className="text-success hover:text-success text-xs h-8">
+                                  <CheckCircle className="w-3.5 h-3.5 ml-1" />{t("admin.activate")}
+                                </Button>
+                              </div>
+                            )}
                         </TableCell>
                       </TableRow>
                     );
@@ -232,55 +186,31 @@ const AdminPanel = ({ onGoToDashboard }: AdminPanelProps) => {
                       <div className="min-w-0">
                         <p className="text-sm text-foreground truncate" dir="ltr">{user.email}</p>
                         <div className="flex items-center gap-2 mt-1">
-                          {expired ? (
-                            <Badge variant="destructive" className="text-[10px]">منتهي</Badge>
-                          ) : user.is_approved ? (
-                            <Badge className="bg-success/20 text-success border-success/30 text-[10px] hover:bg-success/20">مفعّل</Badge>
-                          ) : (
-                            <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px] hover:bg-primary/20">معلّق</Badge>
-                          )}
+                          {expired ? <Badge variant="destructive" className="text-[10px]">{t("admin.expired")}</Badge>
+                            : user.is_approved ? <Badge className="bg-success/20 text-success border-success/30 text-[10px] hover:bg-success/20">{t("admin.active")}</Badge>
+                            : <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px] hover:bg-primary/20">{t("admin.pending")}</Badge>}
                           {user.is_approved && remaining !== null && remaining > 0 && (
                             <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                              <Calendar className="w-3 h-3" />
-                              {remaining} يوم
+                              <Calendar className="w-3 h-3" />{remaining} {t("admin.daysCount")}
                             </span>
                           )}
-                          <span className="text-[10px] text-muted-foreground">
-                            {new Date(user.created_at).toLocaleDateString("ar-EG")}
-                          </span>
+                          <span className="text-[10px] text-muted-foreground">{new Date(user.created_at).toLocaleDateString(lang === "ar" ? "ar-EG" : "en-US")}</span>
                         </div>
                       </div>
-                      {updating === user.id ? (
-                        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground flex-shrink-0" />
-                      ) : user.is_approved && !expired ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => deactivateUser(user.id)}
-                          className="text-destructive hover:text-destructive text-xs h-8 flex-shrink-0"
-                        >
-                          <XCircle className="w-3.5 h-3.5" />
-                        </Button>
-                      ) : null}
+                      {updating === user.id ? <Loader2 className="w-4 h-4 animate-spin text-muted-foreground flex-shrink-0" />
+                        : user.is_approved && !expired ? (
+                          <Button variant="ghost" size="sm" onClick={() => deactivateUser(user.id)} className="text-destructive hover:text-destructive text-xs h-8 flex-shrink-0">
+                            <XCircle className="w-3.5 h-3.5" />
+                          </Button>
+                        ) : null}
                     </div>
                     {(!user.is_approved || expired) && (
                       <div className="flex items-center gap-2">
-                        <Input
-                          type="number"
-                          placeholder="عدد الأيام"
-                          value={daysInput[user.id] || ""}
+                        <Input type="number" placeholder={t("admin.daysPlaceholder")} value={daysInput[user.id] || ""}
                           onChange={(e) => setDaysInput((prev) => ({ ...prev, [user.id]: e.target.value }))}
-                          className="flex-1 h-8 text-xs bg-secondary/50 border-border/50 text-foreground"
-                          min={1}
-                          dir="ltr"
-                        />
-                        <Button
-                          size="sm"
-                          onClick={() => activateUser(user.id)}
-                          className="gradient-telegram text-primary-foreground text-xs h-8"
-                        >
-                          <CheckCircle className="w-3.5 h-3.5 ml-1" />
-                          تفعيل
+                          className="flex-1 h-8 text-xs bg-secondary/50 border-border/50 text-foreground" min={1} dir="ltr" />
+                        <Button size="sm" onClick={() => activateUser(user.id)} className="gradient-telegram text-primary-foreground text-xs h-8">
+                          <CheckCircle className="w-3.5 h-3.5 ml-1" />{t("admin.activate")}
                         </Button>
                       </div>
                     )}
