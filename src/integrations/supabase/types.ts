@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      bot_pending_states: {
+        Row: {
+          bot_token_id: string
+          chat_id: number
+          created_at: string
+          data: Json | null
+          id: string
+          state: string
+        }
+        Insert: {
+          bot_token_id: string
+          chat_id: number
+          created_at?: string
+          data?: Json | null
+          id?: string
+          state: string
+        }
+        Update: {
+          bot_token_id?: string
+          chat_id?: number
+          created_at?: string
+          data?: Json | null
+          id?: string
+          state?: string
+        }
+        Relationships: []
+      }
       bot_tokens: {
         Row: {
           admin_telegram_id: number | null
