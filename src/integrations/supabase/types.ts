@@ -129,9 +129,12 @@ export type Database = {
           bot_token_id: string | null
           created_at: string
           expires_at: string | null
+          first_name: string | null
           id: string
           is_permanent: boolean
+          last_name: string | null
           owner_id: string
+          photo_url: string | null
           subscription_days: number | null
           telegram_user_id: number
           telegram_username: string | null
@@ -140,9 +143,12 @@ export type Database = {
           bot_token_id?: string | null
           created_at?: string
           expires_at?: string | null
+          first_name?: string | null
           id?: string
           is_permanent?: boolean
+          last_name?: string | null
           owner_id: string
+          photo_url?: string | null
           subscription_days?: number | null
           telegram_user_id: number
           telegram_username?: string | null
@@ -151,9 +157,12 @@ export type Database = {
           bot_token_id?: string | null
           created_at?: string
           expires_at?: string | null
+          first_name?: string | null
           id?: string
           is_permanent?: boolean
+          last_name?: string | null
           owner_id?: string
+          photo_url?: string | null
           subscription_days?: number | null
           telegram_user_id?: number
           telegram_username?: string | null

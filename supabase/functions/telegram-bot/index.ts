@@ -30,6 +30,18 @@ async function tg(token: string, method: string, body?: any) {
   return res.json();
 }
 
+// Get user profile photo URL
+async function getUserPhotoUrl(token: string, userId: number): Promise<string | null> {
+  try {
+    const photos = await tg(token, "getUserProfilePhotos", { user_id: userId, limit: 1 });
+    if (!photos.ok || !photos.result?.photos?.length) return null;
+    const fileId = photos.result.photos[0][photos.result.photos[0].length - 1].file_id;
+    const file = await tg(token, "getFile", { file_id: fileId });
+    if (!file.ok) return null;
+    return `https://api.telegram.org/file/bot${token}/${file.result.file_path}`;
+  } catch { return null; }
+}
+
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("ar-SA", { year: "numeric", month: "short", day: "numeric" });
 }
@@ -141,9 +153,16 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
           text: `✅ تم قبولك في القناة *${req.chat.title || ""}*! مرحباً بك 🎉`,
           parse_mode: "Markdown",
         });
-        if (req.from.username) {
+        // Update user info on join
+        const updateData: any = {};
+        if (req.from.username) updateData.telegram_username = req.from.username;
+        if (req.from.first_name) updateData.first_name = req.from.first_name;
+        if (req.from.last_name) updateData.last_name = req.from.last_name;
+        if (Object.keys(updateData).length > 0) {
+          const photoUrl = await getUserPhotoUrl(botToken, telegramUserId);
+          if (photoUrl) updateData.photo_url = photoUrl;
           await sb.from("telegram_subscribers")
-            .update({ telegram_username: req.from.username })
+            .update(updateData)
             .eq("owner_id", ownerId)
             .eq("bot_token_id", botTokenId)
             .eq("telegram_user_id", telegramUserId);
@@ -274,15 +293,21 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
         case "await_sub_id": {
           let telegramUserId: number | null = null;
           let telegramUsername: string | null = null;
+          let userFirstName: string | null = null;
+          let userLastName: string | null = null;
 
           // Support both old (forward_from) and new (forward_origin) Telegram API
           if (msg.forward_from) {
             telegramUserId = msg.forward_from.id;
             telegramUsername = msg.forward_from.username || null;
+            userFirstName = msg.forward_from.first_name || null;
+            userLastName = msg.forward_from.last_name || null;
           } else if (msg.forward_origin) {
             if (msg.forward_origin.type === "user" && msg.forward_origin.sender_user) {
               telegramUserId = msg.forward_origin.sender_user.id;
               telegramUsername = msg.forward_origin.sender_user.username || null;
+              userFirstName = msg.forward_origin.sender_user.first_name || null;
+              userLastName = msg.forward_origin.sender_user.last_name || null;
             } else if (msg.forward_origin.type === "hidden_user") {
               await tg(botToken, "sendMessage", {
                 chat_id: chatId,
@@ -324,7 +349,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
             existingInfo = `\n\n⚠️ *مشترك حالياً:* ${status}\nسيتم تحديث الاشتراك.`;
           }
 
-          await setState(chatId, botToken, "await_sub_days", { telegramUserId, telegramUsername });
+          await setState(chatId, botToken, "await_sub_days", { telegramUserId, telegramUsername, userFirstName, userLastName });
 
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
@@ -355,7 +380,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
 
         // ── ADD SUBSCRIBER STEP 2: waiting for days ──
         case "await_sub_days": {
-          const { telegramUserId, telegramUsername } = currentState.data;
+          const { telegramUserId, telegramUsername, userFirstName: fn, userLastName: ln } = currentState.data;
           const isPermanent = text.trim() === "دائم";
           const days = isPermanent ? null : parseInt(text.trim());
 
@@ -371,8 +396,11 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
           await clearState(chatId, botToken);
           const expiresAt = isPermanent ? null : new Date(Date.now() + days! * 86400000).toISOString();
 
+          // Get photo
+          const photoUrl = await getUserPhotoUrl(botToken, telegramUserId);
+
           const { error } = await sb.from("telegram_subscribers").upsert(
-            { owner_id: ownerId, bot_token_id: botTokenId, telegram_user_id: telegramUserId, telegram_username: telegramUsername, subscription_days: days, expires_at: expiresAt, is_permanent: isPermanent },
+            { owner_id: ownerId, bot_token_id: botTokenId, telegram_user_id: telegramUserId, telegram_username: telegramUsername, first_name: fn || null, last_name: ln || null, photo_url: photoUrl, subscription_days: days, expires_at: expiresAt, is_permanent: isPermanent },
             { onConflict: "owner_id,telegram_user_id" }
           );
 
@@ -734,14 +762,17 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
             await tg(botToken, "sendMessage", { chat_id: chatId, text: "⚠️ انتهت صلاحية العملية. أعد المحاولة.", reply_markup: adminKeyboard() });
             break;
           }
-          const { telegramUserId, telegramUsername } = currentSt.data;
+          const { telegramUserId, telegramUsername, userFirstName: fn, userLastName: ln } = currentSt.data;
           const isPermanent = data === "days_permanent";
           const days = isPermanent ? null : parseInt(data.replace("days_", ""));
           await clearState(chatId, botToken);
           const expiresAt = isPermanent ? null : new Date(Date.now() + days! * 86400000).toISOString();
 
+          // Get photo
+          const photoUrl = await getUserPhotoUrl(botToken, telegramUserId);
+
           const { error } = await sb.from("telegram_subscribers").upsert(
-            { owner_id: ownerId, bot_token_id: botTokenId, telegram_user_id: telegramUserId, telegram_username: telegramUsername, subscription_days: days, expires_at: expiresAt, is_permanent: isPermanent },
+            { owner_id: ownerId, bot_token_id: botTokenId, telegram_user_id: telegramUserId, telegram_username: telegramUsername, first_name: fn || null, last_name: ln || null, photo_url: photoUrl, subscription_days: days, expires_at: expiresAt, is_permanent: isPermanent },
             { onConflict: "owner_id,telegram_user_id" }
           );
 

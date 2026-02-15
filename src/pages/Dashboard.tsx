@@ -7,13 +7,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import {
   LogOut, Trash2, RefreshCw, Users, Zap, Bot, UserPlus, Clock,
-  Settings, Key, Shield, MessageSquare, Save, Loader2,
+  Settings, Key, Shield, MessageSquare, Save, Loader2, User, Calendar, Hash,
 } from "lucide-react";
 
 interface TelegramSubscriber {
   id: string;
   telegram_user_id: number;
   telegram_username: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  photo_url: string | null;
   subscription_days: number | null;
   expires_at: string | null;
   is_permanent: boolean;
@@ -80,22 +83,17 @@ const Dashboard = () => {
 
   const handleChangeToken = async () => {
     if (!newToken.trim() || !canChangeToken()) return;
-
     setSavingSettings(true);
     try {
       const { error } = await supabase
         .from("bot_tokens")
         .update({ token: newToken.trim(), token_updated_at: new Date().toISOString() })
         .eq("id", botSettings!.id);
-
       if (error) throw error;
-
-      const { data: webhookRes, error: webhookErr } = await supabase.functions.invoke("telegram-bot", {
+      const { error: webhookErr } = await supabase.functions.invoke("telegram-bot", {
         body: { action: "setup_webhook", bot_token: newToken.trim() },
       });
-
       if (webhookErr) throw webhookErr;
-
       toast({ title: "تم تغيير التوكن وتحديث الويب هوك ✅" });
       setNewToken("");
       fetchData();
@@ -108,23 +106,11 @@ const Dashboard = () => {
 
   const handleSaveSettings = async () => {
     if (!botSettings) return;
-
     setSavingSettings(true);
     try {
-      const updates: any = {
-        non_subscriber_message: nonSubMessage.trim(),
-      };
-      if (adminId.trim()) {
-        updates.admin_telegram_id = parseInt(adminId.trim());
-      } else {
-        updates.admin_telegram_id = null;
-      }
-
-      const { error } = await supabase
-        .from("bot_tokens")
-        .update(updates)
-        .eq("id", botSettings.id);
-
+      const updates: any = { non_subscriber_message: nonSubMessage.trim() };
+      updates.admin_telegram_id = adminId.trim() ? parseInt(adminId.trim()) : null;
+      const { error } = await supabase.from("bot_tokens").update(updates).eq("id", botSettings.id);
       if (error) throw error;
       toast({ title: "تم حفظ الإعدادات ✅" });
       fetchData();
@@ -150,6 +136,14 @@ const Dashboard = () => {
   const isExpired = (sub: TelegramSubscriber) =>
     !sub.is_permanent && sub.expires_at && new Date(sub.expires_at) < new Date();
 
+  const daysRemaining = (expiresAt: string) =>
+    Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86400000));
+
+  const getDisplayName = (sub: TelegramSubscriber) => {
+    const parts = [sub.first_name, sub.last_name].filter(Boolean);
+    return parts.length > 0 ? parts.join(" ") : null;
+  };
+
   const activeCount = subscribers.filter((s) => !isExpired(s)).length;
   const expiredCount = subscribers.filter((s) => isExpired(s)).length;
 
@@ -164,12 +158,7 @@ const Dashboard = () => {
             </div>
             <h1 className="text-lg font-bold text-foreground">إدارة اشتراكات تلغرام</h1>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleLogout}
-            className="text-muted-foreground hover:text-destructive"
-          >
+          <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground hover:text-destructive">
             <LogOut className="w-4 h-4 ml-2" />
             خروج
           </Button>
@@ -228,27 +217,101 @@ const Dashboard = () => {
                 <p className="text-xs text-muted-foreground/60 mt-1">أضف المشتركين عبر البوت في تلغرام</p>
               </div>
             ) : (
-              subscribers.map((sub, i) => (
-                <div key={sub.id} className="glass-card p-4 flex items-center justify-between animate-fade-in" style={{ animationDelay: `${i * 0.05}s` }}>
-                  <div className="flex items-center gap-3">
-                    <div className={`w-2 h-2 rounded-full ${isExpired(sub) ? "bg-destructive" : "bg-success"}`} />
-                    <div>
-                      <p className="font-medium text-foreground font-mono text-sm" dir="ltr">{sub.telegram_user_id}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {sub.is_permanent ? "♾ دائم" : sub.expires_at ? `حتى ${new Date(sub.expires_at).toLocaleDateString("ar-SA")}` : "غير محدد"}
-                      </p>
+              subscribers.map((sub, i) => {
+                const expired = isExpired(sub);
+                const displayName = getDisplayName(sub);
+                const remaining = sub.expires_at ? daysRemaining(sub.expires_at) : null;
+
+                return (
+                  <div key={sub.id} className="glass-card p-4 animate-fade-in" style={{ animationDelay: `${i * 0.05}s` }}>
+                    <div className="flex items-start gap-3">
+                      {/* Avatar */}
+                      <div className="flex-shrink-0">
+                        {sub.photo_url ? (
+                          <img
+                            src={sub.photo_url}
+                            alt={displayName || "User"}
+                            className="w-12 h-12 rounded-full object-cover border-2 border-border/50"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = "none";
+                              (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden");
+                            }}
+                          />
+                        ) : null}
+                        <div className={`w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center ${sub.photo_url ? "hidden" : ""}`}>
+                          <User className="w-6 h-6 text-primary/60" />
+                        </div>
+                      </div>
+
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="font-semibold text-foreground truncate">
+                            {displayName || `مستخدم ${sub.telegram_user_id}`}
+                          </p>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${
+                            expired ? "bg-destructive/20 text-destructive" : "bg-success/20 text-success"
+                          }`}>
+                            {expired ? "منتهي" : sub.is_permanent ? "♾ دائم" : "نشط"}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                          <div className="flex items-center gap-1.5">
+                            <Hash className="w-3 h-3 flex-shrink-0" />
+                            <span className="font-mono" dir="ltr">{sub.telegram_user_id}</span>
+                          </div>
+
+                          {sub.telegram_username && (
+                            <div className="flex items-center gap-1.5">
+                              <User className="w-3 h-3 flex-shrink-0" />
+                              <span dir="ltr">@{sub.telegram_username}</span>
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-1.5">
+                            <Calendar className="w-3 h-3 flex-shrink-0" />
+                            <span>اشترك: {new Date(sub.created_at).toLocaleDateString("ar-SA")}</span>
+                          </div>
+
+                          {sub.is_permanent ? (
+                            <div className="flex items-center gap-1.5 text-primary">
+                              <Zap className="w-3 h-3 flex-shrink-0" />
+                              <span>اشتراك دائم</span>
+                            </div>
+                          ) : sub.expires_at ? (
+                            <div className={`flex items-center gap-1.5 ${expired ? "text-destructive" : remaining! <= 3 ? "text-yellow-500" : ""}`}>
+                              <Clock className="w-3 h-3 flex-shrink-0" />
+                              <span>
+                                {expired
+                                  ? `انتهى ${new Date(sub.expires_at).toLocaleDateString("ar-SA")}`
+                                  : `متبقي ${remaining} يوم`}
+                              </span>
+                            </div>
+                          ) : null}
+
+                          {sub.subscription_days && !sub.is_permanent && (
+                            <div className="flex items-center gap-1.5">
+                              <Calendar className="w-3 h-3 flex-shrink-0" />
+                              <span>مدة: {sub.subscription_days} يوم</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Delete */}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => deleteSubscriber(sub.id)}
+                        className="text-muted-foreground hover:text-destructive h-8 w-8 flex-shrink-0"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs px-2 py-1 rounded-full ${isExpired(sub) ? "bg-destructive/20 text-destructive" : "bg-success/20 text-success"}`}>
-                      {isExpired(sub) ? "منتهي" : "نشط"}
-                    </span>
-                    <Button variant="ghost" size="icon" onClick={() => deleteSubscriber(sub.id)} className="text-muted-foreground hover:text-destructive h-8 w-8">
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         )}
