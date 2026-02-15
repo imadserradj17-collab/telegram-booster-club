@@ -104,6 +104,20 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
     const chatId = req.chat.id;
     const firstName = req.from.first_name || "";
 
+    // Only process if this channel belongs to THIS bot
+    const { data: myChannel } = await sb
+      .from("telegram_channels")
+      .select("id")
+      .eq("owner_id", ownerId)
+      .eq("bot_token_id", botTokenId)
+      .eq("channel_id", chatId)
+      .maybeSingle();
+
+    if (!myChannel) {
+      // This channel isn't managed by this bot — ignore
+      return;
+    }
+
     const { data: sub } = await sb
       .from("telegram_subscribers")
       .select("*")
