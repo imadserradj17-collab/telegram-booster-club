@@ -876,7 +876,6 @@ Deno.serve(async (req) => {
                 }
               }
               await tg(tokenRow.token, "sendMessage", { chat_id: sub.telegram_user_id, text: "⚠️ *انتهى اشتراكك*\n\nتم إزالتك من القنوات.", parse_mode: "Markdown" });
-              await sb.from("telegram_subscribers").delete().eq("id", sub.id);
             }
             if (tokenRow.admin_telegram_id) {
               await tg(tokenRow.token, "sendMessage", { chat_id: tokenRow.admin_telegram_id, text: `🔔 تم إزالة *${expiredSubs.length}* مشترك منتهي.`, parse_mode: "Markdown" });
