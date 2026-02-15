@@ -46,12 +46,15 @@ const Index = () => {
 
   const checkUserStatus = async (userId: string) => {
     const [profileRes, tokenRes, roleRes] = await Promise.all([
-      supabase.from("profiles").select("is_approved").eq("id", userId).maybeSingle(),
+      supabase.from("profiles").select("is_approved, approved_until").eq("id", userId).maybeSingle(),
       supabase.from("bot_tokens").select("id").eq("user_id", userId).maybeSingle(),
       supabase.rpc("has_role", { _user_id: userId, _role: "admin" }),
     ]);
 
-    setIsApproved(profileRes.data?.is_approved ?? false);
+    const profile = profileRes.data;
+    const approved = profile?.is_approved && 
+      (!profile.approved_until || new Date(profile.approved_until) > new Date());
+    setIsApproved(approved ?? false);
     setHasBotToken(!!tokenRes.data);
     setIsAdmin(roleRes.data === true);
     setShowAdmin(roleRes.data === true);

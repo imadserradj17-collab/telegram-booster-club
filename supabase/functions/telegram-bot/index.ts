@@ -846,15 +846,18 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ error: "Invalid token" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Check if the bot owner's account is approved
+      // Check if the bot owner's account is approved and not expired
       const { data: ownerProfile } = await supabaseAdmin()
         .from("profiles")
-        .select("is_approved")
+        .select("is_approved, approved_until")
         .eq("id", settings.user_id)
         .maybeSingle();
 
-      if (!ownerProfile?.is_approved) {
-        // Account is deactivated — ignore all bot updates
+      const isOwnerActive = ownerProfile?.is_approved && 
+        (!ownerProfile.approved_until || new Date(ownerProfile.approved_until) > new Date());
+
+      if (!isOwnerActive) {
+        // Account is deactivated or expired — ignore all bot updates
         return new Response(JSON.stringify({ ok: true, message: "Account deactivated" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 

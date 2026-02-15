@@ -1,19 +1,22 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import {
-  Shield, CheckCircle, XCircle, Loader2, Users, LogOut, ArrowRight,
+  Shield, CheckCircle, XCircle, Loader2, Users, LogOut, ArrowRight, Calendar,
 } from "lucide-react";
 
-interface UserProfile {
+interface UserWithEmail {
   id: string;
+  email: string;
   created_at: string;
   is_approved: boolean;
+  approved_until: string | null;
 }
 
 interface AdminPanelProps {
@@ -21,9 +24,10 @@ interface AdminPanelProps {
 }
 
 const AdminPanel = ({ onGoToDashboard }: AdminPanelProps) => {
-  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [users, setUsers] = useState<UserWithEmail[]>([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
+  const [daysInput, setDaysInput] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetchUsers();
@@ -31,26 +35,50 @@ const AdminPanel = ({ onGoToDashboard }: AdminPanelProps) => {
 
   const fetchUsers = async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from("profiles")
-      .select("*")
-      .order("created_at", { ascending: false });
-    if (data) setUsers(data);
+    const { data, error } = await supabase.rpc("get_users_with_email");
+    if (data) setUsers(data as UserWithEmail[]);
+    if (error) console.error(error);
     setLoading(false);
   };
 
-  const toggleApproval = async (userId: string, approve: boolean) => {
+  const activateUser = async (userId: string) => {
+    const days = parseInt(daysInput[userId] || "");
+    if (isNaN(days) || days <= 0) {
+      toast({ title: "خطأ", description: "أدخل عدد أيام صحيح", variant: "destructive" });
+      return;
+    }
+    setUpdating(userId);
+    try {
+      const approvedUntil = new Date(Date.now() + days * 86400000).toISOString();
+      const { error } = await supabase
+        .from("profiles")
+        .update({ is_approved: true, approved_until: approvedUntil })
+        .eq("id", userId);
+      if (error) throw error;
+      setUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, is_approved: true, approved_until: approvedUntil } : u))
+      );
+      setDaysInput((prev) => ({ ...prev, [userId]: "" }));
+      toast({ title: `تم تفعيل الحساب لمدة ${days} يوم ✅` });
+    } catch (error: any) {
+      toast({ title: "خطأ", description: error.message, variant: "destructive" });
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  const deactivateUser = async (userId: string) => {
     setUpdating(userId);
     try {
       const { error } = await supabase
         .from("profiles")
-        .update({ is_approved: approve })
+        .update({ is_approved: false, approved_until: null })
         .eq("id", userId);
       if (error) throw error;
       setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, is_approved: approve } : u))
+        prev.map((u) => (u.id === userId ? { ...u, is_approved: false, approved_until: null } : u))
       );
-      toast({ title: approve ? "تم تفعيل الحساب ✅" : "تم تعطيل الحساب ❌" });
+      toast({ title: "تم تعطيل الحساب ❌" });
     } catch (error: any) {
       toast({ title: "خطأ", description: error.message, variant: "destructive" });
     } finally {
@@ -62,8 +90,20 @@ const AdminPanel = ({ onGoToDashboard }: AdminPanelProps) => {
     await supabase.auth.signOut();
   };
 
+  const getRemainingDays = (approvedUntil: string | null) => {
+    if (!approvedUntil) return null;
+    const remaining = Math.ceil((new Date(approvedUntil).getTime() - Date.now()) / 86400000);
+    return remaining > 0 ? remaining : 0;
+  };
+
+  const isExpired = (user: UserWithEmail) => {
+    if (!user.is_approved) return false;
+    if (!user.approved_until) return false;
+    return new Date(user.approved_until) < new Date();
+  };
+
   const pendingCount = users.filter((u) => !u.is_approved).length;
-  const approvedCount = users.filter((u) => u.is_approved).length;
+  const approvedCount = users.filter((u) => u.is_approved && !isExpired(u)).length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -80,10 +120,10 @@ const AdminPanel = ({ onGoToDashboard }: AdminPanelProps) => {
         </Button>
       </header>
 
-      <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-6">
+      <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
         <div className="grid grid-cols-2 gap-4">
           <div className="glass-card p-4">
-            <Users className="w-5 h-5 text-yellow-400 mb-2" />
+            <Users className="w-5 h-5 text-primary mb-2" />
             <p className="text-2xl font-bold text-foreground">{pendingCount}</p>
             <p className="text-xs text-muted-foreground">في انتظار الموافقة</p>
           </div>
@@ -105,103 +145,148 @@ const AdminPanel = ({ onGoToDashboard }: AdminPanelProps) => {
               <Table>
                 <TableHeader>
                   <TableRow className="border-border/50 hover:bg-transparent">
-                    <TableHead className="text-right text-muted-foreground">المستخدم</TableHead>
+                    <TableHead className="text-right text-muted-foreground">البريد الإلكتروني</TableHead>
                     <TableHead className="text-right text-muted-foreground">تاريخ التسجيل</TableHead>
                     <TableHead className="text-right text-muted-foreground">الحالة</TableHead>
-                    <TableHead className="text-right text-muted-foreground w-32">إجراء</TableHead>
+                    <TableHead className="text-right text-muted-foreground">المدة المتبقية</TableHead>
+                    <TableHead className="text-right text-muted-foreground w-64">إجراء</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {users.map((user) => (
-                    <TableRow key={user.id} className="border-border/30 hover:bg-secondary/30">
-                      <TableCell>
-                        <span className="font-mono text-xs text-muted-foreground" dir="ltr">
-                          {user.id.slice(0, 8)}...
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {new Date(user.created_at).toLocaleDateString("ar-EG")}
-                      </TableCell>
-                      <TableCell>
-                        {user.is_approved ? (
-                          <Badge className="bg-success/20 text-success border-success/30 text-[10px] hover:bg-success/20">مفعّل</Badge>
-                        ) : (
-                          <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 text-[10px] hover:bg-yellow-500/20">معلّق</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {updating === user.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                        ) : user.is_approved ? (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => toggleApproval(user.id, false)}
-                            className="text-destructive hover:text-destructive text-xs h-8"
-                          >
-                            <XCircle className="w-3.5 h-3.5 ml-1" />
-                            تعطيل
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => toggleApproval(user.id, true)}
-                            className="text-success hover:text-success text-xs h-8"
-                          >
-                            <CheckCircle className="w-3.5 h-3.5 ml-1" />
-                            تفعيل
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {users.map((user) => {
+                    const remaining = getRemainingDays(user.approved_until);
+                    const expired = isExpired(user);
+                    return (
+                      <TableRow key={user.id} className="border-border/30 hover:bg-secondary/30">
+                        <TableCell>
+                          <span className="text-sm text-foreground" dir="ltr">{user.email}</span>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {new Date(user.created_at).toLocaleDateString("ar-EG")}
+                        </TableCell>
+                        <TableCell>
+                          {expired ? (
+                            <Badge variant="destructive" className="text-[10px]">منتهي</Badge>
+                          ) : user.is_approved ? (
+                            <Badge className="bg-success/20 text-success border-success/30 text-[10px] hover:bg-success/20">مفعّل</Badge>
+                          ) : (
+                            <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px] hover:bg-primary/20">معلّق</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {user.is_approved && remaining !== null ? (
+                            remaining > 0 ? `${remaining} يوم` : "منتهي"
+                          ) : user.is_approved ? "—" : "—"}
+                        </TableCell>
+                        <TableCell>
+                          {updating === user.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                          ) : user.is_approved && !expired ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => deactivateUser(user.id)}
+                              className="text-destructive hover:text-destructive text-xs h-8"
+                            >
+                              <XCircle className="w-3.5 h-3.5 ml-1" />
+                              تعطيل
+                            </Button>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <Input
+                                type="number"
+                                placeholder="عدد الأيام"
+                                value={daysInput[user.id] || ""}
+                                onChange={(e) => setDaysInput((prev) => ({ ...prev, [user.id]: e.target.value }))}
+                                className="w-24 h-8 text-xs bg-secondary/50 border-border/50 text-foreground"
+                                min={1}
+                                dir="ltr"
+                              />
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => activateUser(user.id)}
+                                className="text-success hover:text-success text-xs h-8"
+                              >
+                                <CheckCircle className="w-3.5 h-3.5 ml-1" />
+                                تفعيل
+                              </Button>
+                            </div>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
 
             {/* Mobile Cards */}
             <div className="space-y-3 md:hidden">
-              {users.map((user) => (
-                <div key={user.id} className="glass-card p-4 flex items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-mono text-xs text-muted-foreground mb-1" dir="ltr">
-                      {user.id.slice(0, 8)}...
-                    </p>
-                    <div className="flex items-center gap-2">
-                      {user.is_approved ? (
-                        <Badge className="bg-success/20 text-success border-success/30 text-[10px] hover:bg-success/20">مفعّل</Badge>
-                      ) : (
-                        <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 text-[10px] hover:bg-yellow-500/20">معلّق</Badge>
-                      )}
-                      <span className="text-[10px] text-muted-foreground">
-                        {new Date(user.created_at).toLocaleDateString("ar-EG")}
-                      </span>
+              {users.map((user) => {
+                const remaining = getRemainingDays(user.approved_until);
+                const expired = isExpired(user);
+                return (
+                  <div key={user.id} className="glass-card p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm text-foreground truncate" dir="ltr">{user.email}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          {expired ? (
+                            <Badge variant="destructive" className="text-[10px]">منتهي</Badge>
+                          ) : user.is_approved ? (
+                            <Badge className="bg-success/20 text-success border-success/30 text-[10px] hover:bg-success/20">مفعّل</Badge>
+                          ) : (
+                            <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px] hover:bg-primary/20">معلّق</Badge>
+                          )}
+                          {user.is_approved && remaining !== null && remaining > 0 && (
+                            <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                              <Calendar className="w-3 h-3" />
+                              {remaining} يوم
+                            </span>
+                          )}
+                          <span className="text-[10px] text-muted-foreground">
+                            {new Date(user.created_at).toLocaleDateString("ar-EG")}
+                          </span>
+                        </div>
+                      </div>
+                      {updating === user.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground flex-shrink-0" />
+                      ) : user.is_approved && !expired ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => deactivateUser(user.id)}
+                          className="text-destructive hover:text-destructive text-xs h-8 flex-shrink-0"
+                        >
+                          <XCircle className="w-3.5 h-3.5" />
+                        </Button>
+                      ) : null}
                     </div>
+                    {(!user.is_approved || expired) && (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          placeholder="عدد الأيام"
+                          value={daysInput[user.id] || ""}
+                          onChange={(e) => setDaysInput((prev) => ({ ...prev, [user.id]: e.target.value }))}
+                          className="flex-1 h-8 text-xs bg-secondary/50 border-border/50 text-foreground"
+                          min={1}
+                          dir="ltr"
+                        />
+                        <Button
+                          size="sm"
+                          onClick={() => activateUser(user.id)}
+                          className="gradient-telegram text-primary-foreground text-xs h-8"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5 ml-1" />
+                          تفعيل
+                        </Button>
+                      </div>
+                    )}
                   </div>
-                  {updating === user.id ? (
-                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                  ) : user.is_approved ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => toggleApproval(user.id, false)}
-                      className="text-destructive hover:text-destructive text-xs h-8"
-                    >
-                      <XCircle className="w-3.5 h-3.5" />
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => toggleApproval(user.id, true)}
-                      className="text-success hover:text-success text-xs h-8"
-                    >
-                      <CheckCircle className="w-3.5 h-3.5" />
-                    </Button>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </>
         )}

@@ -73,16 +73,19 @@ export type Database = {
       }
       profiles: {
         Row: {
+          approved_until: string | null
           created_at: string
           id: string
           is_approved: boolean
         }
         Insert: {
+          approved_until?: string | null
           created_at?: string
           id: string
           is_approved?: boolean
         }
         Update: {
+          approved_until?: string | null
           created_at?: string
           id?: string
           is_approved?: boolean
@@ -203,6 +206,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_users_with_email: {
+        Args: never
+        Returns: {
+          approved_until: string
+          created_at: string
+          email: string
+          id: string
+          is_approved: boolean
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
