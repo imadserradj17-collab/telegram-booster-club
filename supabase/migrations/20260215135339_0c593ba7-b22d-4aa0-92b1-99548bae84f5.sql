@@ -1,0 +1,1 @@
+ALTER TABLE public.telegram_channels ADD COLUMN invite_link text;
