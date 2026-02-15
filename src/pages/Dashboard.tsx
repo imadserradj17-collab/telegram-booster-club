@@ -4,94 +4,101 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import {
-  Send, LogOut, Plus, Trash2, RefreshCw, Users, Zap, Settings,
+  Send, LogOut, Plus, Trash2, RefreshCw, Users, Zap, Settings, Bot, Hash, UserPlus, Clock,
 } from "lucide-react";
 
-interface Subscription {
+interface TelegramChannel {
   id: string;
+  channel_id: number;
   channel_name: string;
-  channel_id: string | null;
-  status: string;
+  created_at: string;
+}
+
+interface TelegramSubscriber {
+  id: string;
+  telegram_user_id: number;
+  telegram_username: string | null;
+  subscription_days: number | null;
+  expires_at: string | null;
+  is_permanent: boolean;
   created_at: string;
 }
 
 const Dashboard = () => {
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
-  const [newChannel, setNewChannel] = useState("");
+  const [channels, setChannels] = useState<TelegramChannel[]>([]);
+  const [subscribers, setSubscribers] = useState<TelegramSubscriber[]>([]);
+  const [newChannelId, setNewChannelId] = useState("");
+  const [newChannelName, setNewChannelName] = useState("");
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
+  const [activeTab, setActiveTab] = useState<"channels" | "subscribers">("channels");
 
   useEffect(() => {
-    fetchSubscriptions();
+    fetchData();
   }, []);
 
-  const fetchSubscriptions = async () => {
+  const fetchData = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("subscriptions")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const [channelsRes, subsRes] = await Promise.all([
+      supabase.from("telegram_channels").select("*").order("created_at", { ascending: false }),
+      supabase.from("telegram_subscribers").select("*").order("created_at", { ascending: false }),
+    ]);
 
-    if (error) {
-      toast({ title: "خطأ في جلب البيانات", variant: "destructive" });
-    } else {
-      setSubscriptions(data || []);
-    }
+    if (channelsRes.data) setChannels(channelsRes.data);
+    if (subsRes.data) setSubscribers(subsRes.data);
     setLoading(false);
   };
 
-  const addSubscription = async (e: React.FormEvent) => {
+  const addChannel = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newChannel.trim()) return;
+    if (!newChannelId.trim() || !newChannelName.trim()) return;
 
     setAdding(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { error } = await supabase.from("subscriptions").insert({
-      user_id: user.id,
-      channel_name: newChannel.trim(),
+    const { error } = await supabase.from("telegram_channels").insert({
+      owner_id: user.id,
+      channel_id: parseInt(newChannelId.trim()),
+      channel_name: newChannelName.trim(),
     });
 
     if (error) {
       toast({ title: "خطأ في الإضافة", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "تمت إضافة القناة ✅" });
-      setNewChannel("");
-      fetchSubscriptions();
+      setNewChannelId("");
+      setNewChannelName("");
+      fetchData();
     }
     setAdding(false);
   };
 
-  const deleteSubscription = async (id: string) => {
-    const { error } = await supabase.from("subscriptions").delete().eq("id", id);
-    if (error) {
-      toast({ title: "خطأ في الحذف", variant: "destructive" });
-    } else {
+  const deleteChannel = async (id: string) => {
+    const { error } = await supabase.from("telegram_channels").delete().eq("id", id);
+    if (!error) {
+      setChannels((prev) => prev.filter((c) => c.id !== id));
       toast({ title: "تم حذف القناة" });
-      setSubscriptions((prev) => prev.filter((s) => s.id !== id));
     }
   };
 
-  const toggleStatus = async (id: string, currentStatus: string) => {
-    const newStatus = currentStatus === "active" ? "paused" : "active";
-    const { error } = await supabase
-      .from("subscriptions")
-      .update({ status: newStatus })
-      .eq("id", id);
-
-    if (error) {
-      toast({ title: "خطأ في التحديث", variant: "destructive" });
-    } else {
-      setSubscriptions((prev) =>
-        prev.map((s) => (s.id === id ? { ...s, status: newStatus } : s))
-      );
+  const deleteSubscriber = async (id: string) => {
+    const { error } = await supabase.from("telegram_subscribers").delete().eq("id", id);
+    if (!error) {
+      setSubscribers((prev) => prev.filter((s) => s.id !== id));
+      toast({ title: "تم حذف المشترك" });
     }
   };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
   };
+
+  const isExpired = (sub: TelegramSubscriber) =>
+    !sub.is_permanent && sub.expires_at && new Date(sub.expires_at) < new Date();
+
+  const activeCount = subscribers.filter((s) => !isExpired(s)).length;
+  const expiredCount = subscribers.filter((s) => isExpired(s)).length;
 
   return (
     <div className="min-h-screen">
@@ -100,9 +107,9 @@ const Dashboard = () => {
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg gradient-telegram flex items-center justify-center">
-              <Send className="w-5 h-5 text-primary-foreground" />
+              <Bot className="w-5 h-5 text-primary-foreground" />
             </div>
-            <h1 className="text-lg font-bold text-foreground">إدارة الاشتراكات</h1>
+            <h1 className="text-lg font-bold text-foreground">إدارة اشتراكات تلغرام</h1>
           </div>
           <Button
             variant="ghost"
@@ -118,91 +125,170 @@ const Dashboard = () => {
 
       <main className="container mx-auto px-4 py-8 max-w-3xl">
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-4 gap-3 mb-8">
           {[
-            { icon: Users, label: "إجمالي القنوات", value: subscriptions.length },
-            { icon: Zap, label: "نشطة", value: subscriptions.filter((s) => s.status === "active").length },
-            { icon: Settings, label: "متوقفة", value: subscriptions.filter((s) => s.status === "paused").length },
+            { icon: Hash, label: "القنوات", value: channels.length },
+            { icon: Users, label: "المشتركون", value: subscribers.length },
+            { icon: Zap, label: "نشط", value: activeCount },
+            { icon: Clock, label: "منتهي", value: expiredCount },
           ].map(({ icon: Icon, label, value }, i) => (
-            <div key={i} className="glass-card p-4 text-center">
-              <Icon className="w-5 h-5 text-primary mx-auto mb-2" />
-              <p className="text-2xl font-bold text-foreground">{value}</p>
-              <p className="text-xs text-muted-foreground">{label}</p>
+            <div key={i} className="glass-card p-3 text-center">
+              <Icon className="w-4 h-4 text-primary mx-auto mb-1" />
+              <p className="text-xl font-bold text-foreground">{value}</p>
+              <p className="text-[10px] text-muted-foreground">{label}</p>
             </div>
           ))}
         </div>
 
-        {/* Add Channel */}
-        <form onSubmit={addSubscription} className="glass-card p-4 mb-6 flex gap-3 items-end">
-          <div className="flex-1">
-            <Input
-              placeholder="اسم القناة أو المعرّف..."
-              value={newChannel}
-              onChange={(e) => setNewChannel(e.target.value)}
-              className="bg-secondary/50 border-border/50 text-foreground placeholder:text-muted-foreground"
-            />
-          </div>
+        {/* Tabs */}
+        <div className="flex gap-2 mb-6">
           <Button
-            type="submit"
-            disabled={adding || !newChannel.trim()}
-            className="gradient-telegram text-primary-foreground glow-primary hover:opacity-90"
+            variant={activeTab === "channels" ? "default" : "ghost"}
+            size="sm"
+            onClick={() => setActiveTab("channels")}
+            className={activeTab === "channels" ? "gradient-telegram text-primary-foreground" : "text-muted-foreground"}
           >
-            <Plus className="w-4 h-4 ml-1" />
-            إضافة
+            <Hash className="w-4 h-4 ml-1" />
+            القنوات
           </Button>
-        </form>
+          <Button
+            variant={activeTab === "subscribers" ? "default" : "ghost"}
+            size="sm"
+            onClick={() => setActiveTab("subscribers")}
+            className={activeTab === "subscribers" ? "gradient-telegram text-primary-foreground" : "text-muted-foreground"}
+          >
+            <Users className="w-4 h-4 ml-1" />
+            المشتركون
+          </Button>
+          <Button variant="ghost" size="sm" onClick={fetchData} className="text-muted-foreground mr-auto">
+            <RefreshCw className="w-4 h-4" />
+          </Button>
+        </div>
 
-        {/* Channels List */}
-        <div className="space-y-3">
-          {loading ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
-              جاري التحميل...
-            </div>
-          ) : subscriptions.length === 0 ? (
-            <div className="text-center py-12 glass-card">
-              <Send className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
-              <p className="text-muted-foreground">لا توجد قنوات بعد</p>
-              <p className="text-xs text-muted-foreground/60 mt-1">أضف أول قناة تلغرام للبدء</p>
-            </div>
-          ) : (
-            subscriptions.map((sub, i) => (
-              <div
-                key={sub.id}
-                className="glass-card p-4 flex items-center justify-between animate-fade-in"
-                style={{ animationDelay: `${i * 0.05}s` }}
+        {/* Channels Tab */}
+        {activeTab === "channels" && (
+          <>
+            <form onSubmit={addChannel} className="glass-card p-4 mb-6 space-y-3">
+              <div className="flex gap-3">
+                <Input
+                  placeholder="معرف القناة (مثل: -1001234567890)"
+                  value={newChannelId}
+                  onChange={(e) => setNewChannelId(e.target.value)}
+                  dir="ltr"
+                  className="bg-secondary/50 border-border/50 text-foreground placeholder:text-muted-foreground text-left"
+                />
+                <Input
+                  placeholder="اسم القناة"
+                  value={newChannelName}
+                  onChange={(e) => setNewChannelName(e.target.value)}
+                  className="bg-secondary/50 border-border/50 text-foreground placeholder:text-muted-foreground"
+                />
+              </div>
+              <Button
+                type="submit"
+                disabled={adding || !newChannelId.trim() || !newChannelName.trim()}
+                className="w-full gradient-telegram text-primary-foreground glow-primary hover:opacity-90"
               >
-                <div className="flex items-center gap-3">
-                  <div className={`w-2 h-2 rounded-full ${sub.status === "active" ? "bg-success" : "bg-muted-foreground"}`} />
-                  <div>
-                    <p className="font-medium text-foreground">{sub.channel_name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(sub.created_at).toLocaleDateString("ar-SA")}
-                    </p>
+                <Plus className="w-4 h-4 ml-1" />
+                إضافة قناة
+              </Button>
+            </form>
+
+            <div className="space-y-3">
+              {loading ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
+                </div>
+              ) : channels.length === 0 ? (
+                <div className="text-center py-12 glass-card">
+                  <Send className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
+                  <p className="text-muted-foreground">لا توجد قنوات</p>
+                  <p className="text-xs text-muted-foreground/60 mt-1">أضف قناة تلغرام لبدء إدارة الاشتراكات</p>
+                </div>
+              ) : (
+                channels.map((ch, i) => (
+                  <div
+                    key={ch.id}
+                    className="glass-card p-4 flex items-center justify-between animate-fade-in"
+                    style={{ animationDelay: `${i * 0.05}s` }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                        <Hash className="w-4 h-4 text-primary" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-foreground">{ch.channel_name}</p>
+                        <p className="text-xs text-muted-foreground font-mono" dir="ltr">{ch.channel_id}</p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => deleteChannel(ch.id)}
+                      className="text-muted-foreground hover:text-destructive h-8 w-8"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Subscribers Tab */}
+        {activeTab === "subscribers" && (
+          <div className="space-y-3">
+            {loading ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
+              </div>
+            ) : subscribers.length === 0 ? (
+              <div className="text-center py-12 glass-card">
+                <UserPlus className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
+                <p className="text-muted-foreground">لا يوجد مشتركون</p>
+                <p className="text-xs text-muted-foreground/60 mt-1">أضف المشتركين عبر البوت في تلغرام</p>
+              </div>
+            ) : (
+              subscribers.map((sub, i) => (
+                <div
+                  key={sub.id}
+                  className="glass-card p-4 flex items-center justify-between animate-fade-in"
+                  style={{ animationDelay: `${i * 0.05}s` }}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-2 h-2 rounded-full ${isExpired(sub) ? "bg-destructive" : "bg-success"}`} />
+                    <div>
+                      <p className="font-medium text-foreground font-mono text-sm" dir="ltr">
+                        {sub.telegram_user_id}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {sub.is_permanent
+                          ? "♾ دائم"
+                          : sub.expires_at
+                          ? `حتى ${new Date(sub.expires_at).toLocaleDateString("ar-SA")}`
+                          : "غير محدد"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs px-2 py-1 rounded-full ${isExpired(sub) ? "bg-destructive/20 text-destructive" : "bg-success/20 text-success"}`}>
+                      {isExpired(sub) ? "منتهي" : "نشط"}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => deleteSubscriber(sub.id)}
+                      className="text-muted-foreground hover:text-destructive h-8 w-8"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => toggleStatus(sub.id, sub.status)}
-                    className={sub.status === "active" ? "text-success hover:text-success/80" : "text-muted-foreground hover:text-foreground"}
-                  >
-                    {sub.status === "active" ? "نشط" : "متوقف"}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => deleteSubscription(sub.id)}
-                    className="text-muted-foreground hover:text-destructive h-8 w-8"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+              ))
+            )}
+          </div>
+        )}
       </main>
     </div>
   );

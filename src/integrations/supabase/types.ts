@@ -50,30 +50,60 @@ export type Database = {
         }
         Relationships: []
       }
-      subscriptions: {
+      telegram_channels: {
         Row: {
-          channel_id: string | null
+          channel_id: number
           channel_name: string
           created_at: string
           id: string
-          status: string
-          user_id: string
+          owner_id: string
         }
         Insert: {
-          channel_id?: string | null
+          channel_id: number
           channel_name: string
           created_at?: string
           id?: string
-          status?: string
-          user_id: string
+          owner_id: string
         }
         Update: {
-          channel_id?: string | null
+          channel_id?: number
           channel_name?: string
           created_at?: string
           id?: string
-          status?: string
-          user_id?: string
+          owner_id?: string
+        }
+        Relationships: []
+      }
+      telegram_subscribers: {
+        Row: {
+          created_at: string
+          expires_at: string | null
+          id: string
+          is_permanent: boolean
+          owner_id: string
+          subscription_days: number | null
+          telegram_user_id: number
+          telegram_username: string | null
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          is_permanent?: boolean
+          owner_id: string
+          subscription_days?: number | null
+          telegram_user_id: number
+          telegram_username?: string | null
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          is_permanent?: boolean
+          owner_id?: string
+          subscription_days?: number | null
+          telegram_user_id?: number
+          telegram_username?: string | null
         }
         Relationships: []
       }
