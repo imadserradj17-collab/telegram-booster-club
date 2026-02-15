@@ -147,19 +147,45 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
     if (msg.reply_to_message) {
       const replyText = msg.reply_to_message.text || "";
 
-      // Adding subscriber - step 1: got user ID
+      // Adding subscriber - step 1: got user info (ID, username, or forwarded message)
       if (replyText.includes("أرسل معرف المستخدم")) {
-        const telegramUserId = parseInt(text.trim());
-        if (isNaN(telegramUserId)) {
+        let telegramUserId: number | null = null;
+        let telegramUsername: string | null = null;
+
+        // Check if it's a forwarded message
+        if (msg.forward_from) {
+          telegramUserId = msg.forward_from.id;
+          telegramUsername = msg.forward_from.username || null;
+        } else if (msg.forward_sender_name) {
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
-            text: "❌ معرف غير صالح. أرسل رقم المعرف فقط.",
+            text: "❌ هذا المستخدم أخفى معلوماته. أرسل الـ ID أو الـ @username بدلاً من ذلك.",
           });
           return;
+        } else {
+          const input = text.trim().replace(/^@/, "");
+          const parsed = parseInt(input);
+          if (!isNaN(parsed)) {
+            telegramUserId = parsed;
+          } else if (input.length > 0) {
+            await tg(botToken, "sendMessage", {
+              chat_id: chatId,
+              text: `⚠️ لا يمكن تحويل الـ username إلى ID مباشرة.\n\nاطلب من @${input} إرسال /start للبوت ثم حوّل رسالته، أو أرسل الـ ID الرقمي:`,
+              reply_markup: { force_reply: true },
+            });
+            return;
+          } else {
+            await tg(botToken, "sendMessage", {
+              chat_id: chatId,
+              text: "❌ معرف غير صالح. أرسل رقم الـ ID أو @username أو حوّل رسالة.",
+            });
+            return;
+          }
         }
+
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
-          text: `✅ المعرف: ${telegramUserId}\n\nأرسل عدد أيام الاشتراك (أو اكتب "دائم" لاشتراك دائم):`,
+          text: `✅ المعرف: ${telegramUserId}${telegramUsername ? ` (@${telegramUsername})` : ""}\n\nأرسل عدد أيام الاشتراك (أو اكتب "دائم" لاشتراك دائم):`,
           reply_markup: { force_reply: true },
         });
         return;
@@ -167,10 +193,11 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
 
       // Adding subscriber - step 2: got days
       if (replyText.includes("أرسل عدد أيام الاشتراك")) {
-        // Extract user ID from previous message
         const idMatch = replyText.match(/المعرف: (\d+)/);
+        const usernameMatch = replyText.match(/@(\w+)/);
         if (!idMatch) return;
         const telegramUserId = parseInt(idMatch[1]);
+        const telegramUsername = usernameMatch ? usernameMatch[1] : null;
 
         const isPermanent = text.trim() === "دائم";
         const days = isPermanent ? null : parseInt(text.trim());
@@ -190,7 +217,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
           {
             owner_id: ownerId,
             telegram_user_id: telegramUserId,
-            telegram_username: null,
+            telegram_username: telegramUsername,
             subscription_days: days,
             expires_at: expiresAt,
             is_permanent: isPermanent,
@@ -248,18 +275,39 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
         return;
       }
 
-      // Adding channel - got channel ID
-      if (replyText.includes("أرسل معرف القناة")) {
-        const channelId = parseInt(text.trim());
-        if (isNaN(channelId)) {
-          await tg(botToken, "sendMessage", {
-            chat_id: chatId,
-            text: "❌ معرف غير صالح.",
-          });
-          return;
+      // Adding channel - got channel info (ID, username, or forwarded message)
+      if (replyText.includes("أضف قناة")) {
+        let channelId: number | null = null;
+
+        // Check if it's a forwarded message from a channel
+        if (msg.forward_from_chat) {
+          channelId = msg.forward_from_chat.id;
+        } else {
+          const input = text.trim().replace(/^@/, "");
+          const parsed = parseInt(input);
+          if (!isNaN(parsed)) {
+            channelId = parsed;
+          } else if (input.length > 0) {
+            // It's a username, try to resolve via getChat
+            const resolved = await tg(botToken, "getChat", { chat_id: `@${input}` });
+            if (resolved.ok) {
+              channelId = resolved.result.id;
+            } else {
+              await tg(botToken, "sendMessage", {
+                chat_id: chatId,
+                text: `❌ لم يتم العثور على القناة @${input}. تأكد من أن البوت مسؤول فيها.`,
+              });
+              return;
+            }
+          } else {
+            await tg(botToken, "sendMessage", {
+              chat_id: chatId,
+              text: "❌ معرف غير صالح. أرسل الـ ID أو @username أو حوّل رسالة من القناة.",
+            });
+            return;
+          }
         }
 
-        // Try to get channel info
         const chatInfo = await tg(botToken, "getChat", { chat_id: channelId });
         const channelName = chatInfo.ok ? chatInfo.result.title || `قناة ${channelId}` : `قناة ${channelId}`;
 
@@ -350,7 +398,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
       case "add_subscriber": {
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
-          text: "👤 أرسل معرف المستخدم (Telegram ID):",
+          text: "👤 أرسل معرف المستخدم بإحدى الطرق:\n\n1️⃣ أرسل الـ Telegram ID (رقم)\n2️⃣ أرسل الـ @username\n3️⃣ حوّل (Forward) رسالة من المستخدم",
           reply_markup: { force_reply: true },
         });
         break;
@@ -423,7 +471,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
       case "add_channel": {
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
-          text: "📺 أرسل معرف القناة (Channel ID):\n\nملاحظة: تأكد من إضافة البوت كمسؤول في القناة أولاً.",
+          text: "📺 أضف قناة بإحدى الطرق:\n\n1️⃣ أرسل معرف القناة (Channel ID رقم سالب)\n2️⃣ أرسل @username القناة\n3️⃣ حوّل (Forward) رسالة من القناة\n\n⚠️ تأكد من إضافة البوت كمسؤول في القناة أولاً.",
           reply_markup: { force_reply: true },
         });
         break;
