@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 export type Lang = "ar" | "en";
 
@@ -158,11 +159,53 @@ export const LanguageProvider = ({ children }: { children: ReactNode }) => {
     const saved = localStorage.getItem("app_lang");
     return (saved === "en" || saved === "ar") ? saved : "ar";
   });
+  const [userId, setUserId] = useState<string | null>(null);
 
-  const setLang = (newLang: Lang) => {
+  // Load language preference from DB when user logs in
+  useEffect(() => {
+    const loadUserLang = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        setUserId(session.user.id);
+        const { data } = await supabase
+          .from("profiles")
+          .select("preferred_language")
+          .eq("id", session.user.id)
+          .maybeSingle();
+        if (data?.preferred_language && (data.preferred_language === "ar" || data.preferred_language === "en")) {
+          setLangState(data.preferred_language as Lang);
+          localStorage.setItem("app_lang", data.preferred_language);
+        }
+      }
+    };
+    loadUserLang();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setUserId(session.user.id);
+        supabase.from("profiles").select("preferred_language").eq("id", session.user.id).maybeSingle()
+          .then(({ data }) => {
+            if (data?.preferred_language && (data.preferred_language === "ar" || data.preferred_language === "en")) {
+              setLangState(data.preferred_language as Lang);
+              localStorage.setItem("app_lang", data.preferred_language);
+            }
+          });
+      } else {
+        setUserId(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const setLang = useCallback((newLang: Lang) => {
     setLangState(newLang);
     localStorage.setItem("app_lang", newLang);
-  };
+    // Save to DB if logged in
+    if (userId) {
+      supabase.from("profiles").update({ preferred_language: newLang }).eq("id", userId).then();
+    }
+  }, [userId]);
 
   useEffect(() => {
     document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
