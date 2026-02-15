@@ -43,7 +43,11 @@ interface BotSettings {
 
 type TabKey = "overview" | "subscribers" | "expired" | "settings";
 
-const Dashboard = () => {
+interface DashboardProps {
+  onShowAdmin?: () => void;
+}
+
+const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const [subscribers, setSubscribers] = useState<TelegramSubscriber[]>([]);
   const [botSettings, setBotSettings] = useState<BotSettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -411,6 +415,15 @@ const Dashboard = () => {
         </nav>
 
         <div className="p-2 border-t border-border/50 space-y-1">
+          {onShowAdmin && (
+            <button
+              onClick={onShowAdmin}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-primary hover:bg-primary/10 transition-colors"
+            >
+              <Shield className="w-5 h-5 flex-shrink-0" />
+              {sidebarOpen && <span>لوحة الأدمن</span>}
+            </button>
+          )}
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className="w-full hidden md:flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
