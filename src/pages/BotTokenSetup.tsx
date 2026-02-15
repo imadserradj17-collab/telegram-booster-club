@@ -26,10 +26,14 @@ const BotTokenSetup = ({ onComplete }: BotTokenSetupProps) => {
       if (!user) throw new Error("غير مسجل الدخول");
 
       // Save token
-      const { error } = await supabase.from("bot_tokens").insert({
-        user_id: user.id,
-        token: token.trim(),
-      });
+      const { error } = await supabase.from("bot_tokens").upsert(
+        {
+          user_id: user.id,
+          token: token.trim(),
+          token_updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id" }
+      );
       if (error) throw error;
 
       // Setup webhook
