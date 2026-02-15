@@ -60,7 +60,6 @@ function adminKeyboard() {
 // Handle incoming updates
 async function handleUpdate(update: any, botToken: string, ownerId: string, adminTelegramId: number | null, nonSubMessage: string) {
   const sb = supabaseAdmin();
-  const sb = supabaseAdmin();
 
   // Handle chat join requests - AUTO APPROVE
   if (update.chat_join_request) {
