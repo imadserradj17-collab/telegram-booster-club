@@ -125,10 +125,44 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
           reply_markup: adminKeyboard(),
         });
       } else {
-        await tg(botToken, "sendMessage", {
-          chat_id: chatId,
-          text: nonSubMessage,
-        });
+        // Check if this user is a subscriber
+        const { data: sub } = await sb
+          .from("telegram_subscribers")
+          .select("*")
+          .eq("owner_id", ownerId)
+          .eq("telegram_user_id", fromId)
+          .maybeSingle();
+
+        if (sub && (sub.is_permanent || (sub.expires_at && new Date(sub.expires_at) > new Date()))) {
+          // Active subscriber - show channel invite buttons
+          const { data: channels } = await sb
+            .from("telegram_channels")
+            .select("channel_name, invite_link")
+            .eq("owner_id", ownerId);
+
+          const buttons = (channels || [])
+            .filter((ch: any) => ch.invite_link)
+            .map((ch: any) => [{ text: `📺 ${ch.channel_name}`, url: ch.invite_link }]);
+
+          if (buttons.length > 0) {
+            await tg(botToken, "sendMessage", {
+              chat_id: chatId,
+              text: "✅ *أنت مشترك!*\n\nاضغط على الأزرار للانضمام للقنوات:",
+              parse_mode: "Markdown",
+              reply_markup: { inline_keyboard: buttons },
+            });
+          } else {
+            await tg(botToken, "sendMessage", {
+              chat_id: chatId,
+              text: "✅ أنت مشترك! لا توجد قنوات مربوطة حالياً.",
+            });
+          }
+        } else {
+          await tg(botToken, "sendMessage", {
+            chat_id: chatId,
+            text: nonSubMessage,
+          });
+        }
       }
       return;
     }
@@ -311,11 +345,29 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
         const chatInfo = await tg(botToken, "getChat", { chat_id: channelId });
         const channelName = chatInfo.ok ? chatInfo.result.title || `قناة ${channelId}` : `قناة ${channelId}`;
 
+        // Create invite link with join request approval
+        let inviteLink = "";
+        const linkRes = await tg(botToken, "createChatInviteLink", {
+          chat_id: channelId,
+          creates_join_request: true,
+          name: `bot_invite_${channelId}`,
+        });
+        if (linkRes.ok) {
+          inviteLink = linkRes.result.invite_link;
+        } else {
+          await tg(botToken, "sendMessage", {
+            chat_id: chatId,
+            text: `❌ فشل إنشاء رابط الدعوة: ${linkRes.description || "تأكد أن البوت مسؤول بصلاحية دعوة أعضاء."}`,
+          });
+          return;
+        }
+
         const { error } = await sb.from("telegram_channels").upsert(
           {
             owner_id: ownerId,
             channel_id: channelId,
             channel_name: channelName,
+            invite_link: inviteLink,
           },
           { onConflict: "owner_id,channel_id" }
         );
@@ -330,7 +382,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, admi
 
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
-          text: `✅ تمت إضافة القناة: ${channelName}`,
+          text: `✅ تمت إضافة القناة: ${channelName}\n🔗 رابط الدعوة: ${inviteLink}`,
           reply_markup: adminKeyboard(),
         });
         return;

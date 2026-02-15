@@ -65,6 +65,7 @@ export type Database = {
           channel_name: string
           created_at: string
           id: string
+          invite_link: string | null
           owner_id: string
         }
         Insert: {
@@ -72,6 +73,7 @@ export type Database = {
           channel_name: string
           created_at?: string
           id?: string
+          invite_link?: string | null
           owner_id: string
         }
         Update: {
@@ -79,6 +81,7 @@ export type Database = {
           channel_name?: string
           created_at?: string
           id?: string
+          invite_link?: string | null
           owner_id?: string
         }
         Relationships: []
