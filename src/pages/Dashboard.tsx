@@ -6,16 +6,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import {
-  Send, LogOut, Plus, Trash2, RefreshCw, Users, Zap, Bot, Hash, UserPlus, Clock,
+  LogOut, Trash2, RefreshCw, Users, Zap, Bot, UserPlus, Clock,
   Settings, Key, Shield, MessageSquare, Save, Loader2,
 } from "lucide-react";
-
-interface TelegramChannel {
-  id: string;
-  channel_id: number;
-  channel_name: string;
-  created_at: string;
-}
 
 interface TelegramSubscriber {
   id: string;
@@ -36,15 +29,11 @@ interface BotSettings {
 }
 
 const Dashboard = () => {
-  const [channels, setChannels] = useState<TelegramChannel[]>([]);
   const [subscribers, setSubscribers] = useState<TelegramSubscriber[]>([]);
   const [botSettings, setBotSettings] = useState<BotSettings | null>(null);
-  const [newChannelId, setNewChannelId] = useState("");
-  const [newChannelName, setNewChannelName] = useState("");
   const [loading, setLoading] = useState(true);
-  const [adding, setAdding] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
-  const [activeTab, setActiveTab] = useState<"channels" | "subscribers" | "settings">("channels");
+  const [activeTab, setActiveTab] = useState<"subscribers" | "settings">("subscribers");
 
   // Settings form state
   const [newToken, setNewToken] = useState("");
@@ -57,13 +46,11 @@ const Dashboard = () => {
 
   const fetchData = async () => {
     setLoading(true);
-    const [channelsRes, subsRes, settingsRes] = await Promise.all([
-      supabase.from("telegram_channels").select("*").order("created_at", { ascending: false }),
+    const [subsRes, settingsRes] = await Promise.all([
       supabase.from("telegram_subscribers").select("*").order("created_at", { ascending: false }),
       supabase.from("bot_tokens").select("*").maybeSingle(),
     ]);
 
-    if (channelsRes.data) setChannels(channelsRes.data);
     if (subsRes.data) setSubscribers(subsRes.data);
     if (settingsRes.data) {
       setBotSettings(settingsRes.data as BotSettings);
@@ -103,7 +90,6 @@ const Dashboard = () => {
 
       if (error) throw error;
 
-      // Re-register webhook with new token
       const { data: webhookRes, error: webhookErr } = await supabase.functions.invoke("telegram-bot", {
         body: { action: "setup_webhook", bot_token: newToken.trim() },
       });
@@ -146,39 +132,6 @@ const Dashboard = () => {
       toast({ title: "خطأ", description: error.message, variant: "destructive" });
     } finally {
       setSavingSettings(false);
-    }
-  };
-
-  const addChannel = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newChannelId.trim() || !newChannelName.trim()) return;
-
-    setAdding(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { error } = await supabase.from("telegram_channels").insert({
-      owner_id: user.id,
-      channel_id: parseInt(newChannelId.trim()),
-      channel_name: newChannelName.trim(),
-    });
-
-    if (error) {
-      toast({ title: "خطأ في الإضافة", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "تمت إضافة القناة ✅" });
-      setNewChannelId("");
-      setNewChannelName("");
-      fetchData();
-    }
-    setAdding(false);
-  };
-
-  const deleteChannel = async (id: string) => {
-    const { error } = await supabase.from("telegram_channels").delete().eq("id", id);
-    if (!error) {
-      setChannels((prev) => prev.filter((c) => c.id !== id));
-      toast({ title: "تم حذف القناة" });
     }
   };
 
@@ -225,9 +178,8 @@ const Dashboard = () => {
 
       <main className="container mx-auto px-4 py-8 max-w-3xl">
         {/* Stats */}
-        <div className="grid grid-cols-4 gap-3 mb-8">
+        <div className="grid grid-cols-3 gap-3 mb-8">
           {[
-            { icon: Hash, label: "القنوات", value: channels.length },
             { icon: Users, label: "المشتركون", value: subscribers.length },
             { icon: Zap, label: "نشط", value: activeCount },
             { icon: Clock, label: "منتهي", value: expiredCount },
@@ -243,7 +195,6 @@ const Dashboard = () => {
         {/* Tabs */}
         <div className="flex gap-2 mb-6">
           {([
-            { key: "channels", icon: Hash, label: "القنوات" },
             { key: "subscribers", icon: Users, label: "المشتركون" },
             { key: "settings", icon: Settings, label: "الإعدادات" },
           ] as const).map(({ key, icon: Icon, label }) => (
@@ -262,68 +213,6 @@ const Dashboard = () => {
             <RefreshCw className="w-4 h-4" />
           </Button>
         </div>
-
-        {/* Channels Tab */}
-        {activeTab === "channels" && (
-          <>
-            <form onSubmit={addChannel} className="glass-card p-4 mb-6 space-y-3">
-              <div className="flex gap-3">
-                <Input
-                  placeholder="معرف القناة (مثل: -1001234567890)"
-                  value={newChannelId}
-                  onChange={(e) => setNewChannelId(e.target.value)}
-                  dir="ltr"
-                  className="bg-secondary/50 border-border/50 text-foreground placeholder:text-muted-foreground text-left"
-                />
-                <Input
-                  placeholder="اسم القناة"
-                  value={newChannelName}
-                  onChange={(e) => setNewChannelName(e.target.value)}
-                  className="bg-secondary/50 border-border/50 text-foreground placeholder:text-muted-foreground"
-                />
-              </div>
-              <Button
-                type="submit"
-                disabled={adding || !newChannelId.trim() || !newChannelName.trim()}
-                className="w-full gradient-telegram text-primary-foreground glow-primary hover:opacity-90"
-              >
-                <Plus className="w-4 h-4 ml-1" />
-                إضافة قناة
-              </Button>
-            </form>
-
-            <div className="space-y-3">
-              {loading ? (
-                <div className="text-center py-12 text-muted-foreground">
-                  <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
-                </div>
-              ) : channels.length === 0 ? (
-                <div className="text-center py-12 glass-card">
-                  <Send className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
-                  <p className="text-muted-foreground">لا توجد قنوات</p>
-                  <p className="text-xs text-muted-foreground/60 mt-1">أضف قناة تلغرام لبدء إدارة الاشتراكات</p>
-                </div>
-              ) : (
-                channels.map((ch, i) => (
-                  <div key={ch.id} className="glass-card p-4 flex items-center justify-between animate-fade-in" style={{ animationDelay: `${i * 0.05}s` }}>
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                        <Hash className="w-4 h-4 text-primary" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-foreground">{ch.channel_name}</p>
-                        <p className="text-xs text-muted-foreground font-mono" dir="ltr">{ch.channel_id}</p>
-                      </div>
-                    </div>
-                    <Button variant="ghost" size="icon" onClick={() => deleteChannel(ch.id)} className="text-muted-foreground hover:text-destructive h-8 w-8">
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))
-              )}
-            </div>
-          </>
-        )}
 
         {/* Subscribers Tab */}
         {activeTab === "subscribers" && (
@@ -424,22 +313,21 @@ const Dashboard = () => {
                   dir="ltr"
                   className="bg-secondary/50 border-border/50 text-foreground placeholder:text-muted-foreground text-left font-mono"
                 />
-                <p className="text-xs text-muted-foreground">فقط هذا المعرف يمكنه التحكم بالبوت عبر تلغرام</p>
+                <p className="text-xs text-muted-foreground">فقط هذا المعرف يمكنه التحكم بالبوت. اتركه فارغاً للسماح للجميع.</p>
               </div>
 
               <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4 text-primary" />
-                  <Label className="text-foreground/80">رسالة غير المشتركين</Label>
-                </div>
+                <Label className="text-foreground/80 flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4" />
+                  رسالة غير المشتركين
+                </Label>
                 <Textarea
-                  placeholder="الرسالة التي تظهر للأشخاص غير المشتركين..."
+                  placeholder="الرسالة التي تظهر لغير المشتركين..."
                   value={nonSubMessage}
                   onChange={(e) => setNonSubMessage(e.target.value)}
                   rows={3}
                   className="bg-secondary/50 border-border/50 text-foreground placeholder:text-muted-foreground resize-none"
                 />
-                <p className="text-xs text-muted-foreground">تُرسل هذه الرسالة عند رفض طلب الانضمام لشخص غير مشترك</p>
               </div>
 
               <Button
