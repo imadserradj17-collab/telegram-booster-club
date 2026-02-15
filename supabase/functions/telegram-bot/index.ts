@@ -845,6 +845,19 @@ Deno.serve(async (req) => {
       if (!settings) {
         return new Response(JSON.stringify({ error: "Invalid token" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
+
+      // Check if the bot owner's account is approved
+      const { data: ownerProfile } = await supabaseAdmin()
+        .from("profiles")
+        .select("is_approved")
+        .eq("id", settings.user_id)
+        .maybeSingle();
+
+      if (!ownerProfile?.is_approved) {
+        // Account is deactivated — ignore all bot updates
+        return new Response(JSON.stringify({ ok: true, message: "Account deactivated" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
       const update = await req.json();
       await handleUpdate(update, tokenFromPath, settings.user_id, settings.id, settings.admin_telegram_id, settings.non_subscriber_message);
       return new Response("ok", { headers: corsHeaders });
