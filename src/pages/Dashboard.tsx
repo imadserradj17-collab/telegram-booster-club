@@ -6,8 +6,18 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import {
   LogOut, Trash2, RefreshCw, Users, Zap, Bot, UserPlus, Clock,
   Settings, Key, Shield, MessageSquare, Save, Loader2, User, Calendar, Hash,
+  LayoutDashboard, ChevronLeft, ChevronRight, Search, AlertTriangle,
 } from "lucide-react";
 
 interface TelegramSubscriber {
@@ -31,14 +41,17 @@ interface BotSettings {
   non_subscriber_message: string;
 }
 
+type TabKey = "overview" | "subscribers" | "expired" | "settings";
+
 const Dashboard = () => {
   const [subscribers, setSubscribers] = useState<TelegramSubscriber[]>([]);
   const [botSettings, setBotSettings] = useState<BotSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
-  const [activeTab, setActiveTab] = useState<"subscribers" | "settings">("subscribers");
+  const [activeTab, setActiveTab] = useState<TabKey>("overview");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
 
-  // Settings form state
   const [newToken, setNewToken] = useState("");
   const [adminId, setAdminId] = useState("");
   const [nonSubMessage, setNonSubMessage] = useState("");
@@ -53,7 +66,6 @@ const Dashboard = () => {
       supabase.from("telegram_subscribers").select("*").order("created_at", { ascending: false }),
       supabase.from("bot_tokens").select("*").maybeSingle(),
     ]);
-
     if (subsRes.data) setSubscribers(subsRes.data);
     if (settingsRes.data) {
       setBotSettings(settingsRes.data as BotSettings);
@@ -144,266 +156,423 @@ const Dashboard = () => {
     return parts.length > 0 ? parts.join(" ") : null;
   };
 
-  const activeCount = subscribers.filter((s) => !isExpired(s)).length;
-  const expiredCount = subscribers.filter((s) => isExpired(s)).length;
+  const activeSubs = subscribers.filter((s) => !isExpired(s));
+  const expiredSubs = subscribers.filter((s) => isExpired(s));
+  const permanentCount = subscribers.filter((s) => s.is_permanent).length;
+  const warningCount = activeSubs.filter(
+    (s) => !s.is_permanent && s.expires_at && daysRemaining(s.expires_at) <= 3
+  ).length;
 
-  return (
-    <div className="min-h-screen">
-      {/* Header */}
-      <header className="border-b border-border/50 bg-card/50 backdrop-blur-xl sticky top-0 z-50">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg gradient-telegram flex items-center justify-center">
-              <Bot className="w-5 h-5 text-primary-foreground" />
-            </div>
-            <h1 className="text-lg font-bold text-foreground">إدارة اشتراكات تلغرام</h1>
-          </div>
-          <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground hover:text-destructive">
-            <LogOut className="w-4 h-4 ml-2" />
-            خروج
-          </Button>
-        </div>
-      </header>
+  const navItems: { key: TabKey; icon: typeof Users; label: string; badge?: number }[] = [
+    { key: "overview", icon: LayoutDashboard, label: "نظرة عامة" },
+    { key: "subscribers", icon: Users, label: "المشتركون", badge: activeSubs.length },
+    { key: "expired", icon: Clock, label: "المنتهيون", badge: expiredSubs.length },
+    { key: "settings", icon: Settings, label: "الإعدادات" },
+  ];
 
-      <main className="container mx-auto px-4 py-8 max-w-3xl">
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-3 mb-8">
-          {[
-            { icon: Users, label: "المشتركون", value: subscribers.length },
-            { icon: Zap, label: "نشط", value: activeCount },
-            { icon: Clock, label: "منتهي", value: expiredCount },
-          ].map(({ icon: Icon, label, value }, i) => (
-            <div key={i} className="glass-card p-3 text-center">
-              <Icon className="w-4 h-4 text-primary mx-auto mb-1" />
-              <p className="text-xl font-bold text-foreground">{value}</p>
-              <p className="text-[10px] text-muted-foreground">{label}</p>
-            </div>
-          ))}
-        </div>
+  const filterSubs = (list: TelegramSubscriber[]) => {
+    if (!searchQuery.trim()) return list;
+    const q = searchQuery.toLowerCase();
+    return list.filter(
+      (s) =>
+        s.telegram_user_id.toString().includes(q) ||
+        s.telegram_username?.toLowerCase().includes(q) ||
+        s.first_name?.toLowerCase().includes(q) ||
+        s.last_name?.toLowerCase().includes(q)
+    );
+  };
 
-        {/* Tabs */}
-        <div className="flex gap-2 mb-6">
-          {([
-            { key: "subscribers", icon: Users, label: "المشتركون" },
-            { key: "settings", icon: Settings, label: "الإعدادات" },
-          ] as const).map(({ key, icon: Icon, label }) => (
-            <Button
-              key={key}
-              variant={activeTab === key ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setActiveTab(key)}
-              className={activeTab === key ? "gradient-telegram text-primary-foreground" : "text-muted-foreground"}
-            >
-              <Icon className="w-4 h-4 ml-1" />
-              {label}
-            </Button>
-          ))}
-          <Button variant="ghost" size="sm" onClick={fetchData} className="text-muted-foreground mr-auto">
-            <RefreshCw className="w-4 h-4" />
-          </Button>
-        </div>
-
-        {/* Subscribers Tab */}
-        {activeTab === "subscribers" && (
-          <div className="space-y-3">
-            {loading ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
-              </div>
-            ) : subscribers.length === 0 ? (
-              <div className="text-center py-12 glass-card">
-                <UserPlus className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
-                <p className="text-muted-foreground">لا يوجد مشتركون</p>
-                <p className="text-xs text-muted-foreground/60 mt-1">أضف المشتركين عبر البوت في تلغرام</p>
-              </div>
+  const SubTable = ({ list }: { list: TelegramSubscriber[] }) => {
+    const filtered = filterSubs(list);
+    return (
+      <div className="glass-card overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="border-border/50 hover:bg-transparent">
+              <TableHead className="text-right text-muted-foreground font-medium">المشترك</TableHead>
+              <TableHead className="text-right text-muted-foreground font-medium">المعرف</TableHead>
+              <TableHead className="text-right text-muted-foreground font-medium">الحالة</TableHead>
+              <TableHead className="text-right text-muted-foreground font-medium">المدة</TableHead>
+              <TableHead className="text-right text-muted-foreground font-medium">تاريخ الاشتراك</TableHead>
+              <TableHead className="text-right text-muted-foreground font-medium w-12"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filtered.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                  <UserPlus className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                  <p>لا يوجد مشتركون</p>
+                </TableCell>
+              </TableRow>
             ) : (
-              subscribers.map((sub, i) => {
+              filtered.map((sub) => {
                 const expired = isExpired(sub);
                 const displayName = getDisplayName(sub);
                 const remaining = sub.expires_at ? daysRemaining(sub.expires_at) : null;
 
                 return (
-                  <div key={sub.id} className="glass-card p-4 animate-fade-in" style={{ animationDelay: `${i * 0.05}s` }}>
-                    <div className="flex items-start gap-3">
-                      {/* Avatar */}
-                      <div className="flex-shrink-0">
-                        {sub.photo_url ? (
-                          <img
-                            src={sub.photo_url}
-                            alt={displayName || "User"}
-                            className="w-12 h-12 rounded-full object-cover border-2 border-border/50"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).style.display = "none";
-                              (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden");
-                            }}
-                          />
-                        ) : null}
-                        <div className={`w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center ${sub.photo_url ? "hidden" : ""}`}>
-                          <User className="w-6 h-6 text-primary/60" />
+                  <TableRow key={sub.id} className="border-border/30 hover:bg-secondary/30">
+                    {/* Avatar + Name */}
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <div className="flex-shrink-0">
+                          {sub.photo_url ? (
+                            <img
+                              src={sub.photo_url}
+                              alt=""
+                              className="w-9 h-9 rounded-full object-cover border border-border/50"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = "none";
+                                (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden");
+                              }}
+                            />
+                          ) : null}
+                          <div className={`w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center ${sub.photo_url ? "hidden" : ""}`}>
+                            <User className="w-4 h-4 text-primary/60" />
+                          </div>
                         </div>
-                      </div>
-
-                      {/* Info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <p className="font-semibold text-foreground truncate">
+                        <div className="min-w-0">
+                          <p className="font-medium text-foreground text-sm truncate">
                             {displayName || `مستخدم ${sub.telegram_user_id}`}
                           </p>
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${
-                            expired ? "bg-destructive/20 text-destructive" : "bg-success/20 text-success"
-                          }`}>
-                            {expired ? "منتهي" : sub.is_permanent ? "♾ دائم" : "نشط"}
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                          <div className="flex items-center gap-1.5">
-                            <Hash className="w-3 h-3 flex-shrink-0" />
-                            <span className="font-mono" dir="ltr">{sub.telegram_user_id}</span>
-                          </div>
-
                           {sub.telegram_username && (
-                            <div className="flex items-center gap-1.5">
-                              <User className="w-3 h-3 flex-shrink-0" />
-                              <span dir="ltr">@{sub.telegram_username}</span>
-                            </div>
-                          )}
-
-                          <div className="flex items-center gap-1.5">
-                            <Calendar className="w-3 h-3 flex-shrink-0" />
-                            <span>اشترك: {new Date(sub.created_at).toLocaleDateString("ar-SA")}</span>
-                          </div>
-
-                          {sub.is_permanent ? (
-                            <div className="flex items-center gap-1.5 text-primary">
-                              <Zap className="w-3 h-3 flex-shrink-0" />
-                              <span>اشتراك دائم</span>
-                            </div>
-                          ) : sub.expires_at ? (
-                            <div className={`flex items-center gap-1.5 ${expired ? "text-destructive" : remaining! <= 3 ? "text-yellow-500" : ""}`}>
-                              <Clock className="w-3 h-3 flex-shrink-0" />
-                              <span>
-                                {expired
-                                  ? `انتهى ${new Date(sub.expires_at).toLocaleDateString("ar-SA")}`
-                                  : `متبقي ${remaining} يوم`}
-                              </span>
-                            </div>
-                          ) : null}
-
-                          {sub.subscription_days && !sub.is_permanent && (
-                            <div className="flex items-center gap-1.5">
-                              <Calendar className="w-3 h-3 flex-shrink-0" />
-                              <span>مدة: {sub.subscription_days} يوم</span>
-                            </div>
+                            <p className="text-xs text-muted-foreground" dir="ltr">@{sub.telegram_username}</p>
                           )}
                         </div>
                       </div>
+                    </TableCell>
 
-                      {/* Delete */}
+                    {/* ID */}
+                    <TableCell>
+                      <span className="font-mono text-xs text-muted-foreground" dir="ltr">{sub.telegram_user_id}</span>
+                    </TableCell>
+
+                    {/* Status */}
+                    <TableCell>
+                      {expired ? (
+                        <Badge variant="destructive" className="text-[10px] font-medium">منتهي</Badge>
+                      ) : sub.is_permanent ? (
+                        <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px] font-medium hover:bg-primary/20">♾ دائم</Badge>
+                      ) : remaining !== null && remaining <= 3 ? (
+                        <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 text-[10px] font-medium hover:bg-yellow-500/20">
+                          ⚠ {remaining} يوم
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-success/20 text-success border-success/30 text-[10px] font-medium hover:bg-success/20">نشط</Badge>
+                      )}
+                    </TableCell>
+
+                    {/* Duration */}
+                    <TableCell className="text-sm text-muted-foreground">
+                      {sub.is_permanent ? "—" : sub.expires_at ? (
+                        expired
+                          ? `انتهى ${new Date(sub.expires_at).toLocaleDateString("ar-SA")}`
+                          : `${remaining} يوم متبقي`
+                      ) : "—"}
+                    </TableCell>
+
+                    {/* Created */}
+                    <TableCell className="text-sm text-muted-foreground">
+                      {new Date(sub.created_at).toLocaleDateString("ar-SA")}
+                    </TableCell>
+
+                    {/* Delete */}
+                    <TableCell>
                       <Button
                         variant="ghost"
                         size="icon"
                         onClick={() => deleteSubscriber(sub.id)}
-                        className="text-muted-foreground hover:text-destructive h-8 w-8 flex-shrink-0"
+                        className="text-muted-foreground hover:text-destructive h-8 w-8"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       </Button>
-                    </div>
-                  </div>
+                    </TableCell>
+                  </TableRow>
                 );
               })
             )}
-          </div>
-        )}
+          </TableBody>
+        </Table>
+      </div>
+    );
+  };
 
-        {/* Settings Tab */}
-        {activeTab === "settings" && (
-          <div className="space-y-6">
-            {/* Change Token */}
-            <div className="glass-card p-5 space-y-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Key className="w-5 h-5 text-primary" />
-                <h3 className="font-semibold text-foreground">تغيير توكن البوت</h3>
+  return (
+    <div className="min-h-screen flex w-full">
+      {/* Sidebar */}
+      <aside
+        className={`fixed top-0 right-0 h-full z-40 bg-card border-l border-border/50 transition-all duration-300 flex flex-col ${
+          sidebarOpen ? "w-56" : "w-16"
+        }`}
+      >
+        {/* Sidebar Header */}
+        <div className="h-16 flex items-center gap-3 px-4 border-b border-border/50 flex-shrink-0">
+          <div className="w-9 h-9 rounded-lg gradient-telegram flex items-center justify-center flex-shrink-0">
+            <Bot className="w-5 h-5 text-primary-foreground" />
+          </div>
+          {sidebarOpen && <span className="font-bold text-foreground truncate">إدارة الاشتراكات</span>}
+        </div>
+
+        {/* Nav Items */}
+        <nav className="flex-1 py-4 px-2 space-y-1">
+          {navItems.map(({ key, icon: Icon, label, badge }) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+                activeTab === key
+                  ? "bg-primary/15 text-primary font-medium"
+                  : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+              }`}
+            >
+              <Icon className="w-5 h-5 flex-shrink-0" />
+              {sidebarOpen && (
+                <>
+                  <span className="flex-1 text-right">{label}</span>
+                  {badge !== undefined && badge > 0 && (
+                    <span className="bg-secondary text-muted-foreground text-[10px] px-1.5 py-0.5 rounded-full font-mono">
+                      {badge}
+                    </span>
+                  )}
+                </>
+              )}
+            </button>
+          ))}
+        </nav>
+
+        {/* Sidebar Footer */}
+        <div className="p-2 border-t border-border/50 space-y-1">
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
+          >
+            {sidebarOpen ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
+            {sidebarOpen && <span>طي القائمة</span>}
+          </button>
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+          >
+            <LogOut className="w-5 h-5 flex-shrink-0" />
+            {sidebarOpen && <span>تسجيل الخروج</span>}
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main
+        className={`flex-1 transition-all duration-300 ${sidebarOpen ? "mr-56" : "mr-16"}`}
+      >
+        {/* Top Bar */}
+        <header className="h-16 border-b border-border/50 bg-card/30 backdrop-blur-sm sticky top-0 z-30 flex items-center px-6 gap-4">
+          <h2 className="text-lg font-bold text-foreground">
+            {navItems.find((n) => n.key === activeTab)?.label}
+          </h2>
+          <div className="flex-1" />
+          <Button variant="ghost" size="icon" onClick={fetchData} className="text-muted-foreground">
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+          </Button>
+        </header>
+
+        <div className="p-6 max-w-5xl">
+          {/* ─── OVERVIEW ─── */}
+          {activeTab === "overview" && (
+            <div className="space-y-6 animate-fade-in">
+              {/* Stats Grid */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  { icon: Users, label: "إجمالي المشتركين", value: subscribers.length, color: "text-primary" },
+                  { icon: Zap, label: "نشط", value: activeSubs.length, color: "text-success" },
+                  { icon: Clock, label: "منتهي", value: expiredSubs.length, color: "text-destructive" },
+                  { icon: Shield, label: "دائم", value: permanentCount, color: "text-primary" },
+                ].map(({ icon: Icon, label, value, color }, i) => (
+                  <div key={i} className="glass-card p-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <Icon className={`w-5 h-5 ${color}`} />
+                    </div>
+                    <p className="text-3xl font-bold text-foreground">{value}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{label}</p>
+                  </div>
+                ))}
               </div>
 
-              {!canChangeToken() && (
-                <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 text-sm text-destructive">
-                  ⏳ لا يمكن تغيير التوكن إلا بعد <strong>{getTokenCooldownRemaining()}</strong>
+              {/* Warnings */}
+              {warningCount > 0 && (
+                <div className="glass-card p-4 border-yellow-500/30 bg-yellow-500/5">
+                  <div className="flex items-center gap-3">
+                    <AlertTriangle className="w-5 h-5 text-yellow-400 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-yellow-400">
+                        {warningCount} مشترك سينتهي اشتراكهم خلال 3 أيام
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        يُرسل تحذير تلقائي قبل 24 ساعة من الانتهاء
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setActiveTab("subscribers")}
+                      className="mr-auto text-yellow-400 hover:text-yellow-300 text-xs"
+                    >
+                      عرض
+                    </Button>
+                  </div>
                 </div>
               )}
 
-              <div className="space-y-2">
-                <Label className="text-foreground/80">التوكن الجديد</Label>
-                <Input
-                  placeholder="أدخل التوكن الجديد..."
-                  value={newToken}
-                  onChange={(e) => setNewToken(e.target.value)}
-                  dir="ltr"
-                  disabled={!canChangeToken()}
-                  className="bg-secondary/50 border-border/50 text-foreground placeholder:text-muted-foreground text-left font-mono text-sm"
-                />
+              {/* Recent Subscribers */}
+              <div>
+                <h3 className="text-sm font-semibold text-foreground mb-3">آخر المشتركين</h3>
+                <SubTable list={subscribers.slice(0, 5)} />
               </div>
+            </div>
+          )}
 
-              <Button
-                onClick={handleChangeToken}
-                disabled={!canChangeToken() || !newToken.trim() || savingSettings}
-                className="w-full gradient-telegram text-primary-foreground glow-primary hover:opacity-90"
-              >
-                {savingSettings ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : <Key className="w-4 h-4 ml-2" />}
-                تغيير التوكن
-              </Button>
-
-              {botSettings?.token_updated_at && (
-                <p className="text-xs text-muted-foreground text-center">
-                  آخر تغيير: {new Date(botSettings.token_updated_at).toLocaleDateString("ar-SA")}
+          {/* ─── SUBSCRIBERS ─── */}
+          {activeTab === "subscribers" && (
+            <div className="space-y-4 animate-fade-in">
+              <div className="flex items-center gap-3">
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="بحث بالاسم أو المعرف..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pr-10 bg-secondary/50 border-border/50 text-foreground placeholder:text-muted-foreground"
+                  />
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {activeSubs.length} مشترك نشط
                 </p>
+              </div>
+              {loading ? (
+                <div className="text-center py-16 text-muted-foreground">
+                  <Loader2 className="w-6 h-6 animate-spin mx-auto" />
+                </div>
+              ) : (
+                <SubTable list={activeSubs} />
               )}
             </div>
+          )}
 
-            {/* Admin Settings */}
-            <div className="glass-card p-5 space-y-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Shield className="w-5 h-5 text-primary" />
-                <h3 className="font-semibold text-foreground">إعدادات الأدمن</h3>
+          {/* ─── EXPIRED ─── */}
+          {activeTab === "expired" && (
+            <div className="space-y-4 animate-fade-in">
+              <div className="flex items-center gap-3">
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="بحث بالاسم أو المعرف..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pr-10 bg-secondary/50 border-border/50 text-foreground placeholder:text-muted-foreground"
+                  />
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {expiredSubs.length} مشترك منتهي
+                </p>
               </div>
-
-              <div className="space-y-2">
-                <Label className="text-foreground/80">معرف الأدمن (Telegram ID)</Label>
-                <Input
-                  placeholder="مثال: 123456789"
-                  value={adminId}
-                  onChange={(e) => setAdminId(e.target.value)}
-                  dir="ltr"
-                  className="bg-secondary/50 border-border/50 text-foreground placeholder:text-muted-foreground text-left font-mono"
-                />
-                <p className="text-xs text-muted-foreground">فقط هذا المعرف يمكنه التحكم بالبوت. اتركه فارغاً للسماح للجميع.</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-foreground/80 flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4" />
-                  رسالة غير المشتركين
-                </Label>
-                <Textarea
-                  placeholder="الرسالة التي تظهر لغير المشتركين..."
-                  value={nonSubMessage}
-                  onChange={(e) => setNonSubMessage(e.target.value)}
-                  rows={3}
-                  className="bg-secondary/50 border-border/50 text-foreground placeholder:text-muted-foreground resize-none"
-                />
-              </div>
-
-              <Button
-                onClick={handleSaveSettings}
-                disabled={savingSettings}
-                className="w-full gradient-telegram text-primary-foreground glow-primary hover:opacity-90"
-              >
-                {savingSettings ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : <Save className="w-4 h-4 ml-2" />}
-                حفظ الإعدادات
-              </Button>
+              {loading ? (
+                <div className="text-center py-16 text-muted-foreground">
+                  <Loader2 className="w-6 h-6 animate-spin mx-auto" />
+                </div>
+              ) : (
+                <SubTable list={expiredSubs} />
+              )}
             </div>
-          </div>
-        )}
+          )}
+
+          {/* ─── SETTINGS ─── */}
+          {activeTab === "settings" && (
+            <div className="space-y-6 max-w-xl animate-fade-in">
+              {/* Change Token */}
+              <div className="glass-card p-6 space-y-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Key className="w-5 h-5 text-primary" />
+                  <h3 className="font-semibold text-foreground">تغيير توكن البوت</h3>
+                </div>
+
+                {!canChangeToken() && (
+                  <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 text-sm text-destructive">
+                    ⏳ لا يمكن تغيير التوكن إلا بعد <strong>{getTokenCooldownRemaining()}</strong>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label className="text-foreground/80">التوكن الجديد</Label>
+                  <Input
+                    placeholder="أدخل التوكن الجديد..."
+                    value={newToken}
+                    onChange={(e) => setNewToken(e.target.value)}
+                    dir="ltr"
+                    disabled={!canChangeToken()}
+                    className="bg-secondary/50 border-border/50 text-foreground placeholder:text-muted-foreground text-left font-mono text-sm"
+                  />
+                </div>
+
+                <Button
+                  onClick={handleChangeToken}
+                  disabled={!canChangeToken() || !newToken.trim() || savingSettings}
+                  className="w-full gradient-telegram text-primary-foreground hover:opacity-90"
+                >
+                  {savingSettings ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : <Key className="w-4 h-4 ml-2" />}
+                  تغيير التوكن
+                </Button>
+
+                {botSettings?.token_updated_at && (
+                  <p className="text-xs text-muted-foreground text-center">
+                    آخر تغيير: {new Date(botSettings.token_updated_at).toLocaleDateString("ar-SA")}
+                  </p>
+                )}
+              </div>
+
+              {/* Admin Settings */}
+              <div className="glass-card p-6 space-y-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Shield className="w-5 h-5 text-primary" />
+                  <h3 className="font-semibold text-foreground">إعدادات الأدمن</h3>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-foreground/80">معرف الأدمن (Telegram ID)</Label>
+                  <Input
+                    placeholder="مثال: 123456789"
+                    value={adminId}
+                    onChange={(e) => setAdminId(e.target.value)}
+                    dir="ltr"
+                    className="bg-secondary/50 border-border/50 text-foreground placeholder:text-muted-foreground text-left font-mono"
+                  />
+                  <p className="text-xs text-muted-foreground">فقط هذا المعرف يمكنه التحكم بالبوت. اتركه فارغاً للسماح للجميع.</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-foreground/80 flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4" />
+                    رسالة غير المشتركين
+                  </Label>
+                  <Textarea
+                    placeholder="الرسالة التي تظهر لغير المشتركين..."
+                    value={nonSubMessage}
+                    onChange={(e) => setNonSubMessage(e.target.value)}
+                    rows={3}
+                    className="bg-secondary/50 border-border/50 text-foreground placeholder:text-muted-foreground resize-none"
+                  />
+                </div>
+
+                <Button
+                  onClick={handleSaveSettings}
+                  disabled={savingSettings}
+                  className="w-full gradient-telegram text-primary-foreground hover:opacity-90"
+                >
+                  {savingSettings ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : <Save className="w-4 h-4 ml-2" />}
+                  حفظ الإعدادات
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );
