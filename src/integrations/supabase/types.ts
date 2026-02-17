@@ -95,6 +95,42 @@ export type Database = {
         }
         Relationships: []
       }
+      subscriber_channels: {
+        Row: {
+          channel_id: string
+          created_at: string
+          id: string
+          subscriber_id: string
+        }
+        Insert: {
+          channel_id: string
+          created_at?: string
+          id?: string
+          subscriber_id: string
+        }
+        Update: {
+          channel_id?: string
+          created_at?: string
+          id?: string
+          subscriber_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriber_channels_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscriber_channels_subscriber_id_fkey"
+            columns: ["subscriber_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_subscribers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       telegram_channels: {
         Row: {
           bot_token_id: string | null
