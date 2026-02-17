@@ -767,7 +767,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
     if (data.startsWith("toggle_ch_")) {
       const channelUuid = data.replace("toggle_ch_", "");
       const currentSt = await getState(chatId, botToken);
-      if (!currentSt || currentSt.state !== "await_sub_channels") break;
+      if (!currentSt || currentSt.state !== "await_sub_channels") return;
 
       const selected: string[] = currentSt.data.selectedChannels || [];
       const idx = selected.indexOf(channelUuid);
@@ -799,7 +799,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
 
     if (data === "select_all_channels") {
       const currentSt = await getState(chatId, botToken);
-      if (!currentSt || currentSt.state !== "await_sub_channels") break;
+      if (!currentSt || currentSt.state !== "await_sub_channels") return;
 
       const { data: channels } = await sb.from("telegram_channels").select("id, channel_name").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
       const allIds = (channels || []).map((ch: any) => ch.id);
@@ -821,7 +821,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
 
     if (data === "confirm_channels") {
       const currentSt = await getState(chatId, botToken);
-      if (!currentSt || currentSt.state !== "await_sub_channels") break;
+      if (!currentSt || currentSt.state !== "await_sub_channels") return;
 
       const { telegramUserId, telegramUsername, userFirstName: fn, userLastName: ln, days, isPermanent, selectedChannels } = currentSt.data;
 
