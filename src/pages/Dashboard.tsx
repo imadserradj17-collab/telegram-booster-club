@@ -1,21 +1,28 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
   LogOut, Trash2, RefreshCw, Users, Zap, Bot, UserPlus, Clock,
   Settings, Key, Shield, MessageSquare, Save, Loader2, User, Calendar, Hash,
   LayoutDashboard, ChevronLeft, ChevronRight, Search, AlertTriangle, Menu, X,
-  BarChart3,
+  BarChart3, Tv, Plus, Send, Link, Edit,
 } from "lucide-react";
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from "recharts";
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useLanguage } from "@/contexts/LanguageContext";
 
@@ -32,6 +39,14 @@ interface TelegramSubscriber {
   created_at: string;
 }
 
+interface TelegramChannel {
+  id: string;
+  channel_id: number;
+  channel_name: string;
+  invite_link: string | null;
+  created_at: string;
+}
+
 interface BotSettings {
   id: string;
   token: string;
@@ -40,7 +55,7 @@ interface BotSettings {
   non_subscriber_message: string;
 }
 
-type TabKey = "overview" | "subscribers" | "expired" | "analytics" | "settings";
+type TabKey = "overview" | "subscribers" | "expired" | "channels" | "broadcast" | "analytics" | "settings";
 
 interface DashboardProps {
   onShowAdmin?: () => void;
@@ -49,6 +64,8 @@ interface DashboardProps {
 const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const { t, lang, dir } = useLanguage();
   const [subscribers, setSubscribers] = useState<TelegramSubscriber[]>([]);
+  const [channels, setChannels] = useState<TelegramChannel[]>([]);
+  const [subscriberChannels, setSubscriberChannels] = useState<Record<string, { id: string; channel_name: string }[]>>({});
   const [botSettings, setBotSettings] = useState<BotSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
@@ -58,6 +75,24 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const [newToken, setNewToken] = useState("");
   const [adminId, setAdminId] = useState("");
   const [nonSubMessage, setNonSubMessage] = useState("");
+
+  // Add subscriber dialog
+  const [showAddSub, setShowAddSub] = useState(false);
+  const [addSubForm, setAddSubForm] = useState({
+    telegram_user_id: "", telegram_username: "", first_name: "", last_name: "",
+    duration: "30", customDays: "", is_permanent: false, channel_ids: [] as string[],
+  });
+  const [addingSubscriber, setAddingSubscriber] = useState(false);
+
+  // Edit channels dialog
+  const [editChannelsSub, setEditChannelsSub] = useState<TelegramSubscriber | null>(null);
+  const [editChannelIds, setEditChannelIds] = useState<string[]>([]);
+  const [savingChannels, setSavingChannels] = useState(false);
+
+  // Broadcast
+  const [broadcastMsg, setBroadcastMsg] = useState("");
+  const [broadcasting, setBroadcasting] = useState(false);
+  const [broadcastResult, setBroadcastResult] = useState<{ sent: number; failed: number; total: number } | null>(null);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -75,6 +110,19 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
       setAdminId(settingsRes.data.admin_telegram_id?.toString() || "");
       setNonSubMessage(settingsRes.data.non_subscriber_message || "");
     }
+
+    // Fetch channels
+    const channelsRes = await supabase.from("telegram_channels").select("*").order("created_at", { ascending: false });
+    if (channelsRes.data) setChannels(channelsRes.data);
+
+    // Fetch subscriber-channel mappings
+    try {
+      const { data } = await supabase.functions.invoke("manage-bot", {
+        body: { action: "get_subscriber_channels" },
+      });
+      if (data?.subscriber_channels) setSubscriberChannels(data.subscriber_channels);
+    } catch {}
+
     setLoading(false);
   };
 
@@ -135,6 +183,101 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     }
   };
 
+  const deleteChannel = async (id: string) => {
+    try {
+      const { data } = await supabase.functions.invoke("manage-bot", {
+        body: { action: "delete_channel", channel_id: id },
+      });
+      if (data?.ok) {
+        setChannels((prev) => prev.filter((c) => c.id !== id));
+        toast({ title: t("channels.deleted") });
+      }
+    } catch (error: any) {
+      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+    }
+  };
+
+  const handleAddSubscriber = async () => {
+    if (!addSubForm.telegram_user_id.trim()) return;
+    setAddingSubscriber(true);
+    try {
+      const days = addSubForm.is_permanent ? null :
+        addSubForm.duration === "custom" ? parseInt(addSubForm.customDays) : parseInt(addSubForm.duration);
+
+      if (!addSubForm.is_permanent && (!days || days <= 0)) {
+        toast({ title: t("common.error"), description: t("admin.invalidDays"), variant: "destructive" });
+        setAddingSubscriber(false);
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke("manage-bot", {
+        body: {
+          action: "add_subscriber",
+          telegram_user_id: parseInt(addSubForm.telegram_user_id),
+          telegram_username: addSubForm.telegram_username || null,
+          first_name: addSubForm.first_name || null,
+          last_name: addSubForm.last_name || null,
+          days,
+          is_permanent: addSubForm.is_permanent,
+          channel_ids: addSubForm.channel_ids,
+        },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast({
+        title: t("subs.added"),
+        description: data?.notified === false ? "⚠️ لم يتم إرسال الروابط (المشترك لم يبدأ البوت)" : undefined,
+      });
+      setShowAddSub(false);
+      setAddSubForm({ telegram_user_id: "", telegram_username: "", first_name: "", last_name: "", duration: "30", customDays: "", is_permanent: false, channel_ids: [] });
+      fetchData();
+    } catch (error: any) {
+      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+    } finally { setAddingSubscriber(false); }
+  };
+
+  const handleEditChannels = (sub: TelegramSubscriber) => {
+    const currentChannels = subscriberChannels[sub.id] || [];
+    setEditChannelIds(currentChannels.map(c => c.id));
+    setEditChannelsSub(sub);
+  };
+
+  const handleSaveSubChannels = async () => {
+    if (!editChannelsSub) return;
+    setSavingChannels(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("manage-bot", {
+        body: { action: "update_subscriber_channels", subscriber_id: editChannelsSub.id, channel_ids: editChannelIds },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast({ title: t("subs.channelsSaved") });
+      setEditChannelsSub(null);
+      fetchData();
+    } catch (error: any) {
+      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+    } finally { setSavingChannels(false); }
+  };
+
+  const handleBroadcast = async () => {
+    if (!broadcastMsg.trim()) return;
+    setBroadcasting(true);
+    setBroadcastResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("manage-bot", {
+        body: { action: "broadcast", message: broadcastMsg },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setBroadcastResult({ sent: data.sent, failed: data.failed, total: data.total });
+      toast({ title: t("broadcast.sent") });
+    } catch (error: any) {
+      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+    } finally { setBroadcasting(false); }
+  };
+
   const handleLogout = async () => { await supabase.auth.signOut(); };
 
   const isExpired = (sub: TelegramSubscriber) => !sub.is_permanent && sub.expires_at && new Date(sub.expires_at) < new Date();
@@ -153,6 +296,8 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     { key: "overview", icon: LayoutDashboard, label: t("dash.overview") },
     { key: "subscribers", icon: Users, label: t("dash.subscribers"), badge: activeSubs.length },
     { key: "expired", icon: Clock, label: t("dash.expired"), badge: expiredSubs.length },
+    { key: "channels", icon: Tv, label: t("channels.title"), badge: channels.length },
+    { key: "broadcast", icon: Send, label: t("broadcast.title") },
     { key: "analytics", icon: BarChart3, label: t("dash.analytics") },
     { key: "settings", icon: Settings, label: t("dash.settings") },
   ];
@@ -166,7 +311,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     );
   };
 
-  // ─── Analytics Data ───
+  // Analytics Data
   const analyticsData = useMemo(() => {
     const now = new Date();
     const last30 = Array.from({ length: 30 }, (_, i) => {
@@ -192,6 +337,22 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
 
     return { newSubsByDay, statusData, avgDuration: Math.round(avgDuration), expiringSoon };
   }, [subscribers, lang]);
+
+  // ─── Subscriber Channel Badges ───
+  const SubChannelBadges = ({ subId }: { subId: string }) => {
+    const chans = subscriberChannels[subId];
+    if (!chans || chans.length === 0) return <span className="text-xs text-muted-foreground">—</span>;
+    if (chans.length === channels.length && channels.length > 0) {
+      return <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px] hover:bg-primary/20">{t("subs.allAssigned")}</Badge>;
+    }
+    return (
+      <div className="flex flex-wrap gap-1">
+        {chans.map(ch => (
+          <Badge key={ch.id} variant="outline" className="text-[10px] border-border/50">{ch.channel_name}</Badge>
+        ))}
+      </div>
+    );
+  };
 
   // ─── Mobile Card ───
   const SubCard = ({ sub }: { sub: TelegramSubscriber }) => {
@@ -234,10 +395,18 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                 </span>
               ) : null}
             </div>
+            <div className="mt-2">
+              <SubChannelBadges subId={sub.id} />
+            </div>
           </div>
-          <Button variant="ghost" size="icon" onClick={() => deleteSubscriber(sub.id)} className="text-muted-foreground hover:text-destructive h-8 w-8 flex-shrink-0">
-            <Trash2 className="w-3.5 h-3.5" />
-          </Button>
+          <div className="flex flex-col gap-1 flex-shrink-0">
+            <Button variant="ghost" size="icon" onClick={() => handleEditChannels(sub)} className="text-muted-foreground hover:text-primary h-8 w-8">
+              <Edit className="w-3.5 h-3.5" />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => deleteSubscriber(sub.id)} className="text-muted-foreground hover:text-destructive h-8 w-8">
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -255,14 +424,15 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
               <TableHead className="text-muted-foreground font-medium">{t("dash.id")}</TableHead>
               <TableHead className="text-muted-foreground font-medium">{t("dash.status")}</TableHead>
               <TableHead className="text-muted-foreground font-medium">{t("dash.duration")}</TableHead>
+              <TableHead className="text-muted-foreground font-medium">{t("subs.assignedChannels")}</TableHead>
               <TableHead className="text-muted-foreground font-medium">{t("dash.subDate")}</TableHead>
-              <TableHead className="text-muted-foreground font-medium w-12"></TableHead>
+              <TableHead className="text-muted-foreground font-medium w-20"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
                   <UserPlus className="w-8 h-8 mx-auto mb-2 opacity-30" />
                   <p>{t("dash.noSubs")}</p>
                 </TableCell>
@@ -306,11 +476,17 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                     <TableCell className="text-sm text-muted-foreground">
                       {sub.is_permanent ? "—" : sub.expires_at ? (expired ? `${t("dash.expiredOn")} ${new Date(sub.expires_at).toLocaleDateString(lang === "ar" ? "ar-SA" : "en-US")}` : `${remaining} ${t("dash.daysLeft")}`) : "—"}
                     </TableCell>
+                    <TableCell><SubChannelBadges subId={sub.id} /></TableCell>
                     <TableCell className="text-sm text-muted-foreground">{new Date(sub.created_at).toLocaleDateString(lang === "ar" ? "ar-SA" : "en-US")}</TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="icon" onClick={() => deleteSubscriber(sub.id)} className="text-muted-foreground hover:text-destructive h-8 w-8">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => handleEditChannels(sub)} className="text-muted-foreground hover:text-primary h-8 w-8">
+                          <Edit className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => deleteSubscriber(sub.id)} className="text-muted-foreground hover:text-destructive h-8 w-8">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -337,6 +513,17 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   };
 
   const SubList = ({ list }: { list: TelegramSubscriber[] }) => (<><SubTable list={list} /><SubCardList list={list} /></>);
+
+  const toggleAddSubChannel = (id: string) => {
+    setAddSubForm(prev => ({
+      ...prev,
+      channel_ids: prev.channel_ids.includes(id) ? prev.channel_ids.filter(c => c !== id) : [...prev.channel_ids, id],
+    }));
+  };
+
+  const toggleEditChannel = (id: string) => {
+    setEditChannelIds(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]);
+  };
 
   return (
     <div className="min-h-screen flex w-full" dir={dir}>
@@ -400,7 +587,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
       {/* Bottom Nav - Mobile */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-border/50 md:hidden safe-area-bottom">
         <div className="flex items-center justify-around h-14">
-          {navItems.map(({ key, icon: Icon, label, badge }) => (
+          {navItems.slice(0, 5).map(({ key, icon: Icon, label, badge }) => (
             <button key={key} onClick={() => setActiveTab(key)}
               className={`flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg transition-colors relative ${activeTab === key ? "text-primary" : "text-muted-foreground"}`}>
               <Icon className="w-5 h-5" />
@@ -440,7 +627,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   { icon: Users, label: t("dash.totalSubs"), value: subscribers.length, color: "text-primary" },
                   { icon: Zap, label: t("dash.active"), value: activeSubs.length, color: "text-success" },
                   { icon: Clock, label: t("dash.expiredLabel"), value: expiredSubs.length, color: "text-destructive" },
-                  { icon: Shield, label: t("dash.permanent"), value: permanentCount, color: "text-primary" },
+                  { icon: Tv, label: t("channels.title"), value: channels.length, color: "text-primary" },
                 ].map(({ icon: Icon, label, value, color }, i) => (
                   <div key={i} className="glass-card p-4 md:p-5">
                     <Icon className={`w-4 h-4 md:w-5 md:h-5 ${color} mb-2 md:mb-3`} />
@@ -477,7 +664,14 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   <Input placeholder={t("dash.searchPlaceholder")} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
                     className={`${dir === "rtl" ? "pr-10" : "pl-10"} bg-secondary/50 border-border/50 text-foreground placeholder:text-muted-foreground`} />
                 </div>
-                <p className="text-sm text-muted-foreground text-center sm:text-start">{activeSubs.length} {t("dash.activeCount")}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm text-muted-foreground">{activeSubs.length} {t("dash.activeCount")}</p>
+                  <Button size="sm" onClick={() => { setAddSubForm({ telegram_user_id: "", telegram_username: "", first_name: "", last_name: "", duration: "30", customDays: "", is_permanent: false, channel_ids: channels.map(c => c.id) }); setShowAddSub(true); }}
+                    className="gradient-telegram text-primary-foreground hover:opacity-90">
+                    <Plus className="w-4 h-4" />
+                    {t("subs.add")}
+                  </Button>
+                </div>
               </div>
               {loading ? <div className="text-center py-16 text-muted-foreground"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></div> : <SubList list={activeSubs} />}
             </div>
@@ -495,6 +689,142 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                 <p className="text-sm text-muted-foreground text-center sm:text-start">{expiredSubs.length} {t("dash.expiredCount")}</p>
               </div>
               {loading ? <div className="text-center py-16 text-muted-foreground"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></div> : <SubList list={expiredSubs} />}
+            </div>
+          )}
+
+          {/* CHANNELS */}
+          {activeTab === "channels" && (
+            <div className="space-y-4 animate-fade-in">
+              <p className="text-sm text-muted-foreground">{channels.length} {t("channels.title")}</p>
+              {channels.length === 0 ? (
+                <div className="text-center py-16 glass-card">
+                  <Tv className="w-8 h-8 mx-auto mb-2 text-muted-foreground/30" />
+                  <p className="text-muted-foreground">{t("channels.noChannels")}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {lang === "ar" ? "أضف قنوات عبر البوت أولاً" : "Add channels via the bot first"}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Desktop */}
+                  <div className="glass-card overflow-hidden hidden md:block">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="border-border/50 hover:bg-transparent">
+                          <TableHead className="text-muted-foreground font-medium">{t("channels.name")}</TableHead>
+                          <TableHead className="text-muted-foreground font-medium">{t("channels.channelId")}</TableHead>
+                          <TableHead className="text-muted-foreground font-medium">{t("channels.inviteLink")}</TableHead>
+                          <TableHead className="text-muted-foreground font-medium">{t("channels.addedAt")}</TableHead>
+                          <TableHead className="text-muted-foreground font-medium w-12"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {channels.map((ch) => (
+                          <TableRow key={ch.id} className="border-border/30 hover:bg-secondary/30">
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Tv className="w-4 h-4 text-primary/60 flex-shrink-0" />
+                                <span className="font-medium text-foreground text-sm">{ch.channel_name}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell><span className="font-mono text-xs text-muted-foreground" dir="ltr">{ch.channel_id}</span></TableCell>
+                            <TableCell>
+                              {ch.invite_link ? (
+                                <a href={ch.invite_link} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline flex items-center gap-1">
+                                  <Link className="w-3 h-3" /> {lang === "ar" ? "رابط" : "Link"}
+                                </a>
+                              ) : "—"}
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">{new Date(ch.created_at).toLocaleDateString(lang === "ar" ? "ar-SA" : "en-US")}</TableCell>
+                            <TableCell>
+                              <Button variant="ghost" size="icon" onClick={() => deleteChannel(ch.id)} className="text-muted-foreground hover:text-destructive h-8 w-8">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  {/* Mobile */}
+                  <div className="space-y-3 md:hidden">
+                    {channels.map((ch) => (
+                      <div key={ch.id} className="glass-card p-4">
+                        <div className="flex items-start gap-3">
+                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                            <Tv className="w-5 h-5 text-primary/60" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-foreground text-sm">{ch.channel_name}</p>
+                            <p className="font-mono text-xs text-muted-foreground" dir="ltr">{ch.channel_id}</p>
+                            {ch.invite_link && (
+                              <a href={ch.invite_link} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline mt-1 inline-flex items-center gap-1">
+                                <Link className="w-3 h-3" /> {lang === "ar" ? "رابط الدعوة" : "Invite Link"}
+                              </a>
+                            )}
+                          </div>
+                          <Button variant="ghost" size="icon" onClick={() => deleteChannel(ch.id)} className="text-muted-foreground hover:text-destructive h-8 w-8 flex-shrink-0">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* BROADCAST */}
+          {activeTab === "broadcast" && (
+            <div className="space-y-4 md:space-y-6 max-w-xl animate-fade-in">
+              <div className="glass-card p-4 md:p-6 space-y-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Send className="w-5 h-5 text-primary" />
+                  <h3 className="font-semibold text-foreground">{t("broadcast.title")}</h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {t("broadcast.targetAll")} ({activeSubs.length})
+                </p>
+                <div className="space-y-2">
+                  <Label className="text-foreground/80">{t("broadcast.message")}</Label>
+                  <Textarea
+                    placeholder={t("broadcast.placeholder")}
+                    value={broadcastMsg}
+                    onChange={(e) => setBroadcastMsg(e.target.value)}
+                    rows={5}
+                    className="bg-secondary/50 border-border/50 text-foreground placeholder:text-muted-foreground resize-none"
+                  />
+                  <p className="text-[10px] text-muted-foreground">{lang === "ar" ? "يدعم تنسيق Markdown (*عريض*, _مائل_)" : "Supports Markdown formatting (*bold*, _italic_)"}</p>
+                </div>
+                <Button
+                  onClick={handleBroadcast}
+                  disabled={broadcasting || !broadcastMsg.trim()}
+                  className="w-full gradient-telegram text-primary-foreground hover:opacity-90"
+                >
+                  {broadcasting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  {broadcasting ? t("broadcast.sending") : t("broadcast.send")}
+                </Button>
+                {broadcastResult && (
+                  <div className="glass-card p-4 border-primary/30 bg-primary/5">
+                    <h4 className="text-sm font-semibold text-foreground mb-2">{t("broadcast.result")}</h4>
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div>
+                        <p className="text-lg font-bold text-success">{broadcastResult.sent}</p>
+                        <p className="text-[10px] text-muted-foreground">{t("broadcast.success")}</p>
+                      </div>
+                      <div>
+                        <p className="text-lg font-bold text-destructive">{broadcastResult.failed}</p>
+                        <p className="text-[10px] text-muted-foreground">{t("broadcast.failed")}</p>
+                      </div>
+                      <div>
+                        <p className="text-lg font-bold text-foreground">{broadcastResult.total}</p>
+                        <p className="text-[10px] text-muted-foreground">{t("broadcast.total")}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -516,7 +846,6 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                 ))}
               </div>
 
-              {/* Subscriptions chart */}
               <div className="glass-card p-4 md:p-6">
                 <h3 className="text-sm font-semibold text-foreground mb-1">{t("analytics.last30Days")}</h3>
                 <p className="text-xs text-muted-foreground mb-4">{t("analytics.newSubs")} & {t("analytics.expirations")}</p>
@@ -534,7 +863,6 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                 </div>
               </div>
 
-              {/* Pie chart */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div className="glass-card p-4 md:p-6">
                   <h3 className="text-sm font-semibold text-foreground mb-4">{t("analytics.subsByStatus")}</h3>
@@ -555,7 +883,6 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   </div>
                 </div>
 
-                {/* Expiring soon list */}
                 <div className="glass-card p-4 md:p-6">
                   <h3 className="text-sm font-semibold text-foreground mb-4">{t("analytics.expiringSoon")} (7 {t("dash.day")})</h3>
                   <div className="space-y-2 max-h-52 overflow-y-auto">
@@ -635,6 +962,143 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
           )}
         </div>
       </main>
+
+      {/* ── Add Subscriber Dialog ── */}
+      <Dialog open={showAddSub} onOpenChange={setShowAddSub}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="w-5 h-5 text-primary" />
+              {t("subs.add")}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              {lang === "ar" ? "أدخل بيانات المشترك الجديد" : "Enter new subscriber details"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>{t("subs.telegramId")} *</Label>
+              <Input dir="ltr" placeholder="123456789" value={addSubForm.telegram_user_id}
+                onChange={(e) => setAddSubForm(p => ({ ...p, telegram_user_id: e.target.value }))}
+                className="bg-secondary/50 border-border/50 text-foreground font-mono text-left" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>{t("subs.firstName")}</Label>
+                <Input value={addSubForm.first_name} onChange={(e) => setAddSubForm(p => ({ ...p, first_name: e.target.value }))}
+                  className="bg-secondary/50 border-border/50 text-foreground" />
+              </div>
+              <div className="space-y-2">
+                <Label>{t("subs.lastName")}</Label>
+                <Input value={addSubForm.last_name} onChange={(e) => setAddSubForm(p => ({ ...p, last_name: e.target.value }))}
+                  className="bg-secondary/50 border-border/50 text-foreground" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>{t("subs.username")}</Label>
+              <Input dir="ltr" placeholder="username" value={addSubForm.telegram_username}
+                onChange={(e) => setAddSubForm(p => ({ ...p, telegram_username: e.target.value }))}
+                className="bg-secondary/50 border-border/50 text-foreground text-left" />
+            </div>
+            <div className="space-y-2">
+              <Label>{t("subs.selectDuration")}</Label>
+              <div className="flex items-center gap-2 mb-2">
+                <Checkbox checked={addSubForm.is_permanent} onCheckedChange={(v) => setAddSubForm(p => ({ ...p, is_permanent: !!v }))} />
+                <span className="text-sm text-foreground">{t("subs.permanentOption")} ♾</span>
+              </div>
+              {!addSubForm.is_permanent && (
+                <div className="space-y-2">
+                  <Select value={addSubForm.duration} onValueChange={(v) => setAddSubForm(p => ({ ...p, duration: v }))}>
+                    <SelectTrigger className="bg-secondary/50 border-border/50">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[7, 15, 30, 60, 90, 180, 365].map(d => (
+                        <SelectItem key={d} value={d.toString()}>{d} {t("dash.day")}</SelectItem>
+                      ))}
+                      <SelectItem value="custom">{t("subs.customDays")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {addSubForm.duration === "custom" && (
+                    <Input type="number" min="1" max="9999" placeholder="1-9999" value={addSubForm.customDays}
+                      onChange={(e) => setAddSubForm(p => ({ ...p, customDays: e.target.value }))}
+                      className="bg-secondary/50 border-border/50 text-foreground" dir="ltr" />
+                  )}
+                </div>
+              )}
+            </div>
+            {channels.length > 0 && (
+              <div className="space-y-2">
+                <Label>{t("subs.selectChannels")}</Label>
+                <div className="flex items-center gap-2 mb-2">
+                  <Checkbox
+                    checked={addSubForm.channel_ids.length === channels.length}
+                    onCheckedChange={(v) => setAddSubForm(p => ({ ...p, channel_ids: v ? channels.map(c => c.id) : [] }))}
+                  />
+                  <span className="text-sm text-foreground">{t("subs.allChannels")}</span>
+                </div>
+                <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                  {channels.map(ch => (
+                    <div key={ch.id} className="flex items-center gap-2">
+                      <Checkbox
+                        checked={addSubForm.channel_ids.includes(ch.id)}
+                        onCheckedChange={() => toggleAddSubChannel(ch.id)}
+                      />
+                      <span className="text-sm text-foreground">{ch.channel_name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddSub(false)}>{lang === "ar" ? "إلغاء" : "Cancel"}</Button>
+            <Button onClick={handleAddSubscriber} disabled={addingSubscriber || !addSubForm.telegram_user_id.trim()}
+              className="gradient-telegram text-primary-foreground">
+              {addingSubscriber ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+              {t("subs.add")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Edit Channels Dialog ── */}
+      <Dialog open={!!editChannelsSub} onOpenChange={(v) => { if (!v) setEditChannelsSub(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit className="w-5 h-5 text-primary" />
+              {t("subs.editChannels")}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              {editChannelsSub && (getDisplayName(editChannelsSub) || `${t("dash.user")} ${editChannelsSub.telegram_user_id}`)}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 mb-1">
+              <Checkbox
+                checked={editChannelIds.length === channels.length && channels.length > 0}
+                onCheckedChange={(v) => setEditChannelIds(v ? channels.map(c => c.id) : [])}
+              />
+              <span className="text-sm font-medium text-foreground">{t("subs.allChannels")}</span>
+            </div>
+            {channels.map(ch => (
+              <div key={ch.id} className="flex items-center gap-2">
+                <Checkbox checked={editChannelIds.includes(ch.id)} onCheckedChange={() => toggleEditChannel(ch.id)} />
+                <span className="text-sm text-foreground">{ch.channel_name}</span>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditChannelsSub(null)}>{lang === "ar" ? "إلغاء" : "Cancel"}</Button>
+            <Button onClick={handleSaveSubChannels} disabled={savingChannels}
+              className="gradient-telegram text-primary-foreground">
+              {savingChannels ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              {t("dash.saveSettings")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
