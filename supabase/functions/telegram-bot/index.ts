@@ -520,6 +520,54 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
           return;
         }
 
+        // ── ADD SUBSCRIBER: custom days text input ──
+        case "await_sub_days_custom": {
+          const { telegramUserId, telegramUsername, userFirstName: fn, userLastName: ln } = currentState.data;
+          const days = parseInt(text.trim());
+
+          if (isNaN(days) || days <= 0 || days > 9999) {
+            await tg(botToken, "sendMessage", {
+              chat_id: chatId,
+              text: "❌ أدخل رقماً صحيحاً بين 1 و 9999\n\n_أرسل /cancel للإلغاء_",
+              parse_mode: "Markdown",
+            });
+            return;
+          }
+
+          // Move to channel selection step
+          const { data: channels } = await sb.from("telegram_channels").select("id, channel_name").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+          
+          if (!channels || channels.length === 0) {
+            await clearState(chatId, botToken);
+            await finalizeSubscriber(sb, botToken, chatId, ownerId, botTokenId, telegramUserId, telegramUsername, fn, ln, days, false, []);
+            return;
+          }
+
+          if (channels.length === 1) {
+            await clearState(chatId, botToken);
+            await finalizeSubscriber(sb, botToken, chatId, ownerId, botTokenId, telegramUserId, telegramUsername, fn, ln, days, false, [channels[0].id]);
+            return;
+          }
+
+          await setState(chatId, botToken, "await_sub_channels", {
+            telegramUserId, telegramUsername, userFirstName: fn, userLastName: ln,
+            days, isPermanent: false, selectedChannels: []
+          });
+
+          const channelBtns = channels.map((ch: any) => [{ text: `⬜ ${ch.channel_name}`, callback_data: `toggle_ch_${ch.id}` }]);
+          channelBtns.push([{ text: "✅ الكل", callback_data: "select_all_channels" }]);
+          channelBtns.push([{ text: "📥 تأكيد الاختيار", callback_data: "confirm_channels" }]);
+          channelBtns.push([{ text: "❌ إلغاء", callback_data: "cancel_action" }]);
+
+          await tg(botToken, "sendMessage", {
+            chat_id: chatId,
+            text: "📺 *اختر القنوات للمشترك:*\n\nاضغط على القناة لتحديدها/إلغاء تحديدها، ثم اضغط تأكيد.",
+            parse_mode: "Markdown",
+            reply_markup: { inline_keyboard: channelBtns },
+          });
+          return;
+        }
+
         // ── ADD CHANNEL ──
         case "await_channel": {
           let channelId: number | null = null;
