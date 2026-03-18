@@ -639,14 +639,54 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
             return;
           }
 
-          const { error } = await sb.from("telegram_channels").upsert(
+          const { data: newChannel, error } = await sb.from("telegram_channels").upsert(
             { owner_id: ownerId, bot_token_id: botTokenId, channel_id: channelId, channel_name: channelName, invite_link: linkRes.result.invite_link },
             { onConflict: "owner_id,channel_id" }
-          );
+          ).select("id").single();
 
           if (error) {
             await tg(botToken, "sendMessage", { chat_id: chatId, text: "❌ خطأ: " + error.message, reply_markup: adminKeyboard() });
             return;
+          }
+
+          // Auto-assign new channel to subscribers who have ALL other channels
+          const newChannelId = newChannel.id;
+          const { data: allChannels } = await sb.from("telegram_channels").select("id").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+          const otherChannelIds = (allChannels || []).map((ch: any) => ch.id).filter((id: string) => id !== newChannelId);
+
+          if (otherChannelIds.length > 0) {
+            // Get all active subscribers for this bot
+            const { data: allSubs } = await sb.from("telegram_subscribers").select("id").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+
+            let autoAssigned = 0;
+            for (const sub of (allSubs || [])) {
+              // Check how many of the OTHER channels this subscriber has
+              const { count } = await sb.from("subscriber_channels")
+                .select("id", { count: "exact", head: true })
+                .eq("subscriber_id", sub.id)
+                .in("channel_id", otherChannelIds);
+
+              if (count === otherChannelIds.length) {
+                // Subscriber has all other channels — auto-assign the new one
+                await sb.from("subscriber_channels").insert({ subscriber_id: sub.id, channel_id: newChannelId });
+                autoAssigned++;
+              }
+            }
+
+            if (autoAssigned > 0) {
+              await tg(botToken, "sendMessage", {
+                chat_id: chatId,
+                text: `📌 تم إضافة القناة الجديدة تلقائياً لـ *${autoAssigned}* مشترك يملكون جميع القنوات.`,
+                parse_mode: "Markdown",
+              });
+            }
+          } else {
+            // This is the first/only channel — assign to ALL existing subscribers
+            const { data: allSubs } = await sb.from("telegram_subscribers").select("id").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+            if (allSubs && allSubs.length > 0) {
+              const rows = allSubs.map((s: any) => ({ subscriber_id: s.id, channel_id: newChannelId }));
+              await sb.from("subscriber_channels").insert(rows);
+            }
           }
 
           const membersRes = await tg(botToken, "getChatMemberCount", { chat_id: channelId });
