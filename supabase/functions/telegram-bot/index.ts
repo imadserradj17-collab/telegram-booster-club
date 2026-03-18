@@ -460,6 +460,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
                   { text: "365 يوم", callback_data: "days_365" },
                   { text: "♾ دائم", callback_data: "days_permanent" },
                 ],
+                [{ text: "✏️ إدخال يدوي", callback_data: "days_custom" }],
                 [{ text: "❌ إلغاء", callback_data: "cancel_action" }],
               ],
             },
