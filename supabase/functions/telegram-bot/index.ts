@@ -460,6 +460,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
                   { text: "365 يوم", callback_data: "days_365" },
                   { text: "♾ دائم", callback_data: "days_permanent" },
                 ],
+                [{ text: "✏️ إدخال يدوي", callback_data: "days_custom" }],
                 [{ text: "❌ إلغاء", callback_data: "cancel_action" }],
               ],
             },
@@ -515,6 +516,54 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
             text: "📺 *اختر القنوات للمشترك:*\n\nاضغط على القناة لتحديدها/إلغاء تحديدها، ثم اضغط تأكيد.",
             parse_mode: "Markdown",
             reply_markup: { inline_keyboard: channelButtons },
+          });
+          return;
+        }
+
+        // ── ADD SUBSCRIBER: custom days text input ──
+        case "await_sub_days_custom": {
+          const { telegramUserId, telegramUsername, userFirstName: fn, userLastName: ln } = currentState.data;
+          const days = parseInt(text.trim());
+
+          if (isNaN(days) || days <= 0 || days > 9999) {
+            await tg(botToken, "sendMessage", {
+              chat_id: chatId,
+              text: "❌ أدخل رقماً صحيحاً بين 1 و 9999\n\n_أرسل /cancel للإلغاء_",
+              parse_mode: "Markdown",
+            });
+            return;
+          }
+
+          // Move to channel selection step
+          const { data: channels } = await sb.from("telegram_channels").select("id, channel_name").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+          
+          if (!channels || channels.length === 0) {
+            await clearState(chatId, botToken);
+            await finalizeSubscriber(sb, botToken, chatId, ownerId, botTokenId, telegramUserId, telegramUsername, fn, ln, days, false, []);
+            return;
+          }
+
+          if (channels.length === 1) {
+            await clearState(chatId, botToken);
+            await finalizeSubscriber(sb, botToken, chatId, ownerId, botTokenId, telegramUserId, telegramUsername, fn, ln, days, false, [channels[0].id]);
+            return;
+          }
+
+          await setState(chatId, botToken, "await_sub_channels", {
+            telegramUserId, telegramUsername, userFirstName: fn, userLastName: ln,
+            days, isPermanent: false, selectedChannels: []
+          });
+
+          const channelBtns = channels.map((ch: any) => [{ text: `⬜ ${ch.channel_name}`, callback_data: `toggle_ch_${ch.id}` }]);
+          channelBtns.push([{ text: "✅ الكل", callback_data: "select_all_channels" }]);
+          channelBtns.push([{ text: "📥 تأكيد الاختيار", callback_data: "confirm_channels" }]);
+          channelBtns.push([{ text: "❌ إلغاء", callback_data: "cancel_action" }]);
+
+          await tg(botToken, "sendMessage", {
+            chat_id: chatId,
+            text: "📺 *اختر القنوات للمشترك:*\n\nاضغط على القناة لتحديدها/إلغاء تحديدها، ثم اضغط تأكيد.",
+            parse_mode: "Markdown",
+            reply_markup: { inline_keyboard: channelBtns },
           });
           return;
         }
@@ -957,6 +1006,22 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
 
       default: {
         // ── Days selection buttons ──
+        if (data === "days_custom") {
+          const currentSt = await getState(chatId, botToken);
+          if (!currentSt || currentSt.state !== "await_sub_days") {
+            await tg(botToken, "sendMessage", { chat_id: chatId, text: "⚠️ انتهت صلاحية العملية. أعد المحاولة.", reply_markup: adminKeyboard() });
+            break;
+          }
+          const { telegramUserId, telegramUsername, userFirstName: fn, userLastName: ln } = currentSt.data;
+          await setState(chatId, botToken, "await_sub_days_custom", { telegramUserId, telegramUsername, userFirstName: fn, userLastName: ln });
+          await tg(botToken, "sendMessage", {
+            chat_id: chatId,
+            text: "✏️ *أدخل عدد الأيام يدوياً:*\n\nأرسل رقماً بين 1 و 9999\n\n_أرسل /cancel للإلغاء_",
+            parse_mode: "Markdown",
+          });
+          break;
+        }
+
         if (data.startsWith("days_")) {
           const currentSt = await getState(chatId, botToken);
           if (!currentSt || currentSt.state !== "await_sub_days") {
