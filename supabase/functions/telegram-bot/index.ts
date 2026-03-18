@@ -1006,6 +1006,22 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
 
       default: {
         // ── Days selection buttons ──
+        if (data === "days_custom") {
+          const currentSt = await getState(chatId, botToken);
+          if (!currentSt || currentSt.state !== "await_sub_days") {
+            await tg(botToken, "sendMessage", { chat_id: chatId, text: "⚠️ انتهت صلاحية العملية. أعد المحاولة.", reply_markup: adminKeyboard() });
+            break;
+          }
+          const { telegramUserId, telegramUsername, userFirstName: fn, userLastName: ln } = currentSt.data;
+          await setState(chatId, botToken, "await_sub_days_custom", { telegramUserId, telegramUsername, userFirstName: fn, userLastName: ln });
+          await tg(botToken, "sendMessage", {
+            chat_id: chatId,
+            text: "✏️ *أدخل عدد الأيام يدوياً:*\n\nأرسل رقماً بين 1 و 9999\n\n_أرسل /cancel للإلغاء_",
+            parse_mode: "Markdown",
+          });
+          break;
+        }
+
         if (data.startsWith("days_")) {
           const currentSt = await getState(chatId, botToken);
           if (!currentSt || currentSt.state !== "await_sub_days") {
