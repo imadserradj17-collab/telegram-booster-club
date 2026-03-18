@@ -149,19 +149,28 @@ async function finalizeSubscriber(
 
   const buttons = (selectedChannels || []).filter((ch: any) => ch.invite_link).map((ch: any) => [{ text: `📺 ${ch.channel_name}`, url: ch.invite_link }]);
 
+  let notifiedSubscriber = false;
   if (buttons.length > 0) {
-    await tg(botToken, "sendMessage", {
-      chat_id: telegramUserId,
-      text: "🎉 *تم تفعيل اشتراكك!*\n\nاضغط على الأزرار للانضمام:",
-      parse_mode: "Markdown",
-      reply_markup: { inline_keyboard: buttons },
-    });
+    try {
+      const sendResult = await tg(botToken, "sendMessage", {
+        chat_id: telegramUserId,
+        text: "🎉 *تم تفعيل اشتراكك!*\n\nاضغط على الأزرار للانضمام:",
+        parse_mode: "Markdown",
+        reply_markup: { inline_keyboard: buttons },
+      });
+      notifiedSubscriber = sendResult.ok === true;
+    } catch {
+      notifiedSubscriber = false;
+    }
   }
 
   const subInfo = isPermanent ? "♾ دائم" : `📅 ${days} يوم (حتى ${formatDate(expiresAt!)})`;
+  const notifStatus = buttons.length > 0
+    ? (notifiedSubscriber ? `\n✉️ تم إرسال ${buttons.length} رابط للمشترك` : "\n⚠️ لم يتم إرسال الروابط (المشترك لم يبدأ البوت)")
+    : "";
   await tg(botToken, "sendMessage", {
     chat_id: chatId,
-    text: `✅ *تمت إضافة المشترك بنجاح!*\n\n🆔 المعرف: \`${telegramUserId}\`\n${subInfo}\n📺 القنوات: *${selectedChannelIds.length}*${buttons.length > 0 ? `\n✉️ تم إرسال ${buttons.length} رابط للمشترك` : ""}`,
+    text: `✅ *تمت إضافة المشترك بنجاح!*\n\n🆔 المعرف: \`${telegramUserId}\`\n${subInfo}\n📺 القنوات: *${selectedChannelIds.length}*${notifStatus}`,
     parse_mode: "Markdown",
     reply_markup: adminKeyboard(),
   });
