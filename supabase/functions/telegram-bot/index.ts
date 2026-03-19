@@ -584,7 +584,9 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
           // Support both old (forward_from_chat) and new (forward_origin) Telegram API
           if (msg.forward_from_chat) {
             channelId = msg.forward_from_chat.id;
-          } else if (msg.forward_origin && (msg.forward_origin.type === "channel" || msg.forward_origin.type === "chat") && msg.forward_origin.sender_chat) {
+          } else if (msg.forward_origin && msg.forward_origin.type === "channel" && msg.forward_origin.chat) {
+            channelId = msg.forward_origin.chat.id;
+          } else if (msg.forward_origin && msg.forward_origin.type === "chat" && msg.forward_origin.sender_chat) {
             channelId = msg.forward_origin.sender_chat.id;
           } else {
             const input = text.trim().replace(/^@/, "");
