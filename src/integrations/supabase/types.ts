@@ -262,6 +262,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      update_preferred_language: { Args: { _lang: string }; Returns: undefined }
     }
     Enums: {
       app_role: "admin" | "user"
