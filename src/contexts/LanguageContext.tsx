@@ -246,7 +246,7 @@ export const LanguageProvider = ({ children }: { children: ReactNode }) => {
     localStorage.setItem("app_lang", newLang);
     // Save to DB if logged in
     if (userId) {
-      supabase.from("profiles").update({ preferred_language: newLang }).eq("id", userId).then();
+      supabase.rpc("update_preferred_language", { _lang: newLang }).then();
     }
   }, [userId]);
 
