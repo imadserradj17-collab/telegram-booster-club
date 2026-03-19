@@ -8,12 +8,11 @@ const corsHeaders = {
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-function supabaseAdmin() {
-  return createClient(supabaseUrl, supabaseServiceKey);
-}
+// Single cached client instance
+const sb = createClient(supabaseUrl, supabaseServiceKey);
 
 async function getBotSettingsByToken(token: string) {
-  const { data } = await supabaseAdmin()
+  const { data } = await sb
     .from("bot_tokens")
     .select("id, user_id, admin_telegram_id, non_subscriber_message")
     .eq("token", token)
@@ -30,7 +29,15 @@ async function tg(token: string, method: string, body?: any) {
   return res.json();
 }
 
-// Get user profile photo URL
+// Fire-and-forget telegram call (don't await response)
+function tgFire(token: string, method: string, body?: any) {
+  fetch(`https://api.telegram.org/bot${token}/${method}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  }).catch(() => {});
+}
+
 async function getUserPhotoUrl(token: string, userId: number): Promise<string | null> {
   try {
     const photos = await tg(token, "getUserProfilePhotos", { user_id: userId, limit: 1 });
@@ -50,9 +57,8 @@ function daysRemaining(expiresAt: string): number {
   return Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86400000));
 }
 
-// ─── STATE MANAGEMENT (Database-backed) ───
+// ─── STATE MANAGEMENT ───
 async function setState(chatId: number, botTokenId: string, state: string, data?: any) {
-  const sb = supabaseAdmin();
   await sb.from("bot_pending_states").upsert(
     { chat_id: chatId, bot_token_id: botTokenId, state, data: data || {} },
     { onConflict: "chat_id,bot_token_id" }
@@ -60,12 +66,6 @@ async function setState(chatId: number, botTokenId: string, state: string, data?
 }
 
 async function getState(chatId: number, botTokenId: string) {
-  const sb = supabaseAdmin();
-  // Clean up expired states (older than 5 minutes)
-  await sb.from("bot_pending_states")
-    .delete()
-    .lt("created_at", new Date(Date.now() - 5 * 60 * 1000).toISOString());
-
   const { data } = await sb.from("bot_pending_states")
     .select("state, data")
     .eq("chat_id", chatId)
@@ -75,22 +75,33 @@ async function getState(chatId: number, botTokenId: string) {
 }
 
 async function clearState(chatId: number, botTokenId: string) {
-  const sb = supabaseAdmin();
   await sb.from("bot_pending_states")
     .delete()
     .eq("chat_id", chatId)
     .eq("bot_token_id", botTokenId);
 }
 
-// Get subscriber's assigned channels
-async function getSubscriberChannels(sb: any, subscriberId: string) {
+// Batch get subscriber channels for multiple subscribers
+async function getSubscriberChannelsBatch(subscriberIds: string[]): Promise<Record<string, string[]>> {
+  if (subscriberIds.length === 0) return {};
+  const { data } = await sb.from("subscriber_channels")
+    .select("subscriber_id, channel_id")
+    .in("subscriber_id", subscriberIds);
+  const map: Record<string, string[]> = {};
+  for (const r of (data || [])) {
+    if (!map[r.subscriber_id]) map[r.subscriber_id] = [];
+    map[r.subscriber_id].push(r.channel_id);
+  }
+  return map;
+}
+
+async function getSubscriberChannels(subscriberId: string): Promise<string[]> {
   const { data } = await sb.from("subscriber_channels")
     .select("channel_id")
     .eq("subscriber_id", subscriberId);
   return (data || []).map((r: any) => r.channel_id);
 }
 
-// Main admin keyboard
 function adminKeyboard() {
   return {
     inline_keyboard: [
@@ -114,17 +125,65 @@ function adminKeyboard() {
   };
 }
 
-// Helper: finalize adding subscriber after channel selection
+// Concurrent broadcast with controlled concurrency
+async function broadcastConcurrent(botToken: string, subs: any[], msg: any, chatId: number, text: string) {
+  const CONCURRENCY = 10;
+  let sent = 0, failed = 0;
+  
+  for (let i = 0; i < subs.length; i += CONCURRENCY) {
+    const batch = subs.slice(i, i + CONCURRENCY);
+    const results = await Promise.allSettled(batch.map(async (sub: any) => {
+      if (msg.photo || msg.video || msg.document || msg.animation) {
+        return tg(botToken, "copyMessage", { chat_id: sub.telegram_user_id, from_chat_id: chatId, message_id: msg.message_id });
+      } else if (msg.forward_from_chat || msg.forward_from) {
+        return tg(botToken, "forwardMessage", { chat_id: sub.telegram_user_id, from_chat_id: chatId, message_id: msg.message_id });
+      } else {
+        return tg(botToken, "sendMessage", { chat_id: sub.telegram_user_id, text });
+      }
+    }));
+    for (const r of results) {
+      if (r.status === "fulfilled" && r.value?.ok) sent++;
+      else failed++;
+    }
+  }
+  return { sent, failed };
+}
+
+// Parallel kick from channels
+async function kickFromChannels(botToken: string, userId: number, channelIds: number[]) {
+  const results = await Promise.allSettled(channelIds.map(async (chId) => {
+    const res = await tg(botToken, "banChatMember", { chat_id: chId, user_id: userId });
+    if (res.ok) await tg(botToken, "unbanChatMember", { chat_id: chId, user_id: userId, only_if_banned: true });
+    return res.ok;
+  }));
+  return results.filter(r => r.status === "fulfilled" && r.value).length;
+}
+
+// Get channels to kick a subscriber from
+async function getKickChannels(subscriberId: string | null, ownerId: string, botTokenId: string): Promise<number[]> {
+  if (subscriberId) {
+    const assignedIds = await getSubscriberChannels(subscriberId);
+    if (assignedIds.length > 0) {
+      const { data } = await sb.from("telegram_channels").select("channel_id").in("id", assignedIds);
+      return (data || []).map((c: any) => c.channel_id);
+    }
+  }
+  const { data } = await sb.from("telegram_channels").select("channel_id").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+  return (data || []).map((c: any) => c.channel_id);
+}
+
 async function finalizeSubscriber(
-  sb: any, botToken: string, chatId: number, ownerId: string, botTokenId: string,
+  botToken: string, chatId: number, ownerId: string, botTokenId: string,
   telegramUserId: number, telegramUsername: string | null, fn: string | null, ln: string | null,
   days: number | null, isPermanent: boolean, selectedChannelIds: string[]
 ) {
   const expiresAt = isPermanent ? null : new Date(Date.now() + days! * 86400000).toISOString();
-  const photoUrl = await getUserPhotoUrl(botToken, telegramUserId);
-
+  
+  // Start photo fetch in parallel with DB upsert
+  const photoPromise = getUserPhotoUrl(botToken, telegramUserId);
+  
   const { data: upsertedSub, error } = await sb.from("telegram_subscribers").upsert(
-    { owner_id: ownerId, bot_token_id: botTokenId, telegram_user_id: telegramUserId, telegram_username: telegramUsername, first_name: fn || null, last_name: ln || null, photo_url: photoUrl, subscription_days: days, expires_at: expiresAt, is_permanent: isPermanent },
+    { owner_id: ownerId, bot_token_id: botTokenId, telegram_user_id: telegramUserId, telegram_username: telegramUsername, first_name: fn || null, last_name: ln || null, photo_url: null, subscription_days: days, expires_at: expiresAt, is_permanent: isPermanent },
     { onConflict: "owner_id,telegram_user_id" }
   ).select("id").single();
 
@@ -135,14 +194,24 @@ async function finalizeSubscriber(
 
   const subscriberId = upsertedSub.id;
 
-  // Clear old channel assignments and insert new ones
-  await sb.from("subscriber_channels").delete().eq("subscriber_id", subscriberId);
+  // Parallel: update photo, clear old channels, fetch channel info
+  const [photoUrl] = await Promise.all([
+    photoPromise,
+    sb.from("subscriber_channels").delete().eq("subscriber_id", subscriberId),
+  ]);
+
+  // Update photo if available (fire-and-forget)
+  if (photoUrl) {
+    sb.from("telegram_subscribers").update({ photo_url: photoUrl }).eq("id", subscriberId).then(() => {});
+  }
+
+  // Insert new channel assignments
   if (selectedChannelIds.length > 0) {
     const rows = selectedChannelIds.map((chId: string) => ({ subscriber_id: subscriberId, channel_id: chId }));
     await sb.from("subscriber_channels").insert(rows);
   }
 
-  // Get the selected channels info to send invite links
+  // Get channel info and send invite links in parallel
   const { data: selectedChannels } = await sb.from("telegram_channels")
     .select("channel_name, invite_link")
     .in("id", selectedChannelIds);
@@ -159,9 +228,7 @@ async function finalizeSubscriber(
         reply_markup: { inline_keyboard: buttons },
       });
       notifiedSubscriber = sendResult.ok === true;
-    } catch {
-      notifiedSubscriber = false;
-    }
+    } catch { notifiedSubscriber = false; }
   }
 
   const subInfo = isPermanent ? "♾ دائم" : `📅 ${days} يوم (حتى ${formatDate(expiresAt!)})`;
@@ -177,8 +244,6 @@ async function finalizeSubscriber(
 }
 
 async function handleUpdate(update: any, botToken: string, ownerId: string, botTokenId: string, adminTelegramId: number | null, nonSubMessage: string) {
-  const sb = supabaseAdmin();
-
   // ─── CHAT JOIN REQUESTS ───
   if (update.chat_join_request) {
     const req = update.chat_join_request;
@@ -186,86 +251,79 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
     const chatId = req.chat.id;
     const firstName = req.from.first_name || "";
 
-    // Only process if this channel belongs to THIS bot
-    const { data: myChannel } = await sb
-      .from("telegram_channels")
-      .select("id")
-      .eq("owner_id", ownerId)
-      .eq("bot_token_id", botTokenId)
-      .eq("channel_id", chatId)
-      .maybeSingle();
+    // Parallel: check channel + check subscriber
+    const [channelRes, subRes] = await Promise.all([
+      sb.from("telegram_channels").select("id").eq("owner_id", ownerId).eq("bot_token_id", botTokenId).eq("channel_id", chatId).maybeSingle(),
+      sb.from("telegram_subscribers").select("*").eq("owner_id", ownerId).eq("bot_token_id", botTokenId).eq("telegram_user_id", telegramUserId).maybeSingle(),
+    ]);
 
+    const myChannel = channelRes.data;
     if (!myChannel) return;
 
-    const { data: sub } = await sb
-      .from("telegram_subscribers")
-      .select("*")
-      .eq("owner_id", ownerId)
-      .eq("bot_token_id", botTokenId)
-      .eq("telegram_user_id", telegramUserId)
-      .maybeSingle();
+    const sub = subRes.data;
 
     if (sub) {
       if (!sub.is_permanent && sub.expires_at && new Date(sub.expires_at) < new Date()) {
-        await tg(botToken, "declineChatJoinRequest", { chat_id: chatId, user_id: telegramUserId });
-        await tg(botToken, "sendMessage", {
-          chat_id: telegramUserId,
-          text: "⏰ *انتهى اشتراكك!*\n\nتواصل مع المسؤول لتجديد الاشتراك.",
-          parse_mode: "Markdown",
-        });
+        // Expired - decline + notify in parallel
+        await Promise.all([
+          tg(botToken, "declineChatJoinRequest", { chat_id: chatId, user_id: telegramUserId }),
+          tg(botToken, "sendMessage", { chat_id: telegramUserId, text: "⏰ *انتهى اشتراكك!*\n\nتواصل مع المسؤول لتجديد الاشتراك.", parse_mode: "Markdown" }),
+        ]);
       } else {
-        // Check if subscriber has access to THIS specific channel
-        const assignedChannelIds = await getSubscriberChannels(sb, sub.id);
+        const assignedChannelIds = await getSubscriberChannels(sub.id);
         const hasAccess = assignedChannelIds.length === 0 || assignedChannelIds.includes(myChannel.id);
 
         if (!hasAccess) {
-          await tg(botToken, "declineChatJoinRequest", { chat_id: chatId, user_id: telegramUserId });
-          await tg(botToken, "sendMessage", {
-            chat_id: telegramUserId,
-            text: "⛔ *ليس لديك صلاحية لهذه القناة.*\n\nاشتراكك لا يشمل هذه القناة. تواصل مع المسؤول.",
-            parse_mode: "Markdown",
-          });
+          await Promise.all([
+            tg(botToken, "declineChatJoinRequest", { chat_id: chatId, user_id: telegramUserId }),
+            tg(botToken, "sendMessage", { chat_id: telegramUserId, text: "⛔ *ليس لديك صلاحية لهذه القناة.*\n\nاشتراكك لا يشمل هذه القناة. تواصل مع المسؤول.", parse_mode: "Markdown" }),
+          ]);
           return;
         }
 
-        await tg(botToken, "approveChatJoinRequest", { chat_id: chatId, user_id: telegramUserId });
-        await tg(botToken, "sendMessage", {
-          chat_id: telegramUserId,
-          text: `✅ تم قبولك في القناة *${req.chat.title || ""}*! مرحباً بك 🎉`,
-          parse_mode: "Markdown",
-        });
-        // Update user info on join
+        // Approve + notify subscriber + update info + notify admin — all in parallel
         const updateData: any = {};
         if (req.from.username) updateData.telegram_username = req.from.username;
         if (req.from.first_name) updateData.first_name = req.from.first_name;
         if (req.from.last_name) updateData.last_name = req.from.last_name;
+
+        const promises: Promise<any>[] = [
+          tg(botToken, "approveChatJoinRequest", { chat_id: chatId, user_id: telegramUserId }),
+          tg(botToken, "sendMessage", { chat_id: telegramUserId, text: `✅ تم قبولك في القناة *${req.chat.title || ""}*! مرحباً بك 🎉`, parse_mode: "Markdown" }),
+        ];
+
         if (Object.keys(updateData).length > 0) {
-          const photoUrl = await getUserPhotoUrl(botToken, telegramUserId);
-          if (photoUrl) updateData.photo_url = photoUrl;
-          await sb.from("telegram_subscribers")
-            .update(updateData)
-            .eq("owner_id", ownerId)
-            .eq("bot_token_id", botTokenId)
-            .eq("telegram_user_id", telegramUserId);
+          // Photo fetch is slow, do it fire-and-forget
+          getUserPhotoUrl(botToken, telegramUserId).then(photoUrl => {
+            if (photoUrl) updateData.photo_url = photoUrl;
+            sb.from("telegram_subscribers").update(updateData).eq("owner_id", ownerId).eq("bot_token_id", botTokenId).eq("telegram_user_id", telegramUserId);
+          });
         }
+
         if (adminTelegramId) {
-          await tg(botToken, "sendMessage", {
+          promises.push(tg(botToken, "sendMessage", {
             chat_id: adminTelegramId,
             text: `📥 *طلب انضمام مقبول*\n\n👤 ${firstName} (\`${telegramUserId}\`)\n📺 ${req.chat.title || chatId}`,
             parse_mode: "Markdown",
-          });
+          }));
         }
+
+        await Promise.all(promises);
       }
     } else {
-      await tg(botToken, "declineChatJoinRequest", { chat_id: chatId, user_id: telegramUserId });
-      await tg(botToken, "sendMessage", { chat_id: telegramUserId, text: nonSubMessage });
+      // Not a subscriber - decline + notify in parallel
+      const promises: Promise<any>[] = [
+        tg(botToken, "declineChatJoinRequest", { chat_id: chatId, user_id: telegramUserId }),
+        tg(botToken, "sendMessage", { chat_id: telegramUserId, text: nonSubMessage }),
+      ];
       if (adminTelegramId) {
-        await tg(botToken, "sendMessage", {
+        promises.push(tg(botToken, "sendMessage", {
           chat_id: adminTelegramId,
           text: `🚫 *طلب انضمام مرفوض*\n\n👤 ${firstName} (\`${telegramUserId}\`) — غير مشترك\n📺 ${req.chat.title || chatId}`,
           parse_mode: "Markdown",
-        });
+        }));
       }
+      await Promise.all(promises);
     }
     return;
   }
@@ -279,18 +337,21 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
     const firstName = msg.from.first_name || "";
     const isAdmin = !adminTelegramId || fromId === adminTelegramId;
 
-    // /start command
     if (text === "/start") {
       await clearState(chatId, botToken);
       if (isAdmin) {
-        const { data: subs } = await sb.from("telegram_subscribers").select("id, is_permanent, expires_at").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
-        const { data: channels } = await sb.from("telegram_channels").select("id").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
-        const total = subs?.length || 0;
-        const active = subs?.filter((s: any) => s.is_permanent || (s.expires_at && new Date(s.expires_at) > new Date())).length || 0;
+        // Parallel fetch stats
+        const [subsRes, channelsRes] = await Promise.all([
+          sb.from("telegram_subscribers").select("id, is_permanent, expires_at").eq("owner_id", ownerId).eq("bot_token_id", botTokenId),
+          sb.from("telegram_channels").select("id").eq("owner_id", ownerId).eq("bot_token_id", botTokenId),
+        ]);
+        const subs = subsRes.data || [];
+        const total = subs.length;
+        const active = subs.filter((s: any) => s.is_permanent || (s.expires_at && new Date(s.expires_at) > new Date())).length;
 
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
-          text: `🤖 *لوحة تحكم بوت الاشتراكات*\n\nمرحباً بك يا *${firstName}*! 👋\n\n📊 نظرة سريعة:\n├ 👥 المشتركين: *${active}* نشط من أصل *${total}*\n└ 📺 القنوات: *${channels?.length || 0}*\n\nاختر أحد الخيارات:`,
+          text: `🤖 *لوحة تحكم بوت الاشتراكات*\n\nمرحباً بك يا *${firstName}*! 👋\n\n📊 نظرة سريعة:\n├ 👥 المشتركين: *${active}* نشط من أصل *${total}*\n└ 📺 القنوات: *${channelsRes.data?.length || 0}*\n\nاختر أحد الخيارات:`,
           parse_mode: "Markdown",
           reply_markup: adminKeyboard(),
         });
@@ -298,21 +359,14 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
         const { data: sub } = await sb.from("telegram_subscribers").select("*").eq("owner_id", ownerId).eq("bot_token_id", botTokenId).eq("telegram_user_id", fromId).maybeSingle();
 
         if (sub && (sub.is_permanent || (sub.expires_at && new Date(sub.expires_at) > new Date()))) {
-          // Get only the subscriber's assigned channels
-          const assignedChannelIds = await getSubscriberChannels(sb, sub.id);
+          const assignedChannelIds = await getSubscriberChannels(sub.id);
           
           let channels: any[];
           if (assignedChannelIds.length > 0) {
-            const { data } = await sb.from("telegram_channels")
-              .select("channel_name, invite_link")
-              .in("id", assignedChannelIds);
+            const { data } = await sb.from("telegram_channels").select("channel_name, invite_link").in("id", assignedChannelIds);
             channels = data || [];
           } else {
-            // Legacy: no channel assignments = access to all channels
-            const { data } = await sb.from("telegram_channels")
-              .select("channel_name, invite_link")
-              .eq("owner_id", ownerId)
-              .eq("bot_token_id", botTokenId);
+            const { data } = await sb.from("telegram_channels").select("channel_name, invite_link").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
             channels = data || [];
           }
 
@@ -339,7 +393,6 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
       return;
     }
 
-    // /id command
     if (text === "/id" || text === "/myid") {
       await tg(botToken, "sendMessage", {
         chat_id: chatId,
@@ -349,20 +402,14 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
       return;
     }
 
-    // /cancel command
     if (text === "/cancel" || text === "إلغاء") {
       await clearState(chatId, botToken);
       if (isAdmin) {
-        await tg(botToken, "sendMessage", {
-          chat_id: chatId,
-          text: "❌ تم الإلغاء.",
-          reply_markup: adminKeyboard(),
-        });
+        await tg(botToken, "sendMessage", { chat_id: chatId, text: "❌ تم الإلغاء.", reply_markup: adminKeyboard() });
       }
       return;
     }
 
-    // Non-admin
     if (!isAdmin) {
       if (text === "/status" || text === "/حالتي") {
         const { data: sub } = await sb.from("telegram_subscribers").select("*").eq("owner_id", ownerId).eq("bot_token_id", botTokenId).eq("telegram_user_id", fromId).maybeSingle();
@@ -387,14 +434,12 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
 
     if (currentState) {
       switch (currentState.state) {
-        // ── ADD SUBSCRIBER STEP 1: waiting for user ID ──
         case "await_sub_id": {
           let telegramUserId: number | null = null;
           let telegramUsername: string | null = null;
           let userFirstName: string | null = null;
           let userLastName: string | null = null;
 
-          // Support both old (forward_from) and new (forward_origin) Telegram API
           if (msg.forward_from) {
             telegramUserId = msg.forward_from.id;
             telegramUsername = msg.forward_from.username || null;
@@ -407,19 +452,11 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
               userFirstName = msg.forward_origin.sender_user.first_name || null;
               userLastName = msg.forward_origin.sender_user.last_name || null;
             } else if (msg.forward_origin.type === "hidden_user") {
-              await tg(botToken, "sendMessage", {
-                chat_id: chatId,
-                text: "❌ هذا المستخدم أخفى معلوماته.\n\n💡 اطلب منه إرسال /id للبوت، أو أرسل الـ ID الرقمي مباشرة.",
-                parse_mode: "Markdown",
-              });
+              await tg(botToken, "sendMessage", { chat_id: chatId, text: "❌ هذا المستخدم أخفى معلوماته.\n\n💡 اطلب منه إرسال /id للبوت، أو أرسل الـ ID الرقمي مباشرة.", parse_mode: "Markdown" });
               return;
             }
           } else if (msg.forward_sender_name) {
-            await tg(botToken, "sendMessage", {
-              chat_id: chatId,
-              text: "❌ هذا المستخدم أخفى معلوماته.\n\n💡 اطلب منه إرسال /id للبوت، أو أرسل الـ ID الرقمي مباشرة.",
-              parse_mode: "Markdown",
-            });
+            await tg(botToken, "sendMessage", { chat_id: chatId, text: "❌ هذا المستخدم أخفى معلوماته.\n\n💡 اطلب منه إرسال /id للبوت، أو أرسل الـ ID الرقمي مباشرة.", parse_mode: "Markdown" });
             return;
           } else {
             const input = text.trim().replace(/^@/, "");
@@ -427,11 +464,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
             if (!isNaN(parsed)) {
               telegramUserId = parsed;
             } else if (input.length > 0) {
-              await tg(botToken, "sendMessage", {
-                chat_id: chatId,
-                text: `⚠️ لا يمكن تحويل *@${input}* إلى ID مباشرة.\n\n💡 اطلب منه إرسال /id للبوت ثم أرسل لي الرقم.`,
-                parse_mode: "Markdown",
-              });
+              await tg(botToken, "sendMessage", { chat_id: chatId, text: `⚠️ لا يمكن تحويل *@${input}* إلى ID مباشرة.\n\n💡 اطلب منه إرسال /id للبوت ثم أرسل لي الرقم.`, parse_mode: "Markdown" });
               return;
             } else {
               await tg(botToken, "sendMessage", { chat_id: chatId, text: "❌ مدخل غير صالح. أرسل الـ ID أو حوّل رسالة." });
@@ -439,7 +472,6 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
             }
           }
 
-          // Check existing
           const { data: existing } = await sb.from("telegram_subscribers").select("*").eq("owner_id", ownerId).eq("bot_token_id", botTokenId).eq("telegram_user_id", telegramUserId).maybeSingle();
           let existingInfo = "";
           if (existing) {
@@ -455,20 +487,9 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
             parse_mode: "Markdown",
             reply_markup: {
               inline_keyboard: [
-                [
-                  { text: "7 أيام", callback_data: "days_7" },
-                  { text: "15 يوم", callback_data: "days_15" },
-                  { text: "30 يوم", callback_data: "days_30" },
-                ],
-                [
-                  { text: "60 يوم", callback_data: "days_60" },
-                  { text: "90 يوم", callback_data: "days_90" },
-                  { text: "180 يوم", callback_data: "days_180" },
-                ],
-                [
-                  { text: "365 يوم", callback_data: "days_365" },
-                  { text: "♾ دائم", callback_data: "days_permanent" },
-                ],
+                [{ text: "7 أيام", callback_data: "days_7" }, { text: "15 يوم", callback_data: "days_15" }, { text: "30 يوم", callback_data: "days_30" }],
+                [{ text: "60 يوم", callback_data: "days_60" }, { text: "90 يوم", callback_data: "days_90" }, { text: "180 يوم", callback_data: "days_180" }],
+                [{ text: "365 يوم", callback_data: "days_365" }, { text: "♾ دائم", callback_data: "days_permanent" }],
                 [{ text: "✏️ إدخال يدوي", callback_data: "days_custom" }],
                 [{ text: "❌ إلغاء", callback_data: "cancel_action" }],
               ],
@@ -477,111 +498,78 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
           return;
         }
 
-        // ── ADD SUBSCRIBER STEP 2: waiting for days (text input) ──
         case "await_sub_days": {
           const { telegramUserId, telegramUsername, userFirstName: fn, userLastName: ln } = currentState.data;
           const isPermanent = text.trim() === "دائم";
           const days = isPermanent ? null : parseInt(text.trim());
 
           if (!isPermanent && (isNaN(days!) || days! <= 0)) {
-            await tg(botToken, "sendMessage", {
-              chat_id: chatId,
-              text: "❌ أدخل رقماً صحيحاً (مثال: 30) أو اكتب *دائم*\n\n_أرسل /cancel للإلغاء_",
-              parse_mode: "Markdown",
-            });
+            await tg(botToken, "sendMessage", { chat_id: chatId, text: "❌ أدخل رقماً صحيحاً (مثال: 30) أو اكتب *دائم*\n\n_أرسل /cancel للإلغاء_", parse_mode: "Markdown" });
             return;
           }
 
-          // Move to channel selection step
           const { data: channels } = await sb.from("telegram_channels").select("id, channel_name").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
           
           if (!channels || channels.length === 0) {
-            // No channels — finalize directly with empty channel list
             await clearState(chatId, botToken);
-            await finalizeSubscriber(sb, botToken, chatId, ownerId, botTokenId, telegramUserId, telegramUsername, fn, ln, days, isPermanent, []);
+            await finalizeSubscriber(botToken, chatId, ownerId, botTokenId, telegramUserId, telegramUsername, fn, ln, days, isPermanent, []);
             return;
           }
 
           if (channels.length === 1) {
-            // Only one channel — auto-select it
             await clearState(chatId, botToken);
-            await finalizeSubscriber(sb, botToken, chatId, ownerId, botTokenId, telegramUserId, telegramUsername, fn, ln, days, isPermanent, [channels[0].id]);
+            await finalizeSubscriber(botToken, chatId, ownerId, botTokenId, telegramUserId, telegramUsername, fn, ln, days, isPermanent, [channels[0].id]);
             return;
           }
 
-          // Multiple channels — show selection
-          await setState(chatId, botToken, "await_sub_channels", {
-            telegramUserId, telegramUsername, userFirstName: fn, userLastName: ln,
-            days, isPermanent, selectedChannels: []
-          });
+          await setState(chatId, botToken, "await_sub_channels", { telegramUserId, telegramUsername, userFirstName: fn, userLastName: ln, days, isPermanent, selectedChannels: [] });
 
           const channelButtons = channels.map((ch: any) => [{ text: `⬜ ${ch.channel_name}`, callback_data: `toggle_ch_${ch.id}` }]);
           channelButtons.push([{ text: "✅ الكل", callback_data: "select_all_channels" }]);
           channelButtons.push([{ text: "📥 تأكيد الاختيار", callback_data: "confirm_channels" }]);
           channelButtons.push([{ text: "❌ إلغاء", callback_data: "cancel_action" }]);
 
-          await tg(botToken, "sendMessage", {
-            chat_id: chatId,
-            text: "📺 *اختر القنوات للمشترك:*\n\nاضغط على القناة لتحديدها/إلغاء تحديدها، ثم اضغط تأكيد.",
-            parse_mode: "Markdown",
-            reply_markup: { inline_keyboard: channelButtons },
-          });
+          await tg(botToken, "sendMessage", { chat_id: chatId, text: "📺 *اختر القنوات للمشترك:*\n\nاضغط على القناة لتحديدها/إلغاء تحديدها، ثم اضغط تأكيد.", parse_mode: "Markdown", reply_markup: { inline_keyboard: channelButtons } });
           return;
         }
 
-        // ── ADD SUBSCRIBER: custom days text input ──
         case "await_sub_days_custom": {
           const { telegramUserId, telegramUsername, userFirstName: fn, userLastName: ln } = currentState.data;
           const days = parseInt(text.trim());
 
           if (isNaN(days) || days <= 0 || days > 9999) {
-            await tg(botToken, "sendMessage", {
-              chat_id: chatId,
-              text: "❌ أدخل رقماً صحيحاً بين 1 و 9999\n\n_أرسل /cancel للإلغاء_",
-              parse_mode: "Markdown",
-            });
+            await tg(botToken, "sendMessage", { chat_id: chatId, text: "❌ أدخل رقماً صحيحاً بين 1 و 9999\n\n_أرسل /cancel للإلغاء_", parse_mode: "Markdown" });
             return;
           }
 
-          // Move to channel selection step
           const { data: channels } = await sb.from("telegram_channels").select("id, channel_name").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
           
           if (!channels || channels.length === 0) {
             await clearState(chatId, botToken);
-            await finalizeSubscriber(sb, botToken, chatId, ownerId, botTokenId, telegramUserId, telegramUsername, fn, ln, days, false, []);
+            await finalizeSubscriber(botToken, chatId, ownerId, botTokenId, telegramUserId, telegramUsername, fn, ln, days, false, []);
             return;
           }
 
           if (channels.length === 1) {
             await clearState(chatId, botToken);
-            await finalizeSubscriber(sb, botToken, chatId, ownerId, botTokenId, telegramUserId, telegramUsername, fn, ln, days, false, [channels[0].id]);
+            await finalizeSubscriber(botToken, chatId, ownerId, botTokenId, telegramUserId, telegramUsername, fn, ln, days, false, [channels[0].id]);
             return;
           }
 
-          await setState(chatId, botToken, "await_sub_channels", {
-            telegramUserId, telegramUsername, userFirstName: fn, userLastName: ln,
-            days, isPermanent: false, selectedChannels: []
-          });
+          await setState(chatId, botToken, "await_sub_channels", { telegramUserId, telegramUsername, userFirstName: fn, userLastName: ln, days, isPermanent: false, selectedChannels: [] });
 
           const channelBtns = channels.map((ch: any) => [{ text: `⬜ ${ch.channel_name}`, callback_data: `toggle_ch_${ch.id}` }]);
           channelBtns.push([{ text: "✅ الكل", callback_data: "select_all_channels" }]);
           channelBtns.push([{ text: "📥 تأكيد الاختيار", callback_data: "confirm_channels" }]);
           channelBtns.push([{ text: "❌ إلغاء", callback_data: "cancel_action" }]);
 
-          await tg(botToken, "sendMessage", {
-            chat_id: chatId,
-            text: "📺 *اختر القنوات للمشترك:*\n\nاضغط على القناة لتحديدها/إلغاء تحديدها، ثم اضغط تأكيد.",
-            parse_mode: "Markdown",
-            reply_markup: { inline_keyboard: channelBtns },
-          });
+          await tg(botToken, "sendMessage", { chat_id: chatId, text: "📺 *اختر القنوات للمشترك:*\n\nاضغط على القناة لتحديدها/إلغاء تحديدها، ثم اضغط تأكيد.", parse_mode: "Markdown", reply_markup: { inline_keyboard: channelBtns } });
           return;
         }
 
-        // ── ADD CHANNEL ──
         case "await_channel": {
           let channelId: number | null = null;
 
-          // Support both old (forward_from_chat) and new (forward_origin) Telegram API
           if (msg.forward_from_chat) {
             channelId = msg.forward_from_chat.id;
           } else if (msg.forward_origin && msg.forward_origin.type === "channel" && msg.forward_origin.chat) {
@@ -598,11 +586,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
               if (resolved.ok) {
                 channelId = resolved.result.id;
               } else {
-                await tg(botToken, "sendMessage", {
-                  chat_id: chatId,
-                  text: `❌ لم يتم العثور على *@${input}*\n\n💡 تأكد أن البوت مسؤول فيها.`,
-                  parse_mode: "Markdown",
-                });
+                await tg(botToken, "sendMessage", { chat_id: chatId, text: `❌ لم يتم العثور على *@${input}*\n\n💡 تأكد أن البوت مسؤول فيها.`, parse_mode: "Markdown" });
                 return;
               }
             } else {
@@ -613,31 +597,24 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
 
           await clearState(chatId, botToken);
 
-          const chatInfo = await tg(botToken, "getChat", { chat_id: channelId });
+          // Parallel: getChat + getMe
+          const [chatInfo, botMe] = await Promise.all([
+            tg(botToken, "getChat", { chat_id: channelId }),
+            tg(botToken, "getMe", {}),
+          ]);
           const channelName = chatInfo.ok ? chatInfo.result.title || `قناة ${channelId}` : `قناة ${channelId}`;
 
           if (chatInfo.ok) {
-            const botMe = await tg(botToken, "getMe", {});
             const memberInfo = await tg(botToken, "getChatMember", { chat_id: channelId, user_id: botMe.result.id });
             if (!memberInfo.ok || !["administrator", "creator"].includes(memberInfo.result?.status)) {
-              await tg(botToken, "sendMessage", {
-                chat_id: chatId,
-                text: `⚠️ البوت *ليس مسؤولاً* في *${channelName}*\n\nأضف البوت كمسؤول أولاً.`,
-                parse_mode: "Markdown",
-                reply_markup: adminKeyboard(),
-              });
+              await tg(botToken, "sendMessage", { chat_id: chatId, text: `⚠️ البوت *ليس مسؤولاً* في *${channelName}*\n\nأضف البوت كمسؤول أولاً.`, parse_mode: "Markdown", reply_markup: adminKeyboard() });
               return;
             }
           }
 
           const linkRes = await tg(botToken, "createChatInviteLink", { chat_id: channelId, creates_join_request: true, name: `bot_invite_${channelId}` });
           if (!linkRes.ok) {
-            await tg(botToken, "sendMessage", {
-              chat_id: chatId,
-              text: `❌ فشل إنشاء رابط الدعوة\n\n💡 تأكد أن البوت لديه صلاحية *دعوة أعضاء*.`,
-              parse_mode: "Markdown",
-              reply_markup: adminKeyboard(),
-            });
+            await tg(botToken, "sendMessage", { chat_id: chatId, text: `❌ فشل إنشاء رابط الدعوة\n\n💡 تأكد أن البوت لديه صلاحية *دعوة أعضاء*.`, parse_mode: "Markdown", reply_markup: adminKeyboard() });
             return;
           }
 
@@ -651,44 +628,36 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
             return;
           }
 
-          // Auto-assign new channel to subscribers who have ALL other channels
+          // Auto-assign channel to subscribers
           const newChannelId = newChannel.id;
-          const { data: allChannels } = await sb.from("telegram_channels").select("id").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
-          const otherChannelIds = (allChannels || []).map((ch: any) => ch.id).filter((id: string) => id !== newChannelId);
+          const [allChannelsRes, allSubsRes] = await Promise.all([
+            sb.from("telegram_channels").select("id").eq("owner_id", ownerId).eq("bot_token_id", botTokenId),
+            sb.from("telegram_subscribers").select("id").eq("owner_id", ownerId).eq("bot_token_id", botTokenId),
+          ]);
+          
+          const otherChannelIds = (allChannelsRes.data || []).map((ch: any) => ch.id).filter((id: string) => id !== newChannelId);
+          const allSubs = allSubsRes.data || [];
 
-          if (otherChannelIds.length > 0) {
-            // Get all active subscribers for this bot
-            const { data: allSubs } = await sb.from("telegram_subscribers").select("id").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
-
-            let autoAssigned = 0;
-            for (const sub of (allSubs || [])) {
-              // Check how many of the OTHER channels this subscriber has
-              const { count } = await sb.from("subscriber_channels")
-                .select("id", { count: "exact", head: true })
-                .eq("subscriber_id", sub.id)
-                .in("channel_id", otherChannelIds);
-
-              if (count === otherChannelIds.length) {
-                // Subscriber has all other channels — auto-assign the new one
-                await sb.from("subscriber_channels").insert({ subscriber_id: sub.id, channel_id: newChannelId });
-                autoAssigned++;
+          if (otherChannelIds.length > 0 && allSubs.length > 0) {
+            // Batch: get all subscriber_channels at once
+            const subIds = allSubs.map((s: any) => s.id);
+            const channelMap = await getSubscriberChannelsBatch(subIds);
+            
+            const autoAssignRows: any[] = [];
+            for (const sub of allSubs) {
+              const subChannels = channelMap[sub.id] || [];
+              if (subChannels.length >= otherChannelIds.length && otherChannelIds.every((id: string) => subChannels.includes(id))) {
+                autoAssignRows.push({ subscriber_id: sub.id, channel_id: newChannelId });
               }
             }
 
-            if (autoAssigned > 0) {
-              await tg(botToken, "sendMessage", {
-                chat_id: chatId,
-                text: `📌 تم إضافة القناة الجديدة تلقائياً لـ *${autoAssigned}* مشترك يملكون جميع القنوات.`,
-                parse_mode: "Markdown",
-              });
+            if (autoAssignRows.length > 0) {
+              await sb.from("subscriber_channels").insert(autoAssignRows);
+              tgFire(botToken, "sendMessage", { chat_id: chatId, text: `📌 تم إضافة القناة الجديدة تلقائياً لـ *${autoAssignRows.length}* مشترك يملكون جميع القنوات.`, parse_mode: "Markdown" });
             }
-          } else {
-            // This is the first/only channel — assign to ALL existing subscribers
-            const { data: allSubs } = await sb.from("telegram_subscribers").select("id").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
-            if (allSubs && allSubs.length > 0) {
-              const rows = allSubs.map((s: any) => ({ subscriber_id: s.id, channel_id: newChannelId }));
-              await sb.from("subscriber_channels").insert(rows);
-            }
+          } else if (otherChannelIds.length === 0 && allSubs.length > 0) {
+            const rows = allSubs.map((s: any) => ({ subscriber_id: s.id, channel_id: newChannelId }));
+            await sb.from("subscriber_channels").insert(rows);
           }
 
           const membersRes = await tg(botToken, "getChatMemberCount", { chat_id: channelId });
@@ -701,25 +670,12 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
           return;
         }
 
-        // ── BROADCAST ──
         case "await_broadcast": {
           await clearState(chatId, botToken);
           const { data: subs } = await sb.from("telegram_subscribers").select("telegram_user_id, is_permanent, expires_at").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
           const activeSubs = (subs || []).filter((s: any) => s.is_permanent || (s.expires_at && new Date(s.expires_at) > new Date()));
 
-          let sent = 0, failed = 0;
-          for (const sub of activeSubs) {
-            try {
-              if (msg.photo || msg.video || msg.document || msg.animation) {
-                await tg(botToken, "copyMessage", { chat_id: sub.telegram_user_id, from_chat_id: chatId, message_id: msg.message_id });
-              } else if (msg.forward_from_chat || msg.forward_from) {
-                await tg(botToken, "forwardMessage", { chat_id: sub.telegram_user_id, from_chat_id: chatId, message_id: msg.message_id });
-              } else {
-                await tg(botToken, "sendMessage", { chat_id: sub.telegram_user_id, text });
-              }
-              sent++;
-            } catch { failed++; }
-          }
+          const { sent, failed } = await broadcastConcurrent(botToken, activeSubs, msg, chatId, text);
 
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
@@ -730,7 +686,6 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
           return;
         }
 
-        // ── SEARCH SUBSCRIBER ──
         case "await_search": {
           await clearState(chatId, botToken);
           const input = text.trim().replace(/^@/, "");
@@ -746,8 +701,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
           }
 
           if (sub) {
-            // Get assigned channels for this subscriber
-            const assignedChannelIds = await getSubscriberChannels(sb, sub.id);
+            const assignedChannelIds = await getSubscriberChannels(sub.id);
             let channelInfo = "";
             if (assignedChannelIds.length > 0) {
               const { data: chNames } = await sb.from("telegram_channels").select("channel_name").in("id", assignedChannelIds);
@@ -769,7 +723,6 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
           return;
         }
 
-        // ── DELETE SUBSCRIBER ──
         case "await_delete_sub": {
           await clearState(chatId, botToken);
           const parsed = parseInt(text.trim());
@@ -784,49 +737,24 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
             return;
           }
 
-          // Get channels to kick from (only assigned channels, or all if none assigned)
-          const assignedChannelIds = await getSubscriberChannels(sb, sub.id);
-          let channelsToKick: any[];
-          if (assignedChannelIds.length > 0) {
-            const { data } = await sb.from("telegram_channels").select("channel_id").in("id", assignedChannelIds);
-            channelsToKick = data || [];
-          } else {
-            const { data } = await sb.from("telegram_channels").select("channel_id").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
-            channelsToKick = data || [];
-          }
-
-          let kicked = 0;
-          for (const ch of channelsToKick) {
-            const res = await tg(botToken, "banChatMember", { chat_id: ch.channel_id, user_id: parsed });
-            if (res.ok) { await tg(botToken, "unbanChatMember", { chat_id: ch.channel_id, user_id: parsed, only_if_banned: true }); kicked++; }
-          }
-          // subscriber_channels will be auto-deleted via CASCADE
+          const channelsToKick = await getKickChannels(sub.id, ownerId, botTokenId);
+          const kicked = await kickFromChannels(botToken, parsed, channelsToKick);
           await sb.from("telegram_subscribers").delete().eq("id", sub.id);
 
-          await tg(botToken, "sendMessage", {
-            chat_id: chatId,
-            text: `✅ *تم حذف المشترك* \`${parsed}\`\n🚫 طُرد من *${kicked}* قناة`,
-            parse_mode: "Markdown",
-            reply_markup: adminKeyboard(),
-          });
-          await tg(botToken, "sendMessage", { chat_id: parsed, text: "⚠️ تم إلغاء اشتراكك وإزالتك من القنوات." });
+          await Promise.all([
+            tg(botToken, "sendMessage", { chat_id: chatId, text: `✅ *تم حذف المشترك* \`${parsed}\`\n🚫 طُرد من *${kicked}* قناة`, parse_mode: "Markdown", reply_markup: adminKeyboard() }),
+            tg(botToken, "sendMessage", { chat_id: parsed, text: "⚠️ تم إلغاء اشتراكك وإزالتك من القنوات." }),
+          ]);
           return;
         }
 
-        // ── AWAITING CHANNEL SELECTION (no text input expected here) ──
         case "await_sub_channels": {
-          // Ignore text messages in this state, buttons handle it
-          await tg(botToken, "sendMessage", {
-            chat_id: chatId,
-            text: "💡 اضغط على الأزرار لاختيار القنوات ثم اضغط *تأكيد الاختيار*.",
-            parse_mode: "Markdown",
-          });
+          await tg(botToken, "sendMessage", { chat_id: chatId, text: "💡 اضغط على الأزرار لاختيار القنوات ثم اضغط *تأكيد الاختيار*.", parse_mode: "Markdown" });
           return;
         }
       }
     }
 
-    // No state and not a command — ignore
     return;
   }
 
@@ -841,8 +769,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
       const { data: sub } = await sb.from("telegram_subscribers").select("*").eq("owner_id", ownerId).eq("bot_token_id", botTokenId).eq("telegram_user_id", cbFromId).maybeSingle();
       await tg(botToken, "answerCallbackQuery", { callback_query_id: cb.id });
       if (sub) {
-        // Show assigned channels
-        const assignedChannelIds = await getSubscriberChannels(sb, sub.id);
+        const assignedChannelIds = await getSubscriberChannels(sub.id);
         let channelInfo = "";
         if (assignedChannelIds.length > 0) {
           const { data: chNames } = await sb.from("telegram_channels").select("channel_name").in("id", assignedChannelIds);
@@ -871,17 +798,17 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
 
       const selected: string[] = currentSt.data.selectedChannels || [];
       const idx = selected.indexOf(channelUuid);
-      if (idx >= 0) {
-        selected.splice(idx, 1);
-      } else {
-        selected.push(channelUuid);
-      }
+      if (idx >= 0) selected.splice(idx, 1);
+      else selected.push(channelUuid);
 
-      await setState(chatId, botToken, "await_sub_channels", { ...currentSt.data, selectedChannels: selected });
-
-      // Update the buttons to reflect selection
-      const { data: channels } = await sb.from("telegram_channels").select("id, channel_name").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
-      const channelButtons = (channels || []).map((ch: any) => {
+      // Parallel: update state + fetch channels
+      const [, channelsRes] = await Promise.all([
+        setState(chatId, botToken, "await_sub_channels", { ...currentSt.data, selectedChannels: selected }),
+        sb.from("telegram_channels").select("id, channel_name").eq("owner_id", ownerId).eq("bot_token_id", botTokenId),
+      ]);
+      
+      const channels = channelsRes.data || [];
+      const channelButtons = channels.map((ch: any) => {
         const isSelected = selected.includes(ch.id);
         return [{ text: `${isSelected ? "✅" : "⬜"} ${ch.channel_name}`, callback_data: `toggle_ch_${ch.id}` }];
       });
@@ -889,11 +816,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
       channelButtons.push([{ text: `📥 تأكيد الاختيار (${selected.length})`, callback_data: "confirm_channels" }]);
       channelButtons.push([{ text: "❌ إلغاء", callback_data: "cancel_action" }]);
 
-      await tg(botToken, "editMessageReplyMarkup", {
-        chat_id: chatId,
-        message_id: cb.message.message_id,
-        reply_markup: { inline_keyboard: channelButtons },
-      });
+      await tg(botToken, "editMessageReplyMarkup", { chat_id: chatId, message_id: cb.message.message_id, reply_markup: { inline_keyboard: channelButtons } });
       return;
     }
 
@@ -911,11 +834,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
       channelButtons.push([{ text: `📥 تأكيد الاختيار (${allIds.length})`, callback_data: "confirm_channels" }]);
       channelButtons.push([{ text: "❌ إلغاء", callback_data: "cancel_action" }]);
 
-      await tg(botToken, "editMessageReplyMarkup", {
-        chat_id: chatId,
-        message_id: cb.message.message_id,
-        reply_markup: { inline_keyboard: channelButtons },
-      });
+      await tg(botToken, "editMessageReplyMarkup", { chat_id: chatId, message_id: cb.message.message_id, reply_markup: { inline_keyboard: channelButtons } });
       return;
     }
 
@@ -931,18 +850,14 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
       }
 
       await clearState(chatId, botToken);
-      await finalizeSubscriber(sb, botToken, chatId, ownerId, botTokenId, telegramUserId, telegramUsername, fn, ln, days, isPermanent, selectedChannels);
+      await finalizeSubscriber(botToken, chatId, ownerId, botTokenId, telegramUserId, telegramUsername, fn, ln, days, isPermanent, selectedChannels);
       return;
     }
 
     switch (data) {
       case "add_subscriber": {
         await setState(chatId, botToken, "await_sub_id");
-        await tg(botToken, "sendMessage", {
-          chat_id: chatId,
-          text: "👤 *إضافة مشترك*\n\nأرسل معرف المستخدم بإحدى الطرق:\n\n1️⃣ الـ Telegram ID (رقم)\n2️⃣ حوّل (Forward) رسالة منه\n\n💡 يمكنه معرفة ID بإرسال /id للبوت\n\n_أرسل /cancel للإلغاء_",
-          parse_mode: "Markdown",
-        });
+        await tg(botToken, "sendMessage", { chat_id: chatId, text: "👤 *إضافة مشترك*\n\nأرسل معرف المستخدم بإحدى الطرق:\n\n1️⃣ الـ Telegram ID (رقم)\n2️⃣ حوّل (Forward) رسالة منه\n\n💡 يمكنه معرفة ID بإرسال /id للبوت\n\n_أرسل /cancel للإلغاء_", parse_mode: "Markdown" });
         break;
       }
 
@@ -952,13 +867,16 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
         if (!subs || subs.length === 0) {
           await tg(botToken, "sendMessage", { chat_id: chatId, text: "📋 لا يوجد مشتركون حالياً.", reply_markup: adminKeyboard() });
         } else {
+          // Batch fetch all channel assignments (fixes N+1)
+          const subIds = subs.map((s: any) => s.id);
+          const channelMap = await getSubscriberChannelsBatch(subIds);
+
           let msgText = `📋 *المشتركون (${subs.length}):*\n\n`;
           for (const s of subs) {
             const st = s.is_permanent ? "♾" : s.expires_at && new Date(s.expires_at) > new Date() ? `✅ ${daysRemaining(s.expires_at)}ي` : "❌";
-            // Show channel count
-            const chIds = await getSubscriberChannels(sb, s.id);
-            const chCount = chIds.length > 0 ? ` (📺${chIds.length})` : "";
-            msgText += `${st} \`${s.telegram_user_id}\`${s.telegram_username ? ` @${s.telegram_username}` : ""}${chCount}\n`;
+            const chCount = (channelMap[s.id] || []).length;
+            const chLabel = chCount > 0 ? ` (📺${chCount})` : "";
+            msgText += `${st} \`${s.telegram_user_id}\`${s.telegram_username ? ` @${s.telegram_username}` : ""}${chLabel}\n`;
           }
           await tg(botToken, "sendMessage", { chat_id: chatId, text: msgText, parse_mode: "Markdown", reply_markup: adminKeyboard() });
         }
@@ -985,11 +903,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
 
       case "add_channel": {
         await setState(chatId, botToken, "await_channel");
-        await tg(botToken, "sendMessage", {
-          chat_id: chatId,
-          text: "📺 *إضافة قناة*\n\nأرسل بإحدى الطرق:\n\n1️⃣ معرف القناة (رقم سالب)\n2️⃣ @username القناة\n3️⃣ حوّل رسالة من القناة\n\n⚠️ البوت يجب أن يكون مسؤولاً!\n\n_أرسل /cancel للإلغاء_",
-          parse_mode: "Markdown",
-        });
+        await tg(botToken, "sendMessage", { chat_id: chatId, text: "📺 *إضافة قناة*\n\nأرسل بإحدى الطرق:\n\n1️⃣ معرف القناة (رقم سالب)\n2️⃣ @username القناة\n3️⃣ حوّل رسالة من القناة\n\n⚠️ البوت يجب أن يكون مسؤولاً!\n\n_أرسل /cancel للإلغاء_", parse_mode: "Markdown" });
         break;
       }
 
@@ -997,46 +911,38 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
         const { data: subs } = await sb.from("telegram_subscribers").select("is_permanent, expires_at").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
         const active = (subs || []).filter((s: any) => s.is_permanent || (s.expires_at && new Date(s.expires_at) > new Date())).length;
         await setState(chatId, botToken, "await_broadcast");
-        await tg(botToken, "sendMessage", {
-          chat_id: chatId,
-          text: `📢 *رسالة جماعية*\n\nسيتم إرسالها لـ *${active}* مشترك نشط.\n\nأرسل الرسالة الآن (نص، صورة، فيديو...):\n\n_أرسل /cancel للإلغاء_`,
-          parse_mode: "Markdown",
-        });
+        await tg(botToken, "sendMessage", { chat_id: chatId, text: `📢 *رسالة جماعية*\n\nسيتم إرسالها لـ *${active}* مشترك نشط.\n\nأرسل الرسالة الآن (نص، صورة، فيديو...):\n\n_أرسل /cancel للإلغاء_`, parse_mode: "Markdown" });
         break;
       }
 
       case "search_subscriber": {
         await setState(chatId, botToken, "await_search");
-        await tg(botToken, "sendMessage", {
-          chat_id: chatId,
-          text: "🔍 *بحث عن مشترك*\n\nأرسل الـ ID أو @username:\n\n_أرسل /cancel للإلغاء_",
-          parse_mode: "Markdown",
-        });
+        await tg(botToken, "sendMessage", { chat_id: chatId, text: "🔍 *بحث عن مشترك*\n\nأرسل الـ ID أو @username:\n\n_أرسل /cancel للإلغاء_", parse_mode: "Markdown" });
         break;
       }
 
       case "delete_subscriber": {
         await setState(chatId, botToken, "await_delete_sub");
-        await tg(botToken, "sendMessage", {
-          chat_id: chatId,
-          text: "🗑 *حذف مشترك*\n\nأرسل الـ ID الرقمي للمشترك:\n\n⚠️ سيتم طرده من القنوات نهائياً.\n\n_أرسل /cancel للإلغاء_",
-          parse_mode: "Markdown",
-        });
+        await tg(botToken, "sendMessage", { chat_id: chatId, text: "🗑 *حذف مشترك*\n\nأرسل الـ ID الرقمي للمشترك:\n\n⚠️ سيتم طرده من القنوات نهائياً.\n\n_أرسل /cancel للإلغاء_", parse_mode: "Markdown" });
         break;
       }
 
       case "stats": {
         await clearState(chatId, botToken);
-        const { data: subs } = await sb.from("telegram_subscribers").select("*").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
-        const { data: channels } = await sb.from("telegram_channels").select("*").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
-        const total = subs?.length || 0;
-        const active = subs?.filter((s: any) => s.is_permanent || (s.expires_at && new Date(s.expires_at) > new Date())).length || 0;
-        const permanent = subs?.filter((s: any) => s.is_permanent).length || 0;
-        const expiringSoon = subs?.filter((s: any) => !s.is_permanent && s.expires_at && new Date(s.expires_at) > new Date() && daysRemaining(s.expires_at) <= 3).length || 0;
+        // Parallel fetch
+        const [subsRes, channelsRes] = await Promise.all([
+          sb.from("telegram_subscribers").select("*").eq("owner_id", ownerId).eq("bot_token_id", botTokenId),
+          sb.from("telegram_channels").select("*").eq("owner_id", ownerId).eq("bot_token_id", botTokenId),
+        ]);
+        const subs = subsRes.data || [];
+        const total = subs.length;
+        const active = subs.filter((s: any) => s.is_permanent || (s.expires_at && new Date(s.expires_at) > new Date())).length;
+        const permanent = subs.filter((s: any) => s.is_permanent).length;
+        const expiringSoon = subs.filter((s: any) => !s.is_permanent && s.expires_at && new Date(s.expires_at) > new Date() && daysRemaining(s.expires_at) <= 3).length;
 
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
-          text: `📊 *الإحصائيات:*\n\n👥 *المشتركين:*\n├ إجمالي: *${total}*\n├ ✅ نشطون: *${active}*\n├ ♾ دائمون: *${permanent}*\n├ ❌ منتهيون: *${total - active}*\n└ ⚠️ ينتهي خلال 3 أيام: *${expiringSoon}*\n\n📺 *القنوات:* ${channels?.length || 0}`,
+          text: `📊 *الإحصائيات:*\n\n👥 *المشتركين:*\n├ إجمالي: *${total}*\n├ ✅ نشطون: *${active}*\n├ ♾ دائمون: *${permanent}*\n├ ❌ منتهيون: *${total - active}*\n└ ⚠️ ينتهي خلال 3 أيام: *${expiringSoon}*\n\n📺 *القنوات:* ${channelsRes.data?.length || 0}`,
           parse_mode: "Markdown",
           reply_markup: adminKeyboard(),
         });
@@ -1056,7 +962,6 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
       }
 
       default: {
-        // ── Days selection buttons ──
         if (data === "days_custom") {
           const currentSt = await getState(chatId, botToken);
           if (!currentSt || currentSt.state !== "await_sub_days") {
@@ -1065,11 +970,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
           }
           const { telegramUserId, telegramUsername, userFirstName: fn, userLastName: ln } = currentSt.data;
           await setState(chatId, botToken, "await_sub_days_custom", { telegramUserId, telegramUsername, userFirstName: fn, userLastName: ln });
-          await tg(botToken, "sendMessage", {
-            chat_id: chatId,
-            text: "✏️ *أدخل عدد الأيام يدوياً:*\n\nأرسل رقماً بين 1 و 9999\n\n_أرسل /cancel للإلغاء_",
-            parse_mode: "Markdown",
-          });
+          await tg(botToken, "sendMessage", { chat_id: chatId, text: "✏️ *أدخل عدد الأيام يدوياً:*\n\nأرسل رقماً بين 1 و 9999\n\n_أرسل /cancel للإلغاء_", parse_mode: "Markdown" });
           break;
         }
 
@@ -1083,38 +984,28 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
           const isPermanent = data === "days_permanent";
           const days = isPermanent ? null : parseInt(data.replace("days_", ""));
 
-          // Move to channel selection step
           const { data: channels } = await sb.from("telegram_channels").select("id, channel_name").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
 
           if (!channels || channels.length === 0) {
             await clearState(chatId, botToken);
-            await finalizeSubscriber(sb, botToken, chatId, ownerId, botTokenId, telegramUserId, telegramUsername, fn, ln, days, isPermanent, []);
+            await finalizeSubscriber(botToken, chatId, ownerId, botTokenId, telegramUserId, telegramUsername, fn, ln, days, isPermanent, []);
             break;
           }
 
           if (channels.length === 1) {
             await clearState(chatId, botToken);
-            await finalizeSubscriber(sb, botToken, chatId, ownerId, botTokenId, telegramUserId, telegramUsername, fn, ln, days, isPermanent, [channels[0].id]);
+            await finalizeSubscriber(botToken, chatId, ownerId, botTokenId, telegramUserId, telegramUsername, fn, ln, days, isPermanent, [channels[0].id]);
             break;
           }
 
-          // Multiple channels — show channel selection
-          await setState(chatId, botToken, "await_sub_channels", {
-            telegramUserId, telegramUsername, userFirstName: fn, userLastName: ln,
-            days, isPermanent, selectedChannels: []
-          });
+          await setState(chatId, botToken, "await_sub_channels", { telegramUserId, telegramUsername, userFirstName: fn, userLastName: ln, days, isPermanent, selectedChannels: [] });
 
           const channelButtons = channels.map((ch: any) => [{ text: `⬜ ${ch.channel_name}`, callback_data: `toggle_ch_${ch.id}` }]);
           channelButtons.push([{ text: "✅ الكل", callback_data: "select_all_channels" }]);
           channelButtons.push([{ text: "📥 تأكيد الاختيار (0)", callback_data: "confirm_channels" }]);
           channelButtons.push([{ text: "❌ إلغاء", callback_data: "cancel_action" }]);
 
-          await tg(botToken, "sendMessage", {
-            chat_id: chatId,
-            text: "📺 *اختر القنوات للمشترك:*\n\nاضغط على القناة لتحديدها/إلغاء تحديدها، ثم اضغط تأكيد.",
-            parse_mode: "Markdown",
-            reply_markup: { inline_keyboard: channelButtons },
-          });
+          await tg(botToken, "sendMessage", { chat_id: chatId, text: "📺 *اختر القنوات للمشترك:*\n\nاضغط على القناة لتحديدها/إلغاء تحديدها، ثم اضغط تأكيد.", parse_mode: "Markdown", reply_markup: { inline_keyboard: channelButtons } });
           break;
         }
 
@@ -1122,9 +1013,10 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
           const channelId = parseInt(data.replace("del_ch_", ""));
           const { data: ch } = await sb.from("telegram_channels").select("id, channel_name").eq("owner_id", ownerId).eq("bot_token_id", botTokenId).eq("channel_id", channelId).maybeSingle();
           if (ch) {
-            // Also clean up subscriber_channels referencing this channel
-            await sb.from("subscriber_channels").delete().eq("channel_id", ch.id);
-            await sb.from("telegram_channels").delete().eq("id", ch.id);
+            await Promise.all([
+              sb.from("subscriber_channels").delete().eq("channel_id", ch.id),
+              sb.from("telegram_channels").delete().eq("id", ch.id),
+            ]);
           }
           await tg(botToken, "sendMessage", { chat_id: chatId, text: `✅ تم حذف *${ch?.channel_name || channelId}*`, parse_mode: "Markdown", reply_markup: adminKeyboard() });
         }
@@ -1132,30 +1024,15 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
           const userId = parseInt(data.replace("del_sub_", ""));
           const { data: sub } = await sb.from("telegram_subscribers").select("id").eq("owner_id", ownerId).eq("bot_token_id", botTokenId).eq("telegram_user_id", userId).maybeSingle();
           
-          // Get channels to kick from
-          let channelsToKick: any[];
-          if (sub) {
-            const assignedChannelIds = await getSubscriberChannels(sb, sub.id);
-            if (assignedChannelIds.length > 0) {
-              const { data } = await sb.from("telegram_channels").select("channel_id").in("id", assignedChannelIds);
-              channelsToKick = data || [];
-            } else {
-              const { data } = await sb.from("telegram_channels").select("channel_id").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
-              channelsToKick = data || [];
-            }
-          } else {
-            const { data } = await sb.from("telegram_channels").select("channel_id").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
-            channelsToKick = data || [];
-          }
-
-          let kicked = 0;
-          for (const ch of channelsToKick) {
-            const res = await tg(botToken, "banChatMember", { chat_id: ch.channel_id, user_id: userId });
-            if (res.ok) { await tg(botToken, "unbanChatMember", { chat_id: ch.channel_id, user_id: userId, only_if_banned: true }); kicked++; }
-          }
+          const channelsToKick = await getKickChannels(sub?.id || null, ownerId, botTokenId);
+          const kicked = await kickFromChannels(botToken, userId, channelsToKick);
+          
           await sb.from("telegram_subscribers").delete().eq("owner_id", ownerId).eq("bot_token_id", botTokenId).eq("telegram_user_id", userId);
-          await tg(botToken, "sendMessage", { chat_id: chatId, text: `✅ *تم حذف* \`${userId}\` — طُرد من *${kicked}* قناة`, parse_mode: "Markdown", reply_markup: adminKeyboard() });
-          await tg(botToken, "sendMessage", { chat_id: userId, text: "⚠️ تم إلغاء اشتراكك وإزالتك من القنوات." });
+          
+          await Promise.all([
+            tg(botToken, "sendMessage", { chat_id: chatId, text: `✅ *تم حذف* \`${userId}\` — طُرد من *${kicked}* قناة`, parse_mode: "Markdown", reply_markup: adminKeyboard() }),
+            tg(botToken, "sendMessage", { chat_id: userId, text: "⚠️ تم إلغاء اشتراكك وإزالتك من القنوات." }),
+          ]);
         }
         break;
       }
@@ -1180,8 +1057,7 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ error: "Invalid token" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Check if the bot owner's account is approved and not expired
-      const { data: ownerProfile } = await supabaseAdmin()
+      const { data: ownerProfile } = await sb
         .from("profiles")
         .select("is_approved, approved_until")
         .eq("id", settings.user_id)
@@ -1210,49 +1086,57 @@ Deno.serve(async (req) => {
       }
 
       if (action === "check_expiry") {
-        const sb = supabaseAdmin();
         const { data: allTokens } = await sb.from("bot_tokens").select("*");
         if (allTokens) {
           for (const tokenRow of allTokens) {
-            // 1. Kick expired subscribers from their assigned channels only
-            const { data: expiredSubs } = await sb.from("telegram_subscribers").select("*").eq("owner_id", tokenRow.user_id).eq("bot_token_id", tokenRow.id).eq("is_permanent", false).lt("expires_at", new Date().toISOString());
-            
-            if (expiredSubs && expiredSubs.length > 0) {
-              for (const sub of expiredSubs) {
-                const assignedChannelIds = await getSubscriberChannels(sb, sub.id);
-                let channelsToKick: any[];
-                if (assignedChannelIds.length > 0) {
-                  const { data } = await sb.from("telegram_channels").select("channel_id").in("id", assignedChannelIds);
-                  channelsToKick = data || [];
-                } else {
-                  const { data } = await sb.from("telegram_channels").select("channel_id").eq("owner_id", tokenRow.user_id).eq("bot_token_id", tokenRow.id);
-                  channelsToKick = data || [];
-                }
+            const now = new Date();
+            // Parallel: fetch expired + soon-expiring
+            const [expiredRes, soonRes] = await Promise.all([
+              sb.from("telegram_subscribers").select("*").eq("owner_id", tokenRow.user_id).eq("bot_token_id", tokenRow.id).eq("is_permanent", false).lt("expires_at", now.toISOString()),
+              sb.from("telegram_subscribers").select("*").eq("owner_id", tokenRow.user_id).eq("bot_token_id", tokenRow.id).eq("is_permanent", false).gt("expires_at", now.toISOString()).lt("expires_at", new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString()),
+            ]);
 
-                for (const ch of channelsToKick) {
-                  await tg(tokenRow.token, "banChatMember", { chat_id: ch.channel_id, user_id: sub.telegram_user_id });
-                  await tg(tokenRow.token, "unbanChatMember", { chat_id: ch.channel_id, user_id: sub.telegram_user_id, only_if_banned: true });
+            const expiredSubs = expiredRes.data || [];
+            const soonExpiring = soonRes.data || [];
+
+            if (expiredSubs.length > 0) {
+              // Batch get channels for all expired subs
+              const subIds = expiredSubs.map((s: any) => s.id);
+              const channelMap = await getSubscriberChannelsBatch(subIds);
+
+              // Get all channels for this bot (fallback)
+              const { data: allChannels } = await sb.from("telegram_channels").select("channel_id").eq("owner_id", tokenRow.user_id).eq("bot_token_id", tokenRow.id);
+              const allChannelIds = (allChannels || []).map((c: any) => c.channel_id);
+
+              // Process all expired subs in parallel
+              await Promise.allSettled(expiredSubs.map(async (sub: any) => {
+                const assignedIds = channelMap[sub.id] || [];
+                let kickChannelIds: number[];
+                if (assignedIds.length > 0) {
+                  const { data } = await sb.from("telegram_channels").select("channel_id").in("id", assignedIds);
+                  kickChannelIds = (data || []).map((c: any) => c.channel_id);
+                } else {
+                  kickChannelIds = allChannelIds;
                 }
+                await kickFromChannels(tokenRow.token, sub.telegram_user_id, kickChannelIds);
                 await tg(tokenRow.token, "sendMessage", { chat_id: sub.telegram_user_id, text: "⚠️ *انتهى اشتراكك*\n\nتم إزالتك من القنوات.", parse_mode: "Markdown" });
-              }
+              }));
+
               if (tokenRow.admin_telegram_id) {
-                await tg(tokenRow.token, "sendMessage", { chat_id: tokenRow.admin_telegram_id, text: `🔔 تم إزالة *${expiredSubs.length}* مشترك منتهي.`, parse_mode: "Markdown" });
+                tgFire(tokenRow.token, "sendMessage", { chat_id: tokenRow.admin_telegram_id, text: `🔔 تم إزالة *${expiredSubs.length}* مشترك منتهي.`, parse_mode: "Markdown" });
               }
             }
 
-            // 2. Warn subscribers expiring within 24 hours
-            const now = new Date();
-            const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
-            const { data: soonExpiring } = await sb.from("telegram_subscribers").select("*").eq("owner_id", tokenRow.user_id).eq("bot_token_id", tokenRow.id).eq("is_permanent", false).gt("expires_at", now.toISOString()).lt("expires_at", in24h);
-            if (soonExpiring && soonExpiring.length > 0) {
-              for (const sub of soonExpiring) {
+            // Warn soon-expiring in parallel
+            if (soonExpiring.length > 0) {
+              await Promise.allSettled(soonExpiring.map(async (sub: any) => {
                 const hours = Math.ceil((new Date(sub.expires_at!).getTime() - now.getTime()) / 3600000);
                 await tg(tokenRow.token, "sendMessage", {
                   chat_id: sub.telegram_user_id,
                   text: `⏳ *تنبيه:* اشتراكك سينتهي خلال *${hours}* ساعة تقريباً.\n\nتواصل مع المسؤول لتجديد اشتراكك قبل أن تتم إزالتك من القنوات.`,
                   parse_mode: "Markdown",
                 });
-              }
+              }));
             }
           }
         }
