@@ -1136,12 +1136,18 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
               />
               <span className="text-sm font-medium text-foreground">{t("subs.allChannels")}</span>
             </div>
-            {channels.map(ch => (
-              <div key={ch.id} className="flex items-center gap-2">
-                <Checkbox checked={editChannelIds.includes(ch.id)} onCheckedChange={() => toggleEditChannel(ch.id)} />
-                <span className="text-sm text-foreground">{ch.channel_name}</span>
-              </div>
-            ))}
+            {channels.length > 6 && (
+              <Input placeholder={t("subs.searchChannels")} value={channelSearch} onChange={(e) => setChannelSearch(e.target.value)}
+                className="bg-secondary/50 border-border/50 text-foreground text-sm h-8" />
+            )}
+            <div className="space-y-1.5 max-h-48 overflow-y-auto">
+              {channels.filter(ch => !channelSearch || ch.channel_name.toLowerCase().includes(channelSearch.toLowerCase())).map(ch => (
+                <div key={ch.id} className="flex items-center gap-2">
+                  <Checkbox checked={editChannelIds.includes(ch.id)} onCheckedChange={() => toggleEditChannel(ch.id)} />
+                  <span className="text-sm text-foreground">{ch.channel_name}</span>
+                </div>
+              ))}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditChannelsSub(null)}>{lang === "ar" ? "إلغاء" : "Cancel"}</Button>
