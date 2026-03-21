@@ -188,6 +188,22 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     }
   };
 
+  const [kickingId, setKickingId] = useState<string | null>(null);
+  const handleKickFromChannels = async (sub: TelegramSubscriber) => {
+    if (!confirm(t("subs.kickConfirm"))) return;
+    setKickingId(sub.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("manage-bot", {
+        body: { action: "kick_from_channels", subscriber_id: sub.id },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast({ title: `${t("subs.kicked")} - ${data.kicked} ✅${data.failed > 0 ? ` / ${data.failed} ❌` : ""}` });
+    } catch (error: any) {
+      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+    } finally { setKickingId(null); }
+  };
+
   const deleteChannel = async (id: string) => {
     try {
       const { data } = await supabase.functions.invoke("manage-bot", {
