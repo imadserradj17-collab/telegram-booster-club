@@ -227,6 +227,38 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ ok: true, sent, failed, total: users.length }), { headers: corsHeaders });
       }
 
+      // ── KICK FROM ALL CHANNELS ──
+      case "kick_from_channels": {
+        const { subscriber_id } = params;
+        if (!subscriber_id) {
+          return new Response(JSON.stringify({ error: "subscriber_id required" }), { status: 400, headers: corsHeaders });
+        }
+
+        const { data: sub } = await sb.from("telegram_subscribers").select("id, telegram_user_id").eq("id", subscriber_id).eq("owner_id", user.id).single();
+        if (!sub) {
+          return new Response(JSON.stringify({ error: "Subscriber not found" }), { status: 404, headers: corsHeaders });
+        }
+
+        const { data: subChans } = await sb.from("subscriber_channels")
+          .select("channel_id, telegram_channels(channel_id)")
+          .eq("subscriber_id", subscriber_id);
+
+        let kicked = 0, failedKick = 0;
+        for (const sc of (subChans || [])) {
+          const chId = (sc as any).telegram_channels?.channel_id;
+          if (!chId) continue;
+          try {
+            const banRes = await tg(botToken, "banChatMember", { chat_id: chId, user_id: sub.telegram_user_id });
+            if (banRes.ok) {
+              kicked++;
+              await tg(botToken, "unbanChatMember", { chat_id: chId, user_id: sub.telegram_user_id, only_if_banned: true });
+            } else { failedKick++; }
+          } catch { failedKick++; }
+        }
+
+        return new Response(JSON.stringify({ ok: true, kicked, failed: failedKick }), { headers: corsHeaders });
+      }
+
       // ── GET BOT USERS COUNT ──
       case "get_bot_users": {
         const { data: botUsers } = await sb.from("bot_users")

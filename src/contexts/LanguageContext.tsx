@@ -143,6 +143,10 @@ const translations: Record<string, Record<Lang, string>> = {
   "subs.allAssigned": { ar: "جميع القنوات", en: "All Channels" },
   "subs.editChannels": { ar: "تعديل القنوات", en: "Edit Channels" },
   "subs.channelsSaved": { ar: "تم حفظ القنوات", en: "Channels saved" },
+  "subs.kickAll": { ar: "طرد من كل القنوات", en: "Kick from all channels" },
+  "subs.kickConfirm": { ar: "هل تريد طرد هذا المشترك من جميع القنوات المخصصة؟", en: "Kick this subscriber from all assigned channels?" },
+  "subs.kicked": { ar: "تم الطرد", en: "Kicked" },
+  "subs.searchChannels": { ar: "بحث عن قناة...", en: "Search channels..." },
 
   // Broadcast
   "broadcast.title": { ar: "البث", en: "Broadcast" },
