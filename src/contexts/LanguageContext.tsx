@@ -98,6 +98,8 @@ const translations: Record<string, Record<Lang, string>> = {
   "dash.adminPanel": { ar: "لوحة الأدمن", en: "Admin Panel" },
   "dash.dayAndHour": { ar: "يوم و", en: "day(s) and" },
   "dash.hour": { ar: "ساعة", en: "hour(s)" },
+  "dash.andMinute": { ar: "و", en: "and" },
+  "dash.minute": { ar: "دقيقة", en: "minute(s)" },
 
   // Analytics
   "analytics.title": { ar: "تحليلات الاشتراكات", en: "Subscription Analytics" },

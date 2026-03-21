@@ -141,7 +141,8 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     if (diff <= 0) return "";
     const days = Math.floor(diff / 86400000);
     const hours = Math.floor((diff % 86400000) / 3600000);
-    return `${days} ${t("dash.dayAndHour")} ${hours} ${t("dash.hour")}`;
+    const minutes = Math.floor((diff % 3600000) / 60000);
+    return `${days} ${t("dash.dayAndHour")} ${hours} ${t("dash.hour")} ${t("dash.andMinute")} ${minutes} ${t("dash.minute")}`;
   };
 
   const handleChangeToken = async () => {
