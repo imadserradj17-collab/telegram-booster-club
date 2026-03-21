@@ -95,6 +95,8 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const [broadcastResult, setBroadcastResult] = useState<{ sent: number; failed: number; total: number } | null>(null);
   const [broadcastTarget, setBroadcastTarget] = useState<"subscribers" | "all_users">("subscribers");
   const [botUsersCount, setBotUsersCount] = useState(0);
+  const [kickingId, setKickingId] = useState<string | null>(null);
+  const [channelSearch, setChannelSearch] = useState("");
 
   useEffect(() => { fetchData(); }, []);
 
