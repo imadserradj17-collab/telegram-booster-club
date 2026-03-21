@@ -95,6 +95,8 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const [broadcastResult, setBroadcastResult] = useState<{ sent: number; failed: number; total: number } | null>(null);
   const [broadcastTarget, setBroadcastTarget] = useState<"subscribers" | "all_users">("subscribers");
   const [botUsersCount, setBotUsersCount] = useState(0);
+  const [kickingId, setKickingId] = useState<string | null>(null);
+  const [channelSearch, setChannelSearch] = useState("");
 
   useEffect(() => { fetchData(); }, []);
 
@@ -188,6 +190,21 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     }
   };
 
+  const handleKickFromChannels = async (sub: TelegramSubscriber) => {
+    if (!confirm(t("subs.kickConfirm"))) return;
+    setKickingId(sub.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("manage-bot", {
+        body: { action: "kick_from_channels", subscriber_id: sub.id },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast({ title: `${t("subs.kicked")} - ${data.kicked} ✅${data.failed > 0 ? ` / ${data.failed} ❌` : ""}` });
+    } catch (error: any) {
+      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+    } finally { setKickingId(null); }
+  };
+
   const deleteChannel = async (id: string) => {
     try {
       const { data } = await supabase.functions.invoke("manage-bot", {
@@ -246,6 +263,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const handleEditChannels = (sub: TelegramSubscriber) => {
     const currentChannels = subscriberChannels[sub.id] || [];
     setEditChannelIds(currentChannels.map(c => c.id));
+    setChannelSearch("");
     setEditChannelsSub(sub);
   };
 
@@ -409,6 +427,9 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
             <Button variant="ghost" size="icon" onClick={() => handleEditChannels(sub)} className="text-muted-foreground hover:text-primary h-8 w-8">
               <Edit className="w-3.5 h-3.5" />
             </Button>
+            <Button variant="ghost" size="icon" onClick={() => handleKickFromChannels(sub)} disabled={kickingId === sub.id} className="text-muted-foreground hover:text-yellow-500 h-8 w-8" title={t("subs.kickAll")}>
+              {kickingId === sub.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shield className="w-3.5 h-3.5" />}
+            </Button>
             <Button variant="ghost" size="icon" onClick={() => deleteSubscriber(sub.id)} className="text-muted-foreground hover:text-destructive h-8 w-8">
               <Trash2 className="w-3.5 h-3.5" />
             </Button>
@@ -488,6 +509,9 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                       <div className="flex items-center gap-1">
                         <Button variant="ghost" size="icon" onClick={() => handleEditChannels(sub)} className="text-muted-foreground hover:text-primary h-8 w-8">
                           <Edit className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleKickFromChannels(sub)} disabled={kickingId === sub.id} className="text-muted-foreground hover:text-yellow-500 h-8 w-8" title={t("subs.kickAll")}>
+                          {kickingId === sub.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shield className="w-3.5 h-3.5" />}
                         </Button>
                         <Button variant="ghost" size="icon" onClick={() => deleteSubscriber(sub.id)} className="text-muted-foreground hover:text-destructive h-8 w-8">
                           <Trash2 className="w-3.5 h-3.5" />
@@ -1064,8 +1088,12 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   />
                   <span className="text-sm text-foreground">{t("subs.allChannels")}</span>
                 </div>
-                <div className="space-y-1.5 max-h-32 overflow-y-auto">
-                  {channels.map(ch => (
+                {channels.length > 6 && (
+                  <Input placeholder={t("subs.searchChannels")} value={channelSearch} onChange={(e) => setChannelSearch(e.target.value)}
+                    className="bg-secondary/50 border-border/50 text-foreground text-sm h-8" />
+                )}
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {channels.filter(ch => !channelSearch || ch.channel_name.toLowerCase().includes(channelSearch.toLowerCase())).map(ch => (
                     <div key={ch.id} className="flex items-center gap-2">
                       <Checkbox
                         checked={addSubForm.channel_ids.includes(ch.id)}
@@ -1091,7 +1119,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
 
       {/* ── Edit Channels Dialog ── */}
       <Dialog open={!!editChannelsSub} onOpenChange={(v) => { if (!v) setEditChannelsSub(null); }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Edit className="w-5 h-5 text-primary" />
@@ -1109,12 +1137,18 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
               />
               <span className="text-sm font-medium text-foreground">{t("subs.allChannels")}</span>
             </div>
-            {channels.map(ch => (
-              <div key={ch.id} className="flex items-center gap-2">
-                <Checkbox checked={editChannelIds.includes(ch.id)} onCheckedChange={() => toggleEditChannel(ch.id)} />
-                <span className="text-sm text-foreground">{ch.channel_name}</span>
-              </div>
-            ))}
+            {channels.length > 6 && (
+              <Input placeholder={t("subs.searchChannels")} value={channelSearch} onChange={(e) => setChannelSearch(e.target.value)}
+                className="bg-secondary/50 border-border/50 text-foreground text-sm h-8" />
+            )}
+            <div className="space-y-1.5 max-h-48 overflow-y-auto">
+              {channels.filter(ch => !channelSearch || ch.channel_name.toLowerCase().includes(channelSearch.toLowerCase())).map(ch => (
+                <div key={ch.id} className="flex items-center gap-2">
+                  <Checkbox checked={editChannelIds.includes(ch.id)} onCheckedChange={() => toggleEditChannel(ch.id)} />
+                  <span className="text-sm text-foreground">{ch.channel_name}</span>
+                </div>
+              ))}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditChannelsSub(null)}>{lang === "ar" ? "إلغاء" : "Cancel"}</Button>
