@@ -1118,7 +1118,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
 
       {/* ── Edit Channels Dialog ── */}
       <Dialog open={!!editChannelsSub} onOpenChange={(v) => { if (!v) setEditChannelsSub(null); }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Edit className="w-5 h-5 text-primary" />
