@@ -375,7 +375,26 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
 
     if (text === "/start") {
       await clearState(chatId, botToken);
-      if (isAdmin) {
+      // Save this user to bot_users (fire-and-forget)
+      sb.from("bot_users").upsert(
+        {
+          bot_token_id: botTokenId,
+          owner_id: ownerId,
+          telegram_user_id: fromId,
+          telegram_username: msg.from.username || null,
+          first_name: msg.from.first_name || null,
+          last_name: msg.from.last_name || null,
+        },
+        { onConflict: "owner_id,telegram_user_id" }
+      ).then(() => {
+        // Update photo in background
+        enrichUserInfo(botToken, fromId, { fn: msg.from.first_name || null, ln: msg.from.last_name || null, username: msg.from.username || null })
+          .then(info => {
+            if (info.photoUrl) {
+              sb.from("bot_users").update({ photo_url: info.photoUrl }).eq("owner_id", ownerId).eq("telegram_user_id", fromId);
+            }
+          });
+      });
         // Parallel fetch stats
         const [subsRes, channelsRes] = await Promise.all([
           sb.from("telegram_subscribers").select("id, is_permanent, expires_at").eq("owner_id", ownerId).eq("bot_token_id", botTokenId),
