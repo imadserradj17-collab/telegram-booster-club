@@ -263,6 +263,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const handleEditChannels = (sub: TelegramSubscriber) => {
     const currentChannels = subscriberChannels[sub.id] || [];
     setEditChannelIds(currentChannels.map(c => c.id));
+    setChannelSearch("");
     setEditChannelsSub(sub);
   };
 
