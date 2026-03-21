@@ -426,6 +426,9 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
             <Button variant="ghost" size="icon" onClick={() => handleEditChannels(sub)} className="text-muted-foreground hover:text-primary h-8 w-8">
               <Edit className="w-3.5 h-3.5" />
             </Button>
+            <Button variant="ghost" size="icon" onClick={() => handleKickFromChannels(sub)} disabled={kickingId === sub.id} className="text-muted-foreground hover:text-yellow-500 h-8 w-8" title={t("subs.kickAll")}>
+              {kickingId === sub.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shield className="w-3.5 h-3.5" />}
+            </Button>
             <Button variant="ghost" size="icon" onClick={() => deleteSubscriber(sub.id)} className="text-muted-foreground hover:text-destructive h-8 w-8">
               <Trash2 className="w-3.5 h-3.5" />
             </Button>
