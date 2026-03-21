@@ -190,8 +190,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     }
   };
 
-
-
+  const handleKickFromChannels = async (sub: TelegramSubscriber) => {
     if (!confirm(t("subs.kickConfirm"))) return;
     setKickingId(sub.id);
     try {
