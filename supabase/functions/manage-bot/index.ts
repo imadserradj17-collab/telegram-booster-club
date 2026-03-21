@@ -198,6 +198,46 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ ok: true }), { headers: corsHeaders });
       }
 
+      // ── BROADCAST TO ALL BOT USERS ──
+      case "broadcast_all": {
+        const { message } = params;
+        if (!message?.trim()) {
+          return new Response(JSON.stringify({ error: "Message required" }), { status: 400, headers: corsHeaders });
+        }
+
+        const { data: botUsers } = await sb.from("bot_users")
+          .select("telegram_user_id")
+          .eq("owner_id", user.id)
+          .eq("bot_token_id", botTokenId);
+
+        const users = botUsers || [];
+        let sent = 0, failed = 0;
+        const CONCURRENCY = 10;
+        for (let i = 0; i < users.length; i += CONCURRENCY) {
+          const batch = users.slice(i, i + CONCURRENCY);
+          const results = await Promise.allSettled(batch.map(async (u: any) => {
+            const res = await tg(botToken, "sendMessage", { chat_id: u.telegram_user_id, text: message, parse_mode: "Markdown" });
+            return res.ok;
+          }));
+          for (const r of results) {
+            if (r.status === "fulfilled" && r.value) sent++; else failed++;
+          }
+        }
+
+        return new Response(JSON.stringify({ ok: true, sent, failed, total: users.length }), { headers: corsHeaders });
+      }
+
+      // ── GET BOT USERS COUNT ──
+      case "get_bot_users": {
+        const { data: botUsers } = await sb.from("bot_users")
+          .select("id, telegram_user_id, telegram_username, first_name, last_name, created_at")
+          .eq("owner_id", user.id)
+          .eq("bot_token_id", botTokenId)
+          .order("created_at", { ascending: false });
+
+        return new Response(JSON.stringify({ ok: true, bot_users: botUsers || [], count: (botUsers || []).length }), { headers: corsHeaders });
+      }
+
       default:
         return new Response(JSON.stringify({ error: "Unknown action" }), { status: 400, headers: corsHeaders });
     }
