@@ -789,9 +789,30 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   <Send className="w-5 h-5 text-primary" />
                   <h3 className="font-semibold text-foreground">{t("broadcast.title")}</h3>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {t("broadcast.targetAll")} ({activeSubs.length})
-                </p>
+                {/* Target selector */}
+                <div className="space-y-2">
+                  <Label className="text-foreground/80">{lang === "ar" ? "الهدف" : "Target"}</Label>
+                  <div className="flex gap-2">
+                    <Button
+                      variant={broadcastTarget === "subscribers" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setBroadcastTarget("subscribers")}
+                      className={broadcastTarget === "subscribers" ? "gradient-telegram text-primary-foreground" : ""}
+                    >
+                      <Users className="w-3.5 h-3.5" />
+                      {t("broadcast.subsOnly")} ({activeSubs.length})
+                    </Button>
+                    <Button
+                      variant={broadcastTarget === "all_users" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setBroadcastTarget("all_users")}
+                      className={broadcastTarget === "all_users" ? "gradient-telegram text-primary-foreground" : ""}
+                    >
+                      <Bot className="w-3.5 h-3.5" />
+                      {t("broadcast.allBotUsers")} ({botUsersCount})
+                    </Button>
+                  </div>
+                </div>
                 <div className="space-y-2">
                   <Label className="text-foreground/80">{t("broadcast.message")}</Label>
                   <Textarea
