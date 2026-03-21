@@ -156,6 +156,11 @@ const translations: Record<string, Record<Lang, string>> = {
   "broadcast.failed": { ar: "فشل", en: "Failed" },
   "broadcast.total": { ar: "الإجمالي", en: "Total" },
   "broadcast.targetAll": { ar: "جميع المشتركين النشطين", en: "All active subscribers" },
+  "broadcast.toAllUsers": { ar: "إرسال لجميع مستخدمي البوت", en: "Broadcast to all bot users" },
+  "broadcast.targetAllUsers": { ar: "جميع من بدأ البوت", en: "All users who started the bot" },
+  "broadcast.subsOnly": { ar: "المشتركين النشطين فقط", en: "Active subscribers only" },
+  "broadcast.allBotUsers": { ar: "جميع مستخدمي البوت", en: "All bot users" },
+  "broadcast.botUsersCount": { ar: "مستخدمي البوت", en: "Bot users" },
 
   // Admin
   "admin.title": { ar: "لوحة الأدمن", en: "Admin Panel" },
