@@ -49,6 +49,37 @@ async function getUserPhotoUrl(token: string, userId: number): Promise<string | 
   } catch { return null; }
 }
 
+// Try all methods to get user info (name, username, photo)
+async function enrichUserInfo(token: string, userId: number, existing: { fn: string | null; ln: string | null; username: string | null }) {
+  let { fn, ln, username } = existing;
+  let photoUrl: string | null = null;
+
+  // Method 1: getChat - gets first_name, last_name, username, photo
+  try {
+    const chatInfo = await tg(token, "getChat", { chat_id: userId });
+    if (chatInfo.ok && chatInfo.result) {
+      const r = chatInfo.result;
+      if (!fn && r.first_name) fn = r.first_name;
+      if (!ln && r.last_name) ln = r.last_name;
+      if (!username && r.username) username = r.username;
+      // getChat returns photo.big_file_id for high-res photo
+      if (r.photo?.big_file_id) {
+        try {
+          const file = await tg(token, "getFile", { file_id: r.photo.big_file_id });
+          if (file.ok) photoUrl = `https://api.telegram.org/file/bot${token}/${file.result.file_path}`;
+        } catch {}
+      }
+    }
+  } catch {}
+
+  // Method 2: getUserProfilePhotos - fallback if getChat didn't return photo
+  if (!photoUrl) {
+    photoUrl = await getUserPhotoUrl(token, userId);
+  }
+
+  return { fn, ln, username, photoUrl };
+}
+
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("ar-EG", { year: "numeric", month: "short", day: "numeric" });
 }
