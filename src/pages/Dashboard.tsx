@@ -1087,8 +1087,12 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   />
                   <span className="text-sm text-foreground">{t("subs.allChannels")}</span>
                 </div>
-                <div className="space-y-1.5 max-h-32 overflow-y-auto">
-                  {channels.map(ch => (
+                {channels.length > 6 && (
+                  <Input placeholder={t("subs.searchChannels")} value={channelSearch} onChange={(e) => setChannelSearch(e.target.value)}
+                    className="bg-secondary/50 border-border/50 text-foreground text-sm h-8" />
+                )}
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {channels.filter(ch => !channelSearch || ch.channel_name.toLowerCase().includes(channelSearch.toLowerCase())).map(ch => (
                     <div key={ch.id} className="flex items-center gap-2">
                       <Checkbox
                         checked={addSubForm.channel_ids.includes(ch.id)}
