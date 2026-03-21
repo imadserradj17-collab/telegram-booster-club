@@ -71,6 +71,42 @@ export type Database = {
         }
         Relationships: []
       }
+      bot_users: {
+        Row: {
+          bot_token_id: string
+          created_at: string
+          first_name: string | null
+          id: string
+          last_name: string | null
+          owner_id: string
+          photo_url: string | null
+          telegram_user_id: number
+          telegram_username: string | null
+        }
+        Insert: {
+          bot_token_id: string
+          created_at?: string
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          owner_id: string
+          photo_url?: string | null
+          telegram_user_id: number
+          telegram_username?: string | null
+        }
+        Update: {
+          bot_token_id?: string
+          created_at?: string
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          owner_id?: string
+          photo_url?: string | null
+          telegram_user_id?: number
+          telegram_username?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           approved_until: string | null

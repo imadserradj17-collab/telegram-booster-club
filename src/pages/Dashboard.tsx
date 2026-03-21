@@ -93,6 +93,8 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const [broadcastMsg, setBroadcastMsg] = useState("");
   const [broadcasting, setBroadcasting] = useState(false);
   const [broadcastResult, setBroadcastResult] = useState<{ sent: number; failed: number; total: number } | null>(null);
+  const [broadcastTarget, setBroadcastTarget] = useState<"subscribers" | "all_users">("subscribers");
+  const [botUsersCount, setBotUsersCount] = useState(0);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -115,12 +117,14 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     const channelsRes = await supabase.from("telegram_channels").select("*").order("created_at", { ascending: false });
     if (channelsRes.data) setChannels(channelsRes.data);
 
-    // Fetch subscriber-channel mappings
+    // Fetch subscriber-channel mappings + bot users count
     try {
-      const { data } = await supabase.functions.invoke("manage-bot", {
-        body: { action: "get_subscriber_channels" },
-      });
-      if (data?.subscriber_channels) setSubscriberChannels(data.subscriber_channels);
+      const [scRes, buRes] = await Promise.all([
+        supabase.functions.invoke("manage-bot", { body: { action: "get_subscriber_channels" } }),
+        supabase.functions.invoke("manage-bot", { body: { action: "get_bot_users" } }),
+      ]);
+      if (scRes.data?.subscriber_channels) setSubscriberChannels(scRes.data.subscriber_channels);
+      if (buRes.data?.count !== undefined) setBotUsersCount(buRes.data.count);
     } catch {}
 
     setLoading(false);
@@ -267,8 +271,9 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     setBroadcasting(true);
     setBroadcastResult(null);
     try {
+      const action = broadcastTarget === "all_users" ? "broadcast_all" : "broadcast";
       const { data, error } = await supabase.functions.invoke("manage-bot", {
-        body: { action: "broadcast", message: broadcastMsg },
+        body: { action, message: broadcastMsg },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -784,9 +789,30 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   <Send className="w-5 h-5 text-primary" />
                   <h3 className="font-semibold text-foreground">{t("broadcast.title")}</h3>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {t("broadcast.targetAll")} ({activeSubs.length})
-                </p>
+                {/* Target selector */}
+                <div className="space-y-2">
+                  <Label className="text-foreground/80">{lang === "ar" ? "الهدف" : "Target"}</Label>
+                  <div className="flex gap-2">
+                    <Button
+                      variant={broadcastTarget === "subscribers" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setBroadcastTarget("subscribers")}
+                      className={broadcastTarget === "subscribers" ? "gradient-telegram text-primary-foreground" : ""}
+                    >
+                      <Users className="w-3.5 h-3.5" />
+                      {t("broadcast.subsOnly")} ({activeSubs.length})
+                    </Button>
+                    <Button
+                      variant={broadcastTarget === "all_users" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setBroadcastTarget("all_users")}
+                      className={broadcastTarget === "all_users" ? "gradient-telegram text-primary-foreground" : ""}
+                    >
+                      <Bot className="w-3.5 h-3.5" />
+                      {t("broadcast.allBotUsers")} ({botUsersCount})
+                    </Button>
+                  </div>
+                </div>
                 <div className="space-y-2">
                   <Label className="text-foreground/80">{t("broadcast.message")}</Label>
                   <Textarea
