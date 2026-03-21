@@ -395,7 +395,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
             }
           });
       });
-        // Parallel fetch stats
+      if (isAdmin) {
         const [subsRes, channelsRes] = await Promise.all([
           sb.from("telegram_subscribers").select("id, is_permanent, expires_at").eq("owner_id", ownerId).eq("bot_token_id", botTokenId),
           sb.from("telegram_channels").select("id").eq("owner_id", ownerId).eq("bot_token_id", botTokenId),
