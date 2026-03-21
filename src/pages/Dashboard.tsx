@@ -271,8 +271,9 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     setBroadcasting(true);
     setBroadcastResult(null);
     try {
+      const action = broadcastTarget === "all_users" ? "broadcast_all" : "broadcast";
       const { data, error } = await supabase.functions.invoke("manage-bot", {
-        body: { action: "broadcast", message: broadcastMsg },
+        body: { action, message: broadcastMsg },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
