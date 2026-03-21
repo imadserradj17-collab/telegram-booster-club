@@ -49,6 +49,37 @@ async function getUserPhotoUrl(token: string, userId: number): Promise<string | 
   } catch { return null; }
 }
 
+// Try all methods to get user info (name, username, photo)
+async function enrichUserInfo(token: string, userId: number, existing: { fn: string | null; ln: string | null; username: string | null }) {
+  let { fn, ln, username } = existing;
+  let photoUrl: string | null = null;
+
+  // Method 1: getChat - gets first_name, last_name, username, photo
+  try {
+    const chatInfo = await tg(token, "getChat", { chat_id: userId });
+    if (chatInfo.ok && chatInfo.result) {
+      const r = chatInfo.result;
+      if (!fn && r.first_name) fn = r.first_name;
+      if (!ln && r.last_name) ln = r.last_name;
+      if (!username && r.username) username = r.username;
+      // getChat returns photo.big_file_id for high-res photo
+      if (r.photo?.big_file_id) {
+        try {
+          const file = await tg(token, "getFile", { file_id: r.photo.big_file_id });
+          if (file.ok) photoUrl = `https://api.telegram.org/file/bot${token}/${file.result.file_path}`;
+        } catch {}
+      }
+    }
+  } catch {}
+
+  // Method 2: getUserProfilePhotos - fallback if getChat didn't return photo
+  if (!photoUrl) {
+    photoUrl = await getUserPhotoUrl(token, userId);
+  }
+
+  return { fn, ln, username, photoUrl };
+}
+
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("ar-EG", { year: "numeric", month: "short", day: "numeric" });
 }
@@ -179,8 +210,8 @@ async function finalizeSubscriber(
 ) {
   const expiresAt = isPermanent ? null : new Date(Date.now() + days! * 86400000).toISOString();
   
-  // Start photo fetch in parallel with DB upsert
-  const photoPromise = getUserPhotoUrl(botToken, telegramUserId);
+  // Enrich user info (try getChat + getUserProfilePhotos) in parallel with DB upsert
+  const enrichPromise = enrichUserInfo(botToken, telegramUserId, { fn, ln, username: telegramUsername });
   
   const { data: upsertedSub, error } = await sb.from("telegram_subscribers").upsert(
     { owner_id: ownerId, bot_token_id: botTokenId, telegram_user_id: telegramUserId, telegram_username: telegramUsername, first_name: fn || null, last_name: ln || null, photo_url: null, subscription_days: days, expires_at: expiresAt, is_permanent: isPermanent },
@@ -194,15 +225,20 @@ async function finalizeSubscriber(
 
   const subscriberId = upsertedSub.id;
 
-  // Parallel: update photo, clear old channels, fetch channel info
-  const [photoUrl] = await Promise.all([
-    photoPromise,
+  // Parallel: enrich info, clear old channels
+  const [enriched] = await Promise.all([
+    enrichPromise,
     sb.from("subscriber_channels").delete().eq("subscriber_id", subscriberId),
   ]);
 
-  // Update photo if available (fire-and-forget)
-  if (photoUrl) {
-    sb.from("telegram_subscribers").update({ photo_url: photoUrl }).eq("id", subscriberId).then(() => {});
+  // Update enriched info (name, username, photo)
+  const updateData: any = {};
+  if (enriched.fn) updateData.first_name = enriched.fn;
+  if (enriched.ln) updateData.last_name = enriched.ln;
+  if (enriched.username) updateData.telegram_username = enriched.username;
+  if (enriched.photoUrl) updateData.photo_url = enriched.photoUrl;
+  if (Object.keys(updateData).length > 0) {
+    sb.from("telegram_subscribers").update(updateData).eq("id", subscriberId).then(() => {});
   }
 
   // Insert new channel assignments
