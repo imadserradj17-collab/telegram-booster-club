@@ -1064,7 +1064,36 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">{t("dash.publicChannelHint")}</p>
-                </div>
+                  {publicChannelId && publicChannelId !== "none" && (
+                    <div className="flex items-center justify-between bg-secondary/30 rounded-lg p-3 mt-2">
+                      <div className="text-sm text-foreground">
+                        {t("dash.publicMembers")}: <strong>{publicMembersCount}</strong>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={kickingPublic || publicMembersCount === 0}
+                        onClick={async () => {
+                          if (!confirm(t("dash.kickAllPublicConfirm"))) return;
+                          setKickingPublic(true);
+                          try {
+                            const { data, error } = await supabase.functions.invoke("manage-bot", {
+                              body: { action: "kick_public_members" },
+                            });
+                            if (error) throw error;
+                            if (data?.error) throw new Error(data.error);
+                            toast({ title: `${t("dash.kickAllPublicDone")} - ${data.kicked} ✅${data.failed > 0 ? ` / ${data.failed} ❌` : ""}` });
+                            setPublicMembersCount(0);
+                          } catch (error: any) {
+                            toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+                          } finally { setKickingPublic(false); }
+                        }}
+                      >
+                        {kickingPublic ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                        {t("dash.kickAllPublic")}
+                      </Button>
+                    </div>
+                  )}
                 <div className="space-y-2">
                   <Label className="text-foreground/80 flex items-center gap-2">
                     <MessageSquare className="w-4 h-4" />{t("dash.subscribersChannel")}
