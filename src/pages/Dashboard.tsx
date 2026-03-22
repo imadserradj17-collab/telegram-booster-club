@@ -205,6 +205,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
       toast({ title: t("common.error"), description: error.message, variant: "destructive" });
       return;
     }
+    const { error } = await supabase.from("telegram_subscribers").delete().eq("id", id);
     if (!error) {
       setSubscribers((prev) => prev.filter((s) => s.id !== id));
       toast({ title: t("dash.subscriberDeleted") });
