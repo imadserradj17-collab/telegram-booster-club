@@ -130,12 +130,14 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
 
     // Fetch subscriber-channel mappings + bot users count
     try {
-      const [scRes, buRes] = await Promise.all([
+      const [scRes, buRes, pmRes] = await Promise.all([
         supabase.functions.invoke("manage-bot", { body: { action: "get_subscriber_channels" } }),
         supabase.functions.invoke("manage-bot", { body: { action: "get_bot_users" } }),
+        supabase.functions.invoke("manage-bot", { body: { action: "get_public_members_count" } }),
       ]);
       if (scRes.data?.subscriber_channels) setSubscriberChannels(scRes.data.subscriber_channels);
       if (buRes.data?.count !== undefined) setBotUsersCount(buRes.data.count);
+      if (pmRes.data?.count !== undefined) setPublicMembersCount(pmRes.data.count);
     } catch {}
 
     setLoading(false);
