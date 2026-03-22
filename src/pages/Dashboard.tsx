@@ -790,10 +790,19 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                       <div key={ch.id} className="glass-card p-4">
                         <div className="flex items-start gap-3">
                           <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                            <Tv className="w-5 h-5 text-primary/60" />
+                            {ch.channel_type === "group" ? (
+                              <Users className="w-5 h-5 text-success" />
+                            ) : (
+                              <Tv className="w-5 h-5 text-primary/60" />
+                            )}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="font-medium text-foreground text-sm">{ch.channel_name}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-foreground text-sm">{ch.channel_name}</p>
+                              <Badge variant="outline" className="text-[10px]">
+                                {ch.channel_type === "group" ? t("channels.group") : t("channels.channel")}
+                              </Badge>
+                            </div>
                             <p className="font-mono text-xs text-muted-foreground" dir="ltr">{ch.channel_id}</p>
                             {ch.invite_link && (
                               <a href={ch.invite_link} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline mt-1 inline-flex items-center gap-1">
