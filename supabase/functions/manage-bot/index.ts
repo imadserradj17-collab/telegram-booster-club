@@ -275,6 +275,66 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ ok: true, bot_users: botUsers || [], count: (botUsers || []).length }), { headers: corsHeaders });
       }
 
+      // ── GET PUBLIC CHANNEL MEMBERS COUNT ──
+      case "get_public_members_count": {
+        const { count } = await sb.from("public_channel_members")
+          .select("id", { count: "exact", head: true })
+          .eq("owner_id", user.id)
+          .eq("bot_token_id", botTokenId);
+
+        return new Response(JSON.stringify({ ok: true, count: count || 0 }), { headers: corsHeaders });
+      }
+
+      // ── KICK ALL PUBLIC CHANNEL MEMBERS ──
+      case "kick_public_members": {
+        // Get the public channel setting
+        const publicChId = botData.public_channel_id;
+        if (!publicChId) {
+          return new Response(JSON.stringify({ error: "No public channel configured" }), { status: 400, headers: corsHeaders });
+        }
+
+        // Get the telegram channel_id
+        const { data: pubChannel } = await sb.from("telegram_channels").select("channel_id").eq("id", publicChId).single();
+        if (!pubChannel) {
+          return new Response(JSON.stringify({ error: "Public channel not found" }), { status: 404, headers: corsHeaders });
+        }
+
+        // Get all public channel members
+        const { data: members } = await sb.from("public_channel_members")
+          .select("telegram_user_id")
+          .eq("owner_id", user.id)
+          .eq("bot_token_id", botTokenId)
+          .eq("channel_id", publicChId);
+
+        const allMembers = members || [];
+        let kicked = 0, failed = 0;
+        const CONCURRENCY = 10;
+
+        for (let i = 0; i < allMembers.length; i += CONCURRENCY) {
+          const batch = allMembers.slice(i, i + CONCURRENCY);
+          const results = await Promise.allSettled(batch.map(async (m: any) => {
+            const banRes = await tg(botToken, "banChatMember", { chat_id: pubChannel.channel_id, user_id: m.telegram_user_id });
+            if (banRes.ok) {
+              await tg(botToken, "unbanChatMember", { chat_id: pubChannel.channel_id, user_id: m.telegram_user_id, only_if_banned: true });
+              return true;
+            }
+            return false;
+          }));
+          for (const r of results) {
+            if (r.status === "fulfilled" && r.value) kicked++; else failed++;
+          }
+        }
+
+        // Delete all public channel member records after kicking
+        await sb.from("public_channel_members")
+          .delete()
+          .eq("owner_id", user.id)
+          .eq("bot_token_id", botTokenId)
+          .eq("channel_id", publicChId);
+
+        return new Response(JSON.stringify({ ok: true, kicked, failed, total: allMembers.length }), { headers: corsHeaders });
+      }
+
       default:
         return new Response(JSON.stringify({ error: "Unknown action" }), { status: 400, headers: corsHeaders });
     }
