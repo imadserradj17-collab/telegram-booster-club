@@ -14,7 +14,7 @@ const sb = createClient(supabaseUrl, supabaseServiceKey);
 async function getBotSettingsByToken(token: string) {
   const { data } = await sb
     .from("bot_tokens")
-    .select("id, user_id, admin_telegram_id, non_subscriber_message, public_channel_id")
+    .select("id, user_id, admin_telegram_id, non_subscriber_message, public_channel_id, subscribers_channel_id")
     .eq("token", token)
     .maybeSingle();
   return data || null;
@@ -279,7 +279,7 @@ async function finalizeSubscriber(
   });
 }
 
-async function handleUpdate(update: any, botToken: string, ownerId: string, botTokenId: string, adminTelegramId: number | null, nonSubMessage: string, publicChannelId: string | null = null) {
+async function handleUpdate(update: any, botToken: string, ownerId: string, botTokenId: string, adminTelegramId: number | null, nonSubMessage: string, publicChannelId: string | null = null, subscribersChannelId: string | null = null) {
   // ─── CHAT JOIN REQUESTS ───
   if (update.chat_join_request) {
     const req = update.chat_join_request;
@@ -427,6 +427,14 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
 
           const subStatus = sub.is_permanent ? "♾ *دائم*" : `📅 متبقي *${daysRemaining(sub.expires_at!)}* يوم (حتى ${formatDate(sub.expires_at!)})`;
           const buttons = channels.filter((ch: any) => ch.invite_link).map((ch: any) => [{ text: `📺 ${ch.channel_name}`, url: ch.invite_link }]);
+          // Add subscribers-only channel (e.g. discussion group)
+          if (subscribersChannelId) {
+            const { data: subsCh } = await sb.from("telegram_channels").select("channel_name, invite_link, channel_type").eq("id", subscribersChannelId).maybeSingle();
+            if (subsCh?.invite_link) {
+              const icon = subsCh.channel_type === "group" ? "💬" : "📺";
+              buttons.push([{ text: `${icon} ${subsCh.channel_name}`, url: subsCh.invite_link }]);
+            }
+          }
           buttons.push([{ text: "ℹ️ حالة اشتراكي", callback_data: "my_subscription" }]);
 
           await tg(botToken, "sendMessage", {
@@ -1151,7 +1159,7 @@ Deno.serve(async (req) => {
       }
 
       const update = await req.json();
-      await handleUpdate(update, tokenFromPath, settings.user_id, settings.id, settings.admin_telegram_id, settings.non_subscriber_message, settings.public_channel_id);
+      await handleUpdate(update, tokenFromPath, settings.user_id, settings.id, settings.admin_telegram_id, settings.non_subscriber_message, settings.public_channel_id, settings.subscribers_channel_id);
       return new Response("ok", { headers: corsHeaders });
     }
 
