@@ -732,7 +732,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   <Tv className="w-8 h-8 mx-auto mb-2 text-muted-foreground/30" />
                   <p className="text-muted-foreground">{t("channels.noChannels")}</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {lang === "ar" ? "أضف قنوات عبر البوت أولاً" : "Add channels via the bot first"}
+                    {lang === "ar" ? "أضف قنوات أو مجموعات عبر البوت أولاً" : "Add channels or groups via the bot first"}
                   </p>
                 </div>
               ) : (
