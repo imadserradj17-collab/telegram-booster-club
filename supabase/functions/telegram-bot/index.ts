@@ -722,7 +722,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
           const membersRes = await tg(botToken, "getChatMemberCount", { chat_id: channelId });
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
-            text: `✅ *تمت إضافة القناة!*\n\n📺 *${channelName}*\n🆔 \`${channelId}\`\n👥 الأعضاء: ${membersRes.ok ? membersRes.result : "—"}\n🔗 [رابط الدعوة](${linkRes.result.invite_link})`,
+            text: `✅ *تمت الإضافة بنجاح!*\n\n${typeEmoji} *${channelName}* (${channelType === "group" ? "مجموعة" : "قناة"})\n🆔 \`${channelId}\`\n👥 الأعضاء: ${membersRes.ok ? membersRes.result : "—"}\n🔗 [رابط الدعوة](${linkRes.result.invite_link})`,
             parse_mode: "Markdown",
             reply_markup: adminKeyboard(),
           });
