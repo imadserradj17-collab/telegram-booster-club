@@ -115,17 +115,19 @@ const translations: Record<string, Record<Lang, string>> = {
   "analytics.date": { ar: "التاريخ", en: "Date" },
 
   // Channels
-  "channels.title": { ar: "القنوات", en: "Channels" },
-  "channels.add": { ar: "إضافة قناة", en: "Add Channel" },
-  "channels.name": { ar: "اسم القناة", en: "Channel Name" },
-  "channels.channelId": { ar: "معرف القناة", en: "Channel ID" },
+  "channels.title": { ar: "القنوات والمجموعات", en: "Channels & Groups" },
+  "channels.add": { ar: "إضافة قناة/مجموعة", en: "Add Channel/Group" },
+  "channels.name": { ar: "الاسم", en: "Name" },
+  "channels.channelId": { ar: "المعرف", en: "ID" },
   "channels.inviteLink": { ar: "رابط الدعوة", en: "Invite Link" },
-  "channels.noChannels": { ar: "لا توجد قنوات", en: "No channels" },
-  "channels.delete": { ar: "حذف القناة", en: "Delete Channel" },
-  "channels.deleteConfirm": { ar: "هل أنت متأكد من حذف هذه القناة؟", en: "Are you sure you want to delete this channel?" },
-  "channels.deleted": { ar: "تم حذف القناة", en: "Channel deleted" },
+  "channels.noChannels": { ar: "لا توجد قنوات أو مجموعات", en: "No channels or groups" },
+  "channels.delete": { ar: "حذف", en: "Delete" },
+  "channels.deleteConfirm": { ar: "هل أنت متأكد من الحذف؟", en: "Are you sure you want to delete?" },
+  "channels.deleted": { ar: "تم الحذف", en: "Deleted" },
   "channels.subsCount": { ar: "عدد المشتركين", en: "Subscribers" },
   "channels.addedAt": { ar: "تاريخ الإضافة", en: "Added" },
+  "channels.channel": { ar: "قناة", en: "Channel" },
+  "channels.group": { ar: "مجموعة", en: "Group" },
 
   // Subscriber management
   "subs.add": { ar: "إضافة مشترك", en: "Add Subscriber" },

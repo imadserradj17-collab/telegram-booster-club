@@ -172,6 +172,7 @@ export type Database = {
           bot_token_id: string | null
           channel_id: number
           channel_name: string
+          channel_type: string
           created_at: string
           id: string
           invite_link: string | null
@@ -181,6 +182,7 @@ export type Database = {
           bot_token_id?: string | null
           channel_id: number
           channel_name: string
+          channel_type?: string
           created_at?: string
           id?: string
           invite_link?: string | null
@@ -190,6 +192,7 @@ export type Database = {
           bot_token_id?: string | null
           channel_id?: number
           channel_name?: string
+          channel_type?: string
           created_at?: string
           id?: string
           invite_link?: string | null

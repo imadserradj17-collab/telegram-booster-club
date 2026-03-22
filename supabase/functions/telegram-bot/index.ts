@@ -141,8 +141,8 @@ function adminKeyboard() {
         { text: "📋 المشتركين", callback_data: "list_subscribers" },
       ],
       [
-        { text: "➕ إضافة قناة", callback_data: "add_channel" },
-        { text: "📺 القنوات", callback_data: "manage_channels" },
+        { text: "➕ إضافة قناة/مجموعة", callback_data: "add_channel" },
+        { text: "📺 القنوات والمجموعات", callback_data: "manage_channels" },
       ],
       [
         { text: "📢 رسالة جماعية", callback_data: "broadcast" },
@@ -658,6 +658,10 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
             tg(botToken, "getMe", {}),
           ]);
           const channelName = chatInfo.ok ? chatInfo.result.title || `قناة ${channelId}` : `قناة ${channelId}`;
+          // Auto-detect type: group/supergroup vs channel
+          const chatType = chatInfo.ok ? chatInfo.result.type : "channel";
+          const channelType = (chatType === "group" || chatType === "supergroup") ? "group" : "channel";
+          const typeEmoji = channelType === "group" ? "👥" : "📺";
 
           if (chatInfo.ok) {
             const memberInfo = await tg(botToken, "getChatMember", { chat_id: channelId, user_id: botMe.result.id });
@@ -674,7 +678,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
           }
 
           const { data: newChannel, error } = await sb.from("telegram_channels").upsert(
-            { owner_id: ownerId, bot_token_id: botTokenId, channel_id: channelId, channel_name: channelName, invite_link: linkRes.result.invite_link },
+            { owner_id: ownerId, bot_token_id: botTokenId, channel_id: channelId, channel_name: channelName, invite_link: linkRes.result.invite_link, channel_type: channelType },
             { onConflict: "owner_id,channel_id" }
           ).select("id").single();
 
@@ -718,7 +722,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
           const membersRes = await tg(botToken, "getChatMemberCount", { chat_id: channelId });
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
-            text: `✅ *تمت إضافة القناة!*\n\n📺 *${channelName}*\n🆔 \`${channelId}\`\n👥 الأعضاء: ${membersRes.ok ? membersRes.result : "—"}\n🔗 [رابط الدعوة](${linkRes.result.invite_link})`,
+            text: `✅ *تمت الإضافة بنجاح!*\n\n${typeEmoji} *${channelName}* (${channelType === "group" ? "مجموعة" : "قناة"})\n🆔 \`${channelId}\`\n👥 الأعضاء: ${membersRes.ok ? membersRes.result : "—"}\n🔗 [رابط الدعوة](${linkRes.result.invite_link})`,
             parse_mode: "Markdown",
             reply_markup: adminKeyboard(),
           });
@@ -942,12 +946,14 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
         await clearState(chatId, botToken);
         const { data: channels } = await sb.from("telegram_channels").select("*").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
         if (!channels || channels.length === 0) {
-          await tg(botToken, "sendMessage", { chat_id: chatId, text: "📺 لا توجد قنوات.", reply_markup: adminKeyboard() });
+          await tg(botToken, "sendMessage", { chat_id: chatId, text: "📺 لا توجد قنوات أو مجموعات.", reply_markup: adminKeyboard() });
         } else {
-          let msgText = `📺 *القنوات (${channels.length}):*\n\n`;
+          let msgText = `📺 *القنوات والمجموعات (${channels.length}):*\n\n`;
           const buttons = [];
           for (const ch of channels) {
-            msgText += `• *${ch.channel_name}*\n  🆔 \`${ch.channel_id}\`${ch.invite_link ? " — 🔗 رابط متاح" : ""}\n`;
+            const typeEmoji = ch.channel_type === "group" ? "👥" : "📺";
+            const typeLabel = ch.channel_type === "group" ? "مجموعة" : "قناة";
+            msgText += `${typeEmoji} *${ch.channel_name}* (${typeLabel})\n  🆔 \`${ch.channel_id}\`${ch.invite_link ? " — 🔗 رابط متاح" : ""}\n`;
             buttons.push([{ text: `🗑 حذف ${ch.channel_name}`, callback_data: `del_ch_${ch.channel_id}` }]);
           }
           buttons.push([{ text: "🔙 رجوع", callback_data: "back" }]);
@@ -958,7 +964,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
 
       case "add_channel": {
         await setState(chatId, botToken, "await_channel");
-        await tg(botToken, "sendMessage", { chat_id: chatId, text: "📺 *إضافة قناة*\n\nأرسل بإحدى الطرق:\n\n1️⃣ معرف القناة (رقم سالب)\n2️⃣ @username القناة\n3️⃣ حوّل رسالة من القناة\n\n⚠️ البوت يجب أن يكون مسؤولاً!\n\n_أرسل /cancel للإلغاء_", parse_mode: "Markdown" });
+        await tg(botToken, "sendMessage", { chat_id: chatId, text: "📺 *إضافة قناة أو مجموعة*\n\nأرسل بإحدى الطرق:\n\n1️⃣ معرف القناة/المجموعة (رقم سالب)\n2️⃣ @username\n3️⃣ حوّل رسالة من القناة/المجموعة\n\n⚠️ البوت يجب أن يكون مسؤولاً!\n\n_أرسل /cancel للإلغاء_", parse_mode: "Markdown" });
         break;
       }
 
