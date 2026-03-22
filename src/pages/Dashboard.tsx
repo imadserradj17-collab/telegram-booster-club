@@ -102,6 +102,8 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const [botUsersCount, setBotUsersCount] = useState(0);
   const [kickingId, setKickingId] = useState<string | null>(null);
   const [channelSearch, setChannelSearch] = useState("");
+  const [publicMembersCount, setPublicMembersCount] = useState(0);
+  const [kickingPublic, setKickingPublic] = useState(false);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -128,12 +130,14 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
 
     // Fetch subscriber-channel mappings + bot users count
     try {
-      const [scRes, buRes] = await Promise.all([
+      const [scRes, buRes, pmRes] = await Promise.all([
         supabase.functions.invoke("manage-bot", { body: { action: "get_subscriber_channels" } }),
         supabase.functions.invoke("manage-bot", { body: { action: "get_bot_users" } }),
+        supabase.functions.invoke("manage-bot", { body: { action: "get_public_members_count" } }),
       ]);
       if (scRes.data?.subscriber_channels) setSubscriberChannels(scRes.data.subscriber_channels);
       if (buRes.data?.count !== undefined) setBotUsersCount(buRes.data.count);
+      if (pmRes.data?.count !== undefined) setPublicMembersCount(pmRes.data.count);
     } catch {}
 
     setLoading(false);
@@ -1060,6 +1064,36 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">{t("dash.publicChannelHint")}</p>
+                  {publicChannelId && publicChannelId !== "none" && (
+                    <div className="flex items-center justify-between bg-secondary/30 rounded-lg p-3 mt-2">
+                      <div className="text-sm text-foreground">
+                        {t("dash.publicMembers")}: <strong>{publicMembersCount}</strong>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={kickingPublic || publicMembersCount === 0}
+                        onClick={async () => {
+                          if (!confirm(t("dash.kickAllPublicConfirm"))) return;
+                          setKickingPublic(true);
+                          try {
+                            const { data, error } = await supabase.functions.invoke("manage-bot", {
+                              body: { action: "kick_public_members" },
+                            });
+                            if (error) throw error;
+                            if (data?.error) throw new Error(data.error);
+                            toast({ title: `${t("dash.kickAllPublicDone")} - ${data.kicked} ✅${data.failed > 0 ? ` / ${data.failed} ❌` : ""}` });
+                            setPublicMembersCount(0);
+                          } catch (error: any) {
+                            toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+                          } finally { setKickingPublic(false); }
+                        }}
+                      >
+                        {kickingPublic ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                        {t("dash.kickAllPublic")}
+                      </Button>
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label className="text-foreground/80 flex items-center gap-2">

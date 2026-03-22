@@ -298,7 +298,19 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
 
     // Check if this is the public channel (everyone can join)
     if (publicChannelId && myChannel.id === publicChannelId) {
-      await tg(botToken, "approveChatJoinRequest", { chat_id: chatId, user_id: telegramUserId });
+      // Approve + save member to public_channel_members
+      await Promise.all([
+        tg(botToken, "approveChatJoinRequest", { chat_id: chatId, user_id: telegramUserId }),
+        sb.from("public_channel_members").upsert({
+          owner_id: ownerId,
+          bot_token_id: botTokenId,
+          channel_id: myChannel.id,
+          telegram_user_id: telegramUserId,
+          telegram_username: req.from.username || null,
+          first_name: req.from.first_name || null,
+          last_name: req.from.last_name || null,
+        }, { onConflict: "owner_id,channel_id,telegram_user_id" }),
+      ]);
       return;
     }
 
