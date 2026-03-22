@@ -1024,6 +1024,25 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   <Textarea placeholder={t("dash.nonSubMsgPlaceholder")} value={nonSubMessage} onChange={(e) => setNonSubMessage(e.target.value)} rows={3}
                     className="bg-secondary/50 border-border/50 text-foreground placeholder:text-muted-foreground resize-none" />
                 </div>
+                <div className="space-y-2">
+                  <Label className="text-foreground/80 flex items-center gap-2">
+                    <Link className="w-4 h-4" />{t("dash.publicChannel")}
+                  </Label>
+                  <Select value={publicChannelId || "none"} onValueChange={(v) => setPublicChannelId(v === "none" ? null : v)}>
+                    <SelectTrigger className="bg-secondary/50 border-border/50">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">{t("dash.publicChannelNone")}</SelectItem>
+                      {channels.map(ch => (
+                        <SelectItem key={ch.id} value={ch.id}>
+                          {ch.channel_type === "group" ? "👥" : "📺"} {ch.channel_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">{t("dash.publicChannelHint")}</p>
+                </div>
                 <Button onClick={handleSaveSettings} disabled={savingSettings} className="w-full gradient-telegram text-primary-foreground hover:opacity-90">
                   {savingSettings ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : <Save className="w-4 h-4 ml-2" />}
                   {t("dash.saveSettings")}
