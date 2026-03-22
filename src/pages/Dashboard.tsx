@@ -43,6 +43,7 @@ interface TelegramChannel {
   id: string;
   channel_id: number;
   channel_name: string;
+  channel_type: string;
   invite_link: string | null;
   created_at: string;
 }
