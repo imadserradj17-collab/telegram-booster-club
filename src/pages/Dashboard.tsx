@@ -190,6 +190,13 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   };
 
   const deleteSubscriber = async (id: string) => {
+    if (!confirm(t("subs.deleteConfirm"))) return;
+    // Kick from all channels first, then delete
+    try {
+      await supabase.functions.invoke("manage-bot", {
+        body: { action: "kick_from_channels", subscriber_id: id },
+      });
+    } catch {}
     const { error } = await supabase.from("telegram_subscribers").delete().eq("id", id);
     if (!error) {
       setSubscribers((prev) => prev.filter((s) => s.id !== id));
