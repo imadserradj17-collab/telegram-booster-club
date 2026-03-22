@@ -436,13 +436,32 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
             reply_markup: { inline_keyboard: buttons },
           });
         } else if (sub) {
+          // Expired subscriber - show public channel if available
+          let replyMarkup: any = undefined;
+          if (publicChannelId) {
+            const { data: pubCh } = await sb.from("telegram_channels").select("channel_name, invite_link, channel_type").eq("id", publicChannelId).maybeSingle();
+            if (pubCh?.invite_link) {
+              const icon = pubCh.channel_type === "group" ? "👥" : "📺";
+              replyMarkup = { inline_keyboard: [[{ text: `${icon} ${pubCh.channel_name}`, url: pubCh.invite_link }]] };
+            }
+          }
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
             text: `⏰ مرحباً *${firstName}*\n\nللأسف اشتراكك *منتهي* منذ ${formatDate(sub.expires_at!)}.\n\nتواصل مع المسؤول لتجديد اشتراكك.`,
             parse_mode: "Markdown",
+            ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
           });
         } else {
-          await tg(botToken, "sendMessage", { chat_id: chatId, text: nonSubMessage });
+          // Not a subscriber - show public channel if available
+          let replyMarkup: any = undefined;
+          if (publicChannelId) {
+            const { data: pubCh } = await sb.from("telegram_channels").select("channel_name, invite_link, channel_type").eq("id", publicChannelId).maybeSingle();
+            if (pubCh?.invite_link) {
+              const icon = pubCh.channel_type === "group" ? "👥" : "📺";
+              replyMarkup = { inline_keyboard: [[{ text: `${icon} ${pubCh.channel_name}`, url: pubCh.invite_link }]] };
+            }
+          }
+          await tg(botToken, "sendMessage", { chat_id: chatId, text: nonSubMessage, ...(replyMarkup ? { reply_markup: replyMarkup } : {}) });
         }
       }
       return;
