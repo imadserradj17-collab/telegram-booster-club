@@ -55,6 +55,7 @@ interface BotSettings {
   admin_telegram_id: number | null;
   non_subscriber_message: string;
   public_channel_id: string | null;
+  subscribers_channel_id: string | null;
 }
 
 type TabKey = "overview" | "subscribers" | "expired" | "channels" | "broadcast" | "analytics" | "settings";
