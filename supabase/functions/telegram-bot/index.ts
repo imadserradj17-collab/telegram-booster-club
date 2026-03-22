@@ -14,7 +14,7 @@ const sb = createClient(supabaseUrl, supabaseServiceKey);
 async function getBotSettingsByToken(token: string) {
   const { data } = await sb
     .from("bot_tokens")
-    .select("id, user_id, admin_telegram_id, non_subscriber_message")
+    .select("id, user_id, admin_telegram_id, non_subscriber_message, public_channel_id")
     .eq("token", token)
     .maybeSingle();
   return data || null;
@@ -279,7 +279,7 @@ async function finalizeSubscriber(
   });
 }
 
-async function handleUpdate(update: any, botToken: string, ownerId: string, botTokenId: string, adminTelegramId: number | null, nonSubMessage: string) {
+async function handleUpdate(update: any, botToken: string, ownerId: string, botTokenId: string, adminTelegramId: number | null, nonSubMessage: string, publicChannelId: string | null = null) {
   // ─── CHAT JOIN REQUESTS ───
   if (update.chat_join_request) {
     const req = update.chat_join_request;
@@ -436,13 +436,32 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
             reply_markup: { inline_keyboard: buttons },
           });
         } else if (sub) {
+          // Expired subscriber - show public channel if available
+          let replyMarkup: any = undefined;
+          if (publicChannelId) {
+            const { data: pubCh } = await sb.from("telegram_channels").select("channel_name, invite_link, channel_type").eq("id", publicChannelId).maybeSingle();
+            if (pubCh?.invite_link) {
+              const icon = pubCh.channel_type === "group" ? "👥" : "📺";
+              replyMarkup = { inline_keyboard: [[{ text: `${icon} ${pubCh.channel_name}`, url: pubCh.invite_link }]] };
+            }
+          }
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
             text: `⏰ مرحباً *${firstName}*\n\nللأسف اشتراكك *منتهي* منذ ${formatDate(sub.expires_at!)}.\n\nتواصل مع المسؤول لتجديد اشتراكك.`,
             parse_mode: "Markdown",
+            ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
           });
         } else {
-          await tg(botToken, "sendMessage", { chat_id: chatId, text: nonSubMessage });
+          // Not a subscriber - show public channel if available
+          let replyMarkup: any = undefined;
+          if (publicChannelId) {
+            const { data: pubCh } = await sb.from("telegram_channels").select("channel_name, invite_link, channel_type").eq("id", publicChannelId).maybeSingle();
+            if (pubCh?.invite_link) {
+              const icon = pubCh.channel_type === "group" ? "👥" : "📺";
+              replyMarkup = { inline_keyboard: [[{ text: `${icon} ${pubCh.channel_name}`, url: pubCh.invite_link }]] };
+            }
+          }
+          await tg(botToken, "sendMessage", { chat_id: chatId, text: nonSubMessage, ...(replyMarkup ? { reply_markup: replyMarkup } : {}) });
         }
       }
       return;
@@ -1132,7 +1151,7 @@ Deno.serve(async (req) => {
       }
 
       const update = await req.json();
-      await handleUpdate(update, tokenFromPath, settings.user_id, settings.id, settings.admin_telegram_id, settings.non_subscriber_message);
+      await handleUpdate(update, tokenFromPath, settings.user_id, settings.id, settings.admin_telegram_id, settings.non_subscriber_message, settings.public_channel_id);
       return new Response("ok", { headers: corsHeaders });
     }
 

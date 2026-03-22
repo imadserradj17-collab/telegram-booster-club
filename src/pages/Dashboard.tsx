@@ -54,6 +54,7 @@ interface BotSettings {
   token_updated_at: string;
   admin_telegram_id: number | null;
   non_subscriber_message: string;
+  public_channel_id: string | null;
 }
 
 type TabKey = "overview" | "subscribers" | "expired" | "channels" | "broadcast" | "analytics" | "settings";
@@ -76,6 +77,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const [newToken, setNewToken] = useState("");
   const [adminId, setAdminId] = useState("");
   const [nonSubMessage, setNonSubMessage] = useState("");
+  const [publicChannelId, setPublicChannelId] = useState<string | null>(null);
 
   // Add subscriber dialog
   const [showAddSub, setShowAddSub] = useState(false);
@@ -114,6 +116,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
       setBotSettings(settingsRes.data as BotSettings);
       setAdminId(settingsRes.data.admin_telegram_id?.toString() || "");
       setNonSubMessage(settingsRes.data.non_subscriber_message || "");
+      setPublicChannelId((settingsRes.data as any).public_channel_id || null);
     }
 
     // Fetch channels
@@ -172,7 +175,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     if (!botSettings) return;
     setSavingSettings(true);
     try {
-      const updates: any = { non_subscriber_message: nonSubMessage.trim() };
+      const updates: any = { non_subscriber_message: nonSubMessage.trim(), public_channel_id: publicChannelId || null };
       updates.admin_telegram_id = adminId.trim() ? parseInt(adminId.trim()) : null;
       const { error } = await supabase.from("bot_tokens").update(updates).eq("id", botSettings.id);
       if (error) throw error;
@@ -1020,6 +1023,25 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   </Label>
                   <Textarea placeholder={t("dash.nonSubMsgPlaceholder")} value={nonSubMessage} onChange={(e) => setNonSubMessage(e.target.value)} rows={3}
                     className="bg-secondary/50 border-border/50 text-foreground placeholder:text-muted-foreground resize-none" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-foreground/80 flex items-center gap-2">
+                    <Link className="w-4 h-4" />{t("dash.publicChannel")}
+                  </Label>
+                  <Select value={publicChannelId || "none"} onValueChange={(v) => setPublicChannelId(v === "none" ? null : v)}>
+                    <SelectTrigger className="bg-secondary/50 border-border/50">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">{t("dash.publicChannelNone")}</SelectItem>
+                      {channels.map(ch => (
+                        <SelectItem key={ch.id} value={ch.id}>
+                          {ch.channel_type === "group" ? "👥" : "📺"} {ch.channel_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">{t("dash.publicChannelHint")}</p>
                 </div>
                 <Button onClick={handleSaveSettings} disabled={savingSettings} className="w-full gradient-telegram text-primary-foreground hover:opacity-90">
                   {savingSettings ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : <Save className="w-4 h-4 ml-2" />}
