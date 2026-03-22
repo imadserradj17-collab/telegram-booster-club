@@ -368,6 +368,9 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
   if (update.message) {
     const msg = update.message;
     const chatId = msg.chat.id;
+
+    // Ignore messages from groups/channels - only respond in private chats
+    if (msg.chat.type !== "private") return;
     const text = msg.text || "";
     const fromId = msg.from.id;
     const firstName = msg.from.first_name || "";
