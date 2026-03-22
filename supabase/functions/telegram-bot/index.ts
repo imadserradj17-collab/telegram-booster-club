@@ -296,6 +296,12 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
     const myChannel = channelRes.data;
     if (!myChannel) return;
 
+    // Check if this is the public channel (everyone can join)
+    if (publicChannelId && myChannel.id === publicChannelId) {
+      await tg(botToken, "approveChatJoinRequest", { chat_id: chatId, user_id: telegramUserId });
+      return;
+    }
+
     const sub = subRes.data;
 
     if (sub) {
@@ -306,8 +312,25 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
           tg(botToken, "sendMessage", { chat_id: telegramUserId, text: "⏰ *انتهى اشتراكك!*\n\nتواصل مع المسؤول لتجديد الاشتراك.", parse_mode: "Markdown" }),
         ]);
       } else {
+        // Check if this is the subscribers channel (all active subscribers can join)
+        if (subscribersChannelId && myChannel.id === subscribersChannelId) {
+          await tg(botToken, "approveChatJoinRequest", { chat_id: chatId, user_id: telegramUserId });
+          return;
+        }
+
         const assignedChannelIds = await getSubscriberChannels(sub.id);
-        const hasAccess = assignedChannelIds.length === 0 || assignedChannelIds.includes(myChannel.id);
+        let hasAccess = assignedChannelIds.length === 0 || assignedChannelIds.includes(myChannel.id);
+
+        // If subscriber has all other channels assigned but not this new one, auto-assign and approve
+        if (!hasAccess && assignedChannelIds.length > 0) {
+          const { data: allChannels } = await sb.from("telegram_channels").select("id").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+          const otherChannelIds = (allChannels || []).map((c: any) => c.id).filter((id: string) => id !== myChannel.id);
+          if (otherChannelIds.length > 0 && otherChannelIds.every((id: string) => assignedChannelIds.includes(id))) {
+            // Subscriber has all other channels - auto-assign this new one
+            await sb.from("subscriber_channels").insert({ subscriber_id: sub.id, channel_id: myChannel.id });
+            hasAccess = true;
+          }
+        }
 
         if (!hasAccess) {
           await Promise.all([
@@ -329,7 +352,6 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
         ];
 
         if (Object.keys(updateData).length > 0) {
-          // Photo fetch is slow, do it fire-and-forget
           getUserPhotoUrl(botToken, telegramUserId).then(photoUrl => {
             if (photoUrl) updateData.photo_url = photoUrl;
             sb.from("telegram_subscribers").update(updateData).eq("owner_id", ownerId).eq("bot_token_id", botTokenId).eq("telegram_user_id", telegramUserId);
