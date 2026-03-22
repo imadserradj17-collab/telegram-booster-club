@@ -1045,6 +1045,25 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   </Select>
                   <p className="text-xs text-muted-foreground">{t("dash.publicChannelHint")}</p>
                 </div>
+                <div className="space-y-2">
+                  <Label className="text-foreground/80 flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4" />{t("dash.subscribersChannel")}
+                  </Label>
+                  <Select value={subscribersChannelId || "none"} onValueChange={(v) => setSubscribersChannelId(v === "none" ? null : v)}>
+                    <SelectTrigger className="bg-secondary/50 border-border/50">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">{t("dash.subscribersChannelNone")}</SelectItem>
+                      {channels.map(ch => (
+                        <SelectItem key={ch.id} value={ch.id}>
+                          {ch.channel_type === "group" ? "👥" : "📺"} {ch.channel_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">{t("dash.subscribersChannelHint")}</p>
+                </div>
                 <Button onClick={handleSaveSettings} disabled={savingSettings} className="w-full gradient-telegram text-primary-foreground hover:opacity-90">
                   {savingSettings ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : <Save className="w-4 h-4 ml-2" />}
                   {t("dash.saveSettings")}
