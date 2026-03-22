@@ -1094,6 +1094,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                       </Button>
                     </div>
                   )}
+                </div>
                 <div className="space-y-2">
                   <Label className="text-foreground/80 flex items-center gap-2">
                     <MessageSquare className="w-4 h-4" />{t("dash.subscribersChannel")}
