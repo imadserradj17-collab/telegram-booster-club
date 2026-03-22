@@ -946,12 +946,14 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
         await clearState(chatId, botToken);
         const { data: channels } = await sb.from("telegram_channels").select("*").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
         if (!channels || channels.length === 0) {
-          await tg(botToken, "sendMessage", { chat_id: chatId, text: "📺 لا توجد قنوات.", reply_markup: adminKeyboard() });
+          await tg(botToken, "sendMessage", { chat_id: chatId, text: "📺 لا توجد قنوات أو مجموعات.", reply_markup: adminKeyboard() });
         } else {
-          let msgText = `📺 *القنوات (${channels.length}):*\n\n`;
+          let msgText = `📺 *القنوات والمجموعات (${channels.length}):*\n\n`;
           const buttons = [];
           for (const ch of channels) {
-            msgText += `• *${ch.channel_name}*\n  🆔 \`${ch.channel_id}\`${ch.invite_link ? " — 🔗 رابط متاح" : ""}\n`;
+            const typeEmoji = ch.channel_type === "group" ? "👥" : "📺";
+            const typeLabel = ch.channel_type === "group" ? "مجموعة" : "قناة";
+            msgText += `${typeEmoji} *${ch.channel_name}* (${typeLabel})\n  🆔 \`${ch.channel_id}\`${ch.invite_link ? " — 🔗 رابط متاح" : ""}\n`;
             buttons.push([{ text: `🗑 حذف ${ch.channel_name}`, callback_data: `del_ch_${ch.channel_id}` }]);
           }
           buttons.push([{ text: "🔙 رجوع", callback_data: "back" }]);
