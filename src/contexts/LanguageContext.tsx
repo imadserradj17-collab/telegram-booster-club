@@ -154,6 +154,7 @@ const translations: Record<string, Record<Lang, string>> = {
   "subs.kickAll": { ar: "طرد من كل القنوات", en: "Kick from all channels" },
   "subs.kickConfirm": { ar: "هل تريد طرد هذا المشترك من جميع القنوات المخصصة؟", en: "Kick this subscriber from all assigned channels?" },
   "subs.deleteConfirm": { ar: "هل تريد حذف هذا المشترك وطرده من جميع القنوات والمجموعات؟", en: "Delete this subscriber and kick from all channels/groups?" },
+  "subs.kickBeforeDeleteFailed": { ar: "فشل طرد المشترك من القنوات/المجموعات، لذلك تم إيقاف الحذف.", en: "Failed to kick subscriber from channels/groups, so deletion was stopped." },
   "subs.kicked": { ar: "تم الطرد", en: "Kicked" },
   "subs.searchChannels": { ar: "بحث عن قناة...", en: "Search channels..." },
 

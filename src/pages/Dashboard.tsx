@@ -193,10 +193,18 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     if (!confirm(t("subs.deleteConfirm"))) return;
     // Kick from all channels first, then delete
     try {
-      await supabase.functions.invoke("manage-bot", {
+      const { data, error } = await supabase.functions.invoke("manage-bot", {
         body: { action: "kick_from_channels", subscriber_id: id },
       });
-    } catch {}
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      if ((data?.kicked ?? 0) === 0 && (data?.failed ?? 0) > 0) {
+        throw new Error(t("subs.kickBeforeDeleteFailed"));
+      }
+    } catch (error: any) {
+      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+      return;
+    }
     const { error } = await supabase.from("telegram_subscribers").delete().eq("id", id);
     if (!error) {
       setSubscribers((prev) => prev.filter((s) => s.id !== id));
