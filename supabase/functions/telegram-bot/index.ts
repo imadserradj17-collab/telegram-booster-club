@@ -141,8 +141,8 @@ function adminKeyboard() {
         { text: "📋 المشتركين", callback_data: "list_subscribers" },
       ],
       [
-        { text: "➕ إضافة قناة", callback_data: "add_channel" },
-        { text: "📺 القنوات", callback_data: "manage_channels" },
+        { text: "➕ إضافة قناة/مجموعة", callback_data: "add_channel" },
+        { text: "📺 القنوات والمجموعات", callback_data: "manage_channels" },
       ],
       [
         { text: "📢 رسالة جماعية", callback_data: "broadcast" },
