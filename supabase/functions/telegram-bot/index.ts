@@ -1240,7 +1240,7 @@ Deno.serve(async (req) => {
 
       if (action === "setup_webhook") {
         const webhookUrl = `${supabaseUrl}/functions/v1/telegram-bot/${bot_token}`;
-        const result = await tg(bot_token, "setWebhook", { url: webhookUrl, allowed_updates: ["message", "callback_query", "chat_join_request"] });
+        const result = await tg(bot_token, "setWebhook", { url: webhookUrl, allowed_updates: ["message", "callback_query", "chat_join_request", "chat_member"] });
         return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
