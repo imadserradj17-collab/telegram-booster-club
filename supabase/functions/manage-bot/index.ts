@@ -239,26 +239,15 @@ Deno.serve(async (req) => {
           return new Response(JSON.stringify({ error: "Subscriber not found" }), { status: 404, headers: corsHeaders });
         }
 
-        // Get assigned channels
-        const { data: subChans } = await sb.from("subscriber_channels")
-          .select("channel_id, telegram_channels(channel_id)")
-          .eq("subscriber_id", subscriber_id);
-
-        // Also get ALL owner channels to kick from any the subscriber might be in
+        // Always kick from ALL owner channels/groups for this bot
         const { data: allChannels } = await sb.from("telegram_channels")
-          .select("id, channel_id")
+          .select("channel_id")
           .eq("owner_id", user.id)
           .eq("bot_token_id", sub.bot_token_id || botData.id);
 
-        // Build a set of all telegram channel_ids to kick from
         const kickSet = new Set<number>();
-        for (const sc of (subChans || [])) {
-          const chId = (sc as any).telegram_channels?.channel_id;
-          if (chId) kickSet.add(chId);
-        }
-        // If no specific channels assigned, kick from ALL channels
-        if (kickSet.size === 0 && allChannels) {
-          for (const ch of allChannels) kickSet.add(ch.channel_id);
+        for (const ch of (allChannels || [])) {
+          if (ch.channel_id) kickSet.add(ch.channel_id);
         }
 
         let kicked = 0, failedKick = 0;
