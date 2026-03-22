@@ -251,14 +251,18 @@ Deno.serve(async (req) => {
         }
 
         let kicked = 0, failedKick = 0;
+        console.log(`Kicking user ${sub.telegram_user_id} from ${kickSet.size} channels: ${[...kickSet].join(", ")}`);
         for (const chId of kickSet) {
           try {
+            console.log(`Banning user ${sub.telegram_user_id} from channel ${chId}...`);
             const banRes = await tg(botToken, "banChatMember", { chat_id: chId, user_id: sub.telegram_user_id });
+            console.log(`Ban result for channel ${chId}:`, JSON.stringify(banRes));
             if (banRes.ok) {
               kicked++;
-              await tg(botToken, "unbanChatMember", { chat_id: chId, user_id: sub.telegram_user_id, only_if_banned: true });
+              const unbanRes = await tg(botToken, "unbanChatMember", { chat_id: chId, user_id: sub.telegram_user_id, only_if_banned: true });
+              console.log(`Unban result for channel ${chId}:`, JSON.stringify(unbanRes));
             } else { failedKick++; }
-          } catch { failedKick++; }
+          } catch (e: any) { console.error(`Kick error for channel ${chId}:`, e.message); failedKick++; }
         }
 
         return new Response(JSON.stringify({ ok: true, kicked, failed: failedKick }), { headers: corsHeaders });

@@ -280,6 +280,40 @@ async function finalizeSubscriber(
 }
 
 async function handleUpdate(update: any, botToken: string, ownerId: string, botTokenId: string, adminTelegramId: number | null, nonSubMessage: string, publicChannelId: string | null = null, subscribersChannelId: string | null = null) {
+  // ─── CHAT MEMBER UPDATES (track joins to public channel) ───
+  if (update.chat_member) {
+    const cm = update.chat_member;
+    const newStatus = cm.new_chat_member?.status;
+    const oldStatus = cm.old_chat_member?.status;
+    const chatId = cm.chat.id;
+    const userId = cm.new_chat_member?.user?.id;
+
+    // Track when someone joins the public channel
+    if (publicChannelId && userId && (newStatus === "member" || newStatus === "administrator") && (oldStatus === "left" || oldStatus === "kicked" || oldStatus === "restricted")) {
+      const { data: myChannel } = await sb.from("telegram_channels")
+        .select("id")
+        .eq("owner_id", ownerId)
+        .eq("bot_token_id", botTokenId)
+        .eq("channel_id", chatId)
+        .maybeSingle();
+
+      if (myChannel && myChannel.id === publicChannelId) {
+        const user = cm.new_chat_member.user;
+        await sb.from("public_channel_members").upsert({
+          owner_id: ownerId,
+          bot_token_id: botTokenId,
+          channel_id: myChannel.id,
+          telegram_user_id: userId,
+          telegram_username: user.username || null,
+          first_name: user.first_name || null,
+          last_name: user.last_name || null,
+        }, { onConflict: "owner_id,channel_id,telegram_user_id" });
+        console.log(`Tracked public channel join: user ${userId} in channel ${chatId}`);
+      }
+    }
+    return;
+  }
+
   // ─── CHAT JOIN REQUESTS ───
   if (update.chat_join_request) {
     const req = update.chat_join_request;
@@ -1206,7 +1240,7 @@ Deno.serve(async (req) => {
 
       if (action === "setup_webhook") {
         const webhookUrl = `${supabaseUrl}/functions/v1/telegram-bot/${bot_token}`;
-        const result = await tg(bot_token, "setWebhook", { url: webhookUrl, allowed_updates: ["message", "callback_query", "chat_join_request"] });
+        const result = await tg(bot_token, "setWebhook", { url: webhookUrl, allowed_updates: ["message", "callback_query", "chat_join_request", "chat_member"] });
         return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
