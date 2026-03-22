@@ -48,6 +48,7 @@ export type Database = {
           id: string
           non_subscriber_message: string
           public_channel_id: string | null
+          subscribers_channel_id: string | null
           token: string
           token_updated_at: string
           user_id: string
@@ -58,6 +59,7 @@ export type Database = {
           id?: string
           non_subscriber_message?: string
           public_channel_id?: string | null
+          subscribers_channel_id?: string | null
           token: string
           token_updated_at?: string
           user_id: string
@@ -68,6 +70,7 @@ export type Database = {
           id?: string
           non_subscriber_message?: string
           public_channel_id?: string | null
+          subscribers_channel_id?: string | null
           token?: string
           token_updated_at?: string
           user_id?: string
@@ -76,6 +79,13 @@ export type Database = {
           {
             foreignKeyName: "bot_tokens_public_channel_id_fkey"
             columns: ["public_channel_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bot_tokens_subscribers_channel_id_fkey"
+            columns: ["subscribers_channel_id"]
             isOneToOne: false
             referencedRelation: "telegram_channels"
             referencedColumns: ["id"]
