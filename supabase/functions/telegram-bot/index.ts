@@ -214,7 +214,7 @@ async function finalizeSubscriber(
   const enrichPromise = enrichUserInfo(botToken, telegramUserId, { fn, ln, username: telegramUsername });
   
   const { data: upsertedSub, error } = await sb.from("telegram_subscribers").upsert(
-    { owner_id: ownerId, bot_token_id: botTokenId, telegram_user_id: telegramUserId, telegram_username: telegramUsername, first_name: fn || null, last_name: ln || null, photo_url: null, subscription_days: days, expires_at: expiresAt, is_permanent: isPermanent },
+    { owner_id: ownerId, bot_token_id: botTokenId, telegram_user_id: telegramUserId, telegram_username: telegramUsername, first_name: fn || null, last_name: ln || null, photo_url: null, subscription_days: days, expires_at: expiresAt, is_permanent: isPermanent, expiry_notified: false },
     { onConflict: "owner_id,telegram_user_id" }
   ).select("id").single();
 
