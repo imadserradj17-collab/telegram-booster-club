@@ -658,6 +658,10 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
             tg(botToken, "getMe", {}),
           ]);
           const channelName = chatInfo.ok ? chatInfo.result.title || `قناة ${channelId}` : `قناة ${channelId}`;
+          // Auto-detect type: group/supergroup vs channel
+          const chatType = chatInfo.ok ? chatInfo.result.type : "channel";
+          const channelType = (chatType === "group" || chatType === "supergroup") ? "group" : "channel";
+          const typeEmoji = channelType === "group" ? "👥" : "📺";
 
           if (chatInfo.ok) {
             const memberInfo = await tg(botToken, "getChatMember", { chat_id: channelId, user_id: botMe.result.id });
@@ -674,7 +678,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
           }
 
           const { data: newChannel, error } = await sb.from("telegram_channels").upsert(
-            { owner_id: ownerId, bot_token_id: botTokenId, channel_id: channelId, channel_name: channelName, invite_link: linkRes.result.invite_link },
+            { owner_id: ownerId, bot_token_id: botTokenId, channel_id: channelId, channel_name: channelName, invite_link: linkRes.result.invite_link, channel_type: channelType },
             { onConflict: "owner_id,channel_id" }
           ).select("id").single();
 
