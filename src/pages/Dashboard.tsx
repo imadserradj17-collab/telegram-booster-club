@@ -118,6 +118,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
       setAdminId(settingsRes.data.admin_telegram_id?.toString() || "");
       setNonSubMessage(settingsRes.data.non_subscriber_message || "");
       setPublicChannelId((settingsRes.data as any).public_channel_id || null);
+      setSubscribersChannelId((settingsRes.data as any).subscribers_channel_id || null);
     }
 
     // Fetch channels
