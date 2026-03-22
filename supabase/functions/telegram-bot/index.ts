@@ -964,7 +964,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
 
       case "add_channel": {
         await setState(chatId, botToken, "await_channel");
-        await tg(botToken, "sendMessage", { chat_id: chatId, text: "📺 *إضافة قناة*\n\nأرسل بإحدى الطرق:\n\n1️⃣ معرف القناة (رقم سالب)\n2️⃣ @username القناة\n3️⃣ حوّل رسالة من القناة\n\n⚠️ البوت يجب أن يكون مسؤولاً!\n\n_أرسل /cancel للإلغاء_", parse_mode: "Markdown" });
+        await tg(botToken, "sendMessage", { chat_id: chatId, text: "📺 *إضافة قناة أو مجموعة*\n\nأرسل بإحدى الطرق:\n\n1️⃣ معرف القناة/المجموعة (رقم سالب)\n2️⃣ @username\n3️⃣ حوّل رسالة من القناة/المجموعة\n\n⚠️ البوت يجب أن يكون مسؤولاً!\n\n_أرسل /cancel للإلغاء_", parse_mode: "Markdown" });
         break;
       }
 
