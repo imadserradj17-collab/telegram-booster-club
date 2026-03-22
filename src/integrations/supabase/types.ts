@@ -210,6 +210,7 @@ export type Database = {
           bot_token_id: string | null
           created_at: string
           expires_at: string | null
+          expiry_notified: boolean
           first_name: string | null
           id: string
           is_permanent: boolean
@@ -224,6 +225,7 @@ export type Database = {
           bot_token_id?: string | null
           created_at?: string
           expires_at?: string | null
+          expiry_notified?: boolean
           first_name?: string | null
           id?: string
           is_permanent?: boolean
@@ -238,6 +240,7 @@ export type Database = {
           bot_token_id?: string | null
           created_at?: string
           expires_at?: string | null
+          expiry_notified?: boolean
           first_name?: string | null
           id?: string
           is_permanent?: boolean

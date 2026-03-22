@@ -214,7 +214,7 @@ async function finalizeSubscriber(
   const enrichPromise = enrichUserInfo(botToken, telegramUserId, { fn, ln, username: telegramUsername });
   
   const { data: upsertedSub, error } = await sb.from("telegram_subscribers").upsert(
-    { owner_id: ownerId, bot_token_id: botTokenId, telegram_user_id: telegramUserId, telegram_username: telegramUsername, first_name: fn || null, last_name: ln || null, photo_url: null, subscription_days: days, expires_at: expiresAt, is_permanent: isPermanent },
+    { owner_id: ownerId, bot_token_id: botTokenId, telegram_user_id: telegramUserId, telegram_username: telegramUsername, first_name: fn || null, last_name: ln || null, photo_url: null, subscription_days: days, expires_at: expiresAt, is_permanent: isPermanent, expiry_notified: false },
     { onConflict: "owner_id,telegram_user_id" }
   ).select("id").single();
 
@@ -1147,7 +1147,7 @@ Deno.serve(async (req) => {
             const now = new Date();
             // Parallel: fetch expired + soon-expiring
             const [expiredRes, soonRes] = await Promise.all([
-              sb.from("telegram_subscribers").select("*").eq("owner_id", tokenRow.user_id).eq("bot_token_id", tokenRow.id).eq("is_permanent", false).lt("expires_at", now.toISOString()),
+              sb.from("telegram_subscribers").select("*").eq("owner_id", tokenRow.user_id).eq("bot_token_id", tokenRow.id).eq("is_permanent", false).eq("expiry_notified", false).lt("expires_at", now.toISOString()),
               sb.from("telegram_subscribers").select("*").eq("owner_id", tokenRow.user_id).eq("bot_token_id", tokenRow.id).eq("is_permanent", false).gt("expires_at", now.toISOString()).lt("expires_at", new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString()),
             ]);
 
@@ -1175,6 +1175,8 @@ Deno.serve(async (req) => {
                 }
                 await kickFromChannels(tokenRow.token, sub.telegram_user_id, kickChannelIds);
                 await tg(tokenRow.token, "sendMessage", { chat_id: sub.telegram_user_id, text: "⚠️ *انتهى اشتراكك*\n\nتم إزالتك من القنوات.", parse_mode: "Markdown" });
+                // Mark as notified so we don't send again
+                await sb.from("telegram_subscribers").update({ expiry_notified: true }).eq("id", sub.id);
               }));
 
               if (tokenRow.admin_telegram_id) {
