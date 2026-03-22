@@ -234,19 +234,35 @@ Deno.serve(async (req) => {
           return new Response(JSON.stringify({ error: "subscriber_id required" }), { status: 400, headers: corsHeaders });
         }
 
-        const { data: sub } = await sb.from("telegram_subscribers").select("id, telegram_user_id").eq("id", subscriber_id).eq("owner_id", user.id).single();
+        const { data: sub } = await sb.from("telegram_subscribers").select("id, telegram_user_id, bot_token_id").eq("id", subscriber_id).eq("owner_id", user.id).single();
         if (!sub) {
           return new Response(JSON.stringify({ error: "Subscriber not found" }), { status: 404, headers: corsHeaders });
         }
 
+        // Get assigned channels
         const { data: subChans } = await sb.from("subscriber_channels")
           .select("channel_id, telegram_channels(channel_id)")
           .eq("subscriber_id", subscriber_id);
 
-        let kicked = 0, failedKick = 0;
+        // Also get ALL owner channels to kick from any the subscriber might be in
+        const { data: allChannels } = await sb.from("telegram_channels")
+          .select("id, channel_id")
+          .eq("owner_id", user.id)
+          .eq("bot_token_id", sub.bot_token_id || botData.id);
+
+        // Build a set of all telegram channel_ids to kick from
+        const kickSet = new Set<number>();
         for (const sc of (subChans || [])) {
           const chId = (sc as any).telegram_channels?.channel_id;
-          if (!chId) continue;
+          if (chId) kickSet.add(chId);
+        }
+        // If no specific channels assigned, kick from ALL channels
+        if (kickSet.size === 0 && allChannels) {
+          for (const ch of allChannels) kickSet.add(ch.channel_id);
+        }
+
+        let kicked = 0, failedKick = 0;
+        for (const chId of kickSet) {
           try {
             const banRes = await tg(botToken, "banChatMember", { chat_id: chId, user_id: sub.telegram_user_id });
             if (banRes.ok) {
