@@ -754,8 +754,15 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                           <TableRow key={ch.id} className="border-border/30 hover:bg-secondary/30">
                             <TableCell>
                               <div className="flex items-center gap-2">
-                                <Tv className="w-4 h-4 text-primary/60 flex-shrink-0" />
+                                {ch.channel_type === "group" ? (
+                                  <Users className="w-4 h-4 text-success flex-shrink-0" />
+                                ) : (
+                                  <Tv className="w-4 h-4 text-primary/60 flex-shrink-0" />
+                                )}
                                 <span className="font-medium text-foreground text-sm">{ch.channel_name}</span>
+                                <Badge variant="outline" className="text-[10px]">
+                                  {ch.channel_type === "group" ? t("channels.group") : t("channels.channel")}
+                                </Badge>
                               </div>
                             </TableCell>
                             <TableCell><span className="font-mono text-xs text-muted-foreground" dir="ltr">{ch.channel_id}</span></TableCell>
