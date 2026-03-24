@@ -704,6 +704,46 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   </div>
                 </div>
               )}
+              {/* Public Channel Members - Kick All */}
+              {publicChannelId && publicChannelId !== "none" && (
+                <div className="glass-card p-4 md:p-5 border-destructive/20">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-destructive/10 flex items-center justify-center flex-shrink-0">
+                        <Users className="w-5 h-5 text-destructive" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-semibold text-foreground">{t("dash.publicMembers")}</h3>
+                        <p className="text-xs text-muted-foreground">{t("dash.publicChannelHint")}</p>
+                      </div>
+                    </div>
+                    <div className="text-2xl font-bold text-foreground">{publicMembersCount}</div>
+                  </div>
+                  <Button
+                    variant="destructive"
+                    className="w-full mt-3"
+                    disabled={kickingPublic || publicMembersCount === 0}
+                    onClick={async () => {
+                      if (!confirm(t("dash.kickAllPublicConfirm"))) return;
+                      setKickingPublic(true);
+                      try {
+                        const { data, error } = await supabase.functions.invoke("manage-bot", {
+                          body: { action: "kick_public_members" },
+                        });
+                        if (error) throw error;
+                        if (data?.error) throw new Error(data.error);
+                        toast({ title: `${t("dash.kickAllPublicDone")} - ${data.kicked} ✅${data.failed > 0 ? ` / ${data.failed} ❌` : ""}` });
+                        setPublicMembersCount(0);
+                      } catch (error: any) {
+                        toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+                      } finally { setKickingPublic(false); }
+                    }}
+                  >
+                    {kickingPublic ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                    {t("dash.kickAllPublic")}
+                  </Button>
+                </div>
+              )}
               <div>
                 <h3 className="text-sm font-semibold text-foreground mb-3">{t("dash.latestSubs")}</h3>
                 <SubList list={subscribers.slice(0, 5)} />
