@@ -1065,13 +1065,16 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   </Select>
                   <p className="text-xs text-muted-foreground">{t("dash.publicChannelHint")}</p>
                   {publicChannelId && publicChannelId !== "none" && (
-                    <div className="flex items-center justify-between bg-secondary/30 rounded-lg p-3 mt-2">
-                      <div className="text-sm text-foreground">
-                        {t("dash.publicMembers")}: <strong>{publicMembersCount}</strong>
+                    <div className="space-y-2 mt-2">
+                      <div className="flex items-center justify-between bg-secondary/30 rounded-lg p-3">
+                        <div className="text-sm text-foreground">
+                          {t("dash.publicMembers")}: <strong>{publicMembersCount}</strong>
+                        </div>
                       </div>
                       <Button
                         size="sm"
                         variant="destructive"
+                        className="w-full"
                         disabled={kickingPublic || publicMembersCount === 0}
                         onClick={async () => {
                           if (!confirm(t("dash.kickAllPublicConfirm"))) return;
@@ -1089,7 +1092,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                           } finally { setKickingPublic(false); }
                         }}
                       >
-                        {kickingPublic ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                        {kickingPublic ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldOff className="w-4 h-4" />}
                         {t("dash.kickAllPublic")}
                       </Button>
                     </div>
