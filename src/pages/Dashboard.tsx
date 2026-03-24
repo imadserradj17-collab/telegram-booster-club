@@ -128,16 +128,16 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     const channelsRes = await supabase.from("telegram_channels").select("*").order("created_at", { ascending: false });
     if (channelsRes.data) setChannels(channelsRes.data);
 
-    // Fetch subscriber-channel mappings + bot users count
+    // Fetch subscriber-channel mappings + bot users count + public members count
     try {
       const [scRes, buRes, pmRes] = await Promise.all([
         supabase.functions.invoke("manage-bot", { body: { action: "get_subscriber_channels" } }),
         supabase.functions.invoke("manage-bot", { body: { action: "get_bot_users" } }),
-        supabase.functions.invoke("manage-bot", { body: { action: "get_public_members_count" } }),
+        supabase.from("public_channel_members").select("id", { count: "exact", head: true }),
       ]);
       if (scRes.data?.subscriber_channels) setSubscriberChannels(scRes.data.subscriber_channels);
       if (buRes.data?.count !== undefined) setBotUsersCount(buRes.data.count);
-      if (pmRes.data?.count !== undefined) setPublicMembersCount(pmRes.data.count);
+      setPublicMembersCount(pmRes.count ?? 0);
     } catch {}
 
     setLoading(false);
