@@ -1105,37 +1105,9 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   </Select>
                   <p className="text-xs text-muted-foreground">{t("dash.publicChannelHint")}</p>
                   {publicChannelId && publicChannelId !== "none" && (
-                    <div className="space-y-2 mt-2">
-                      <div className="flex items-center justify-between bg-secondary/30 rounded-lg p-3">
-                        <div className="text-sm text-foreground">
-                          {t("dash.publicMembers")}: <strong>{publicMembersCount}</strong>
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        className="w-full"
-                        disabled={kickingPublic || publicMembersCount === 0}
-                        onClick={async () => {
-                          if (!confirm(t("dash.kickAllPublicConfirm"))) return;
-                          setKickingPublic(true);
-                          try {
-                            const { data, error } = await supabase.functions.invoke("manage-bot", {
-                              body: { action: "kick_public_members" },
-                            });
-                            if (error) throw error;
-                            if (data?.error) throw new Error(data.error);
-                            toast({ title: `${t("dash.kickAllPublicDone")} - ${data.kicked} ✅${data.failed > 0 ? ` / ${data.failed} ❌` : ""}` });
-                            setPublicMembersCount(0);
-                          } catch (error: any) {
-                            toast({ title: t("common.error"), description: error.message, variant: "destructive" });
-                          } finally { setKickingPublic(false); }
-                        }}
-                      >
-                        {kickingPublic ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                        {t("dash.kickAllPublic")}
-                      </Button>
-                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {t("dash.publicMembers")}: <strong>{publicMembersCount}</strong> — {lang === "ar" ? "يمكنك طردهم من لوحة التحكم الرئيسية" : "You can kick them from the overview tab"}
+                    </p>
                   )}
                 </div>
                 <div className="space-y-2">
