@@ -1092,7 +1092,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                           } finally { setKickingPublic(false); }
                         }}
                       >
-                        {kickingPublic ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldOff className="w-4 h-4" />}
+                        {kickingPublic ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                         {t("dash.kickAllPublic")}
                       </Button>
                     </div>
