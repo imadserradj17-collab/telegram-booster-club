@@ -289,6 +289,54 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ ok: true, count: count || 0 }), { headers: corsHeaders });
       }
 
+      // ── KICK ALL EXPIRED SUBSCRIBERS FROM ALL CHANNELS ──
+      case "kick_expired_from_channels": {
+        // Get all expired subscribers
+        const { data: expiredSubs } = await sb.from("telegram_subscribers")
+          .select("id, telegram_user_id")
+          .eq("owner_id", user.id)
+          .eq("bot_token_id", botTokenId)
+          .eq("is_permanent", false)
+          .not("expires_at", "is", null);
+
+        const nowDate = new Date();
+        const expired = (expiredSubs || []).filter((s: any) => new Date(s.expires_at) < nowDate);
+
+        if (expired.length === 0) {
+          return new Response(JSON.stringify({ ok: true, kicked: 0, failed: 0, total: 0 }), { headers: corsHeaders });
+        }
+
+        // Get all channels for this owner/bot
+        const { data: allChs } = await sb.from("telegram_channels")
+          .select("channel_id")
+          .eq("owner_id", user.id)
+          .eq("bot_token_id", botTokenId);
+
+        const chIds = (allChs || []).map((c: any) => c.channel_id).filter(Boolean);
+        if (chIds.length === 0) {
+          return new Response(JSON.stringify({ ok: true, kicked: 0, failed: 0, total: expired.length, message: "No channels" }), { headers: corsHeaders });
+        }
+
+        let kicked = 0, failedKick = 0;
+        const BATCH = 5;
+        for (let i = 0; i < expired.length; i += BATCH) {
+          const batch = expired.slice(i, i + BATCH);
+          await Promise.allSettled(batch.map(async (sub: any) => {
+            for (const chId of chIds) {
+              try {
+                const banRes = await tg(botToken, "banChatMember", { chat_id: chId, user_id: sub.telegram_user_id });
+                if (banRes.ok) {
+                  kicked++;
+                  await tg(botToken, "unbanChatMember", { chat_id: chId, user_id: sub.telegram_user_id, only_if_banned: true });
+                } else { failedKick++; }
+              } catch { failedKick++; }
+            }
+          }));
+        }
+
+        return new Response(JSON.stringify({ ok: true, kicked, failed: failedKick, total: expired.length }), { headers: corsHeaders });
+      }
+
       // ── KICK ALL PUBLIC CHANNEL MEMBERS ──
       case "kick_public_members": {
         // Get the public channel setting

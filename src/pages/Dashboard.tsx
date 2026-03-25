@@ -104,6 +104,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const [channelSearch, setChannelSearch] = useState("");
   const [publicMembersCount, setPublicMembersCount] = useState(0);
   const [kickingPublic, setKickingPublic] = useState(false);
+  const [kickingExpired, setKickingExpired] = useState(false);
 
   useEffect(() => { fetchData(); }, []);
 
