@@ -105,6 +105,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const [publicMembersCount, setPublicMembersCount] = useState(0);
   const [kickingPublic, setKickingPublic] = useState(false);
   const [kickingExpired, setKickingExpired] = useState(false);
+  const [unbanningAll, setUnbanningAll] = useState(false);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -783,6 +784,42 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   </Button>
                 </div>
               )}
+              {/* Unban All from All Channels */}
+              <div className="glass-card p-4 md:p-5 border-green-500/20">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center flex-shrink-0">
+                      <UserPlus className="w-5 h-5 text-green-500" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground">{t("dash.unbanAll")}</h3>
+                      <p className="text-xs text-muted-foreground">{t("dash.unbanAllConfirm").split("؟")[0]}</p>
+                    </div>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  className="w-full mt-3 border-green-500/30 text-green-500 hover:bg-green-500/10 hover:text-green-400"
+                  disabled={unbanningAll}
+                  onClick={async () => {
+                    if (!confirm(t("dash.unbanAllConfirm"))) return;
+                    setUnbanningAll(true);
+                    try {
+                      const { data, error } = await supabase.functions.invoke("manage-bot", {
+                        body: { action: "unban_all_from_channels" },
+                      });
+                      if (error) throw error;
+                      if (data?.error) throw new Error(data.error);
+                      toast({ title: `${t("dash.unbanAllDone")} - ${data.unbanned} ✅${data.failed > 0 ? ` / ${data.failed} ❌` : ""}` });
+                    } catch (error: any) {
+                      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+                    } finally { setUnbanningAll(false); }
+                  }}
+                >
+                  {unbanningAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                  {t("dash.unbanAll")}
+                </Button>
+              </div>
               <div>
                 <h3 className="text-sm font-semibold text-foreground mb-3">{t("dash.latestSubs")}</h3>
                 <SubList list={subscribers.slice(0, 5)} />

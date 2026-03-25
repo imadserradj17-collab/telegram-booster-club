@@ -337,6 +337,53 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ ok: true, kicked, failed: failedKick, total: expired.length }), { headers: corsHeaders });
       }
 
+      // ── UNBAN ALL FROM ALL CHANNELS ──
+      case "unban_all_from_channels": {
+        // Get all channels for this owner/bot
+        const { data: allChsUnban } = await sb.from("telegram_channels")
+          .select("channel_id")
+          .eq("owner_id", user.id)
+          .eq("bot_token_id", botTokenId);
+
+        const chIdsUnban = (allChsUnban || []).map((c: any) => c.channel_id).filter(Boolean);
+        if (chIdsUnban.length === 0) {
+          return new Response(JSON.stringify({ ok: true, unbanned: 0, failed: 0, message: "No channels" }), { headers: corsHeaders });
+        }
+
+        // Collect all known user IDs: subscribers + bot_users + public_channel_members
+        const [subsU, buU, pcmU] = await Promise.all([
+          sb.from("telegram_subscribers").select("telegram_user_id").eq("owner_id", user.id).eq("bot_token_id", botTokenId),
+          sb.from("bot_users").select("telegram_user_id").eq("owner_id", user.id).eq("bot_token_id", botTokenId),
+          sb.from("public_channel_members").select("telegram_user_id").eq("owner_id", user.id).eq("bot_token_id", botTokenId),
+        ]);
+
+        const allUserIds = new Set<number>();
+        for (const s of (subsU.data || [])) allUserIds.add(s.telegram_user_id);
+        for (const b of (buU.data || [])) allUserIds.add(b.telegram_user_id);
+        for (const p of (pcmU.data || [])) allUserIds.add(p.telegram_user_id);
+
+        if (allUserIds.size === 0) {
+          return new Response(JSON.stringify({ ok: true, unbanned: 0, failed: 0, total: 0 }), { headers: corsHeaders });
+        }
+
+        let unbanned = 0, failedUnban = 0;
+        const BATCH_SIZE = 5;
+        const userArr = [...allUserIds];
+        for (let i = 0; i < userArr.length; i += BATCH_SIZE) {
+          const batch = userArr.slice(i, i + BATCH_SIZE);
+          await Promise.allSettled(batch.map(async (uid) => {
+            for (const chId of chIdsUnban) {
+              try {
+                const res = await tg(botToken, "unbanChatMember", { chat_id: chId, user_id: uid, only_if_banned: true });
+                if (res.ok) unbanned++; else failedUnban++;
+              } catch { failedUnban++; }
+            }
+          }));
+        }
+
+        return new Response(JSON.stringify({ ok: true, unbanned, failed: failedUnban, total: allUserIds.size }), { headers: corsHeaders });
+      }
+
       // ── KICK ALL PUBLIC CHANNEL MEMBERS ──
       case "kick_public_members": {
         // Get the public channel setting
