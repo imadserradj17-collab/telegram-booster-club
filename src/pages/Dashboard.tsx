@@ -745,6 +745,44 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   </Button>
                 </div>
               )}
+              {/* Kick Expired from All Channels */}
+              {expiredSubs.length > 0 && (
+                <div className="glass-card p-4 md:p-5 border-yellow-500/20">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-yellow-500/10 flex items-center justify-center flex-shrink-0">
+                        <Shield className="w-5 h-5 text-yellow-500" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-semibold text-foreground">{t("dash.kickExpiredFromChannels")}</h3>
+                        <p className="text-xs text-muted-foreground">{expiredSubs.length} {t("dash.expiredLabel")}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    className="w-full mt-3 border-yellow-500/30 text-yellow-500 hover:bg-yellow-500/10 hover:text-yellow-400"
+                    disabled={kickingExpired}
+                    onClick={async () => {
+                      if (!confirm(t("dash.kickExpiredConfirm"))) return;
+                      setKickingExpired(true);
+                      try {
+                        const { data, error } = await supabase.functions.invoke("manage-bot", {
+                          body: { action: "kick_expired_from_channels" },
+                        });
+                        if (error) throw error;
+                        if (data?.error) throw new Error(data.error);
+                        toast({ title: `${t("dash.kickExpiredDone")} - ${data.kicked} ✅${data.failed > 0 ? ` / ${data.failed} ❌` : ""}` });
+                      } catch (error: any) {
+                        toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+                      } finally { setKickingExpired(false); }
+                    }}
+                  >
+                    {kickingExpired ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
+                    {t("dash.kickExpiredFromChannels")}
+                  </Button>
+                </div>
+              )}
               <div>
                 <h3 className="text-sm font-semibold text-foreground mb-3">{t("dash.latestSubs")}</h3>
                 <SubList list={subscribers.slice(0, 5)} />
