@@ -105,6 +105,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const [publicMembersCount, setPublicMembersCount] = useState(0);
   const [kickingPublic, setKickingPublic] = useState(false);
   const [kickingExpired, setKickingExpired] = useState(false);
+  const [unbanningAll, setUnbanningAll] = useState(false);
 
   useEffect(() => { fetchData(); }, []);
 
