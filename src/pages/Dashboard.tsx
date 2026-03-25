@@ -644,14 +644,14 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
 
       {/* Bottom Nav - Mobile */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-border/50 md:hidden safe-area-bottom">
-        <div className="flex items-center justify-around h-14">
-          {navItems.slice(0, 5).map(({ key, icon: Icon, label, badge }) => (
+        <div className="flex items-center justify-around h-14 overflow-x-auto scrollbar-hide px-1">
+          {navItems.map(({ key, icon: Icon, label, badge }) => (
             <button key={key} onClick={() => setActiveTab(key)}
-              className={`flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg transition-colors relative ${activeTab === key ? "text-primary" : "text-muted-foreground"}`}>
+              className={`flex flex-col items-center gap-0.5 px-1.5 py-1.5 rounded-lg transition-colors relative flex-shrink-0 min-w-[3rem] ${activeTab === key ? "text-primary" : "text-muted-foreground"}`}>
               <Icon className="w-5 h-5" />
-              <span className="text-[9px]">{label}</span>
+              <span className="text-[8px] leading-tight whitespace-nowrap">{label}</span>
               {badge !== undefined && badge > 0 && (
-                <span className="absolute -top-0.5 right-0.5 bg-primary text-primary-foreground text-[8px] w-4 h-4 rounded-full flex items-center justify-center font-mono">
+                <span className="absolute -top-0.5 right-0 bg-primary text-primary-foreground text-[8px] w-4 h-4 rounded-full flex items-center justify-center font-mono">
                   {badge > 99 ? "99+" : badge}
                 </span>
               )}
