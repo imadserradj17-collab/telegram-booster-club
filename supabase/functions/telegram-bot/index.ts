@@ -367,15 +367,10 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
         const assignedChannelIds = await getSubscriberChannels(sub.id);
         let hasAccess = assignedChannelIds.length === 0 || assignedChannelIds.includes(myChannel.id);
 
-        // If subscriber has all other channels assigned but not this new one, auto-assign and approve
-        if (!hasAccess && assignedChannelIds.length > 0) {
-          const { data: allChannels } = await sb.from("telegram_channels").select("id").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
-          const otherChannelIds = (allChannels || []).map((c: any) => c.id).filter((id: string) => id !== myChannel.id);
-          if (otherChannelIds.length > 0 && otherChannelIds.every((id: string) => assignedChannelIds.includes(id))) {
-            // Subscriber has all other channels - auto-assign this new one
-            await sb.from("subscriber_channels").insert({ subscriber_id: sub.id, channel_id: myChannel.id });
-            hasAccess = true;
-          }
+        // If subscriber has 5+ channels assigned, auto-assign any new channel
+        if (!hasAccess && assignedChannelIds.length >= 5) {
+          await sb.from("subscriber_channels").insert({ subscriber_id: sub.id, channel_id: myChannel.id });
+          hasAccess = true;
         }
 
         if (!hasAccess) {
