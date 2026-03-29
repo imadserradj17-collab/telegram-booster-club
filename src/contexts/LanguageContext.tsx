@@ -222,6 +222,16 @@ const translations: Record<string, Record<Lang, string>> = {
   "admin.noResults": { ar: "لا توجد نتائج", en: "No results found" },
   "admin.refresh": { ar: "تحديث", en: "Refresh" },
 
+  // Free Trial
+  "dash.freeTrial": { ar: "العرض المجاني", en: "Free Trial" },
+  "dash.freeTrialEnabled": { ar: "تفعيل التجربة المجانية (3 أيام)", en: "Enable free trial (3 days)" },
+  "dash.freeTrialHint": { ar: "عند التفعيل، يظهر زر في البوت لغير المشتركين لتجربة مجانية لمدة 3 أيام (مرة واحدة فقط)", en: "When enabled, non-subscribers see a button in the bot for a 3-day free trial (one-time only)" },
+  "dash.freeTrialUsers": { ar: "مستخدمو التجربة المجانية", en: "Free Trial Users" },
+  "dash.freeTrialCount": { ar: "عدد المستفيدين", en: "Trial users" },
+  "dash.noTrialUsers": { ar: "لا يوجد مستفيدون من التجربة المجانية", en: "No free trial users" },
+  "dash.trialActivatedAt": { ar: "تاريخ التفعيل", en: "Activated" },
+  "dash.trialExpiresAt": { ar: "ينتهي", en: "Expires" },
+
   // Common
   "common.logout": { ar: "تسجيل الخروج", en: "Sign Out" },
   "common.error": { ar: "خطأ", en: "Error" },
