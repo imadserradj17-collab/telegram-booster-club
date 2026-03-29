@@ -1253,6 +1253,15 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   </Select>
                   <p className="text-xs text-muted-foreground">{t("dash.subscribersChannelHint")}</p>
                 </div>
+                <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 border border-border/30">
+                  <div className="flex-1">
+                    <Label className="text-foreground/80 flex items-center gap-2">
+                      <Zap className="w-4 h-4" />{t("dash.freeTrialEnabled")}
+                    </Label>
+                    <p className="text-xs text-muted-foreground mt-1">{t("dash.freeTrialHint")}</p>
+                  </div>
+                  <Switch checked={freeTrialEnabled} onCheckedChange={setFreeTrialEnabled} />
+                </div>
                 <Button onClick={handleSaveSettings} disabled={savingSettings} className="w-full gradient-telegram text-primary-foreground hover:opacity-90">
                   {savingSettings ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : <Save className="w-4 h-4 ml-2" />}
                   {t("dash.saveSettings")}
