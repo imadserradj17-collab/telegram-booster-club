@@ -137,6 +137,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
       setNonSubMessage(settingsRes.data.non_subscriber_message || "");
       setPublicChannelId((settingsRes.data as any).public_channel_id || null);
       setSubscribersChannelId((settingsRes.data as any).subscribers_channel_id || null);
+      setFreeTrialEnabled((settingsRes.data as any).free_trial_enabled ?? false);
     }
 
     // Fetch channels
