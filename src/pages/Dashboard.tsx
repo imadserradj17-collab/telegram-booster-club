@@ -838,38 +838,6 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   {t("dash.unbanAll")}
                 </Button>
               </div>
-              {/* Free Trial Users */}
-              {freeTrialUsers.length > 0 && (
-                <div className="glass-card p-4 md:p-5 border-primary/20">
-                  <div className="flex items-center justify-between gap-3 mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                        <Zap className="w-5 h-5 text-primary" />
-                      </div>
-                      <div>
-                        <h3 className="text-sm font-semibold text-foreground">{t("dash.freeTrialUsers")}</h3>
-                        <p className="text-xs text-muted-foreground">{freeTrialUsers.length} {t("dash.freeTrialCount")}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {freeTrialUsers.map(u => {
-                      const isTrialExpired = new Date(u.expires_at) < new Date();
-                      return (
-                        <div key={u.id} className="flex items-center justify-between py-2 px-3 rounded-lg bg-secondary/30 text-sm">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-foreground truncate">{[u.first_name, u.last_name].filter(Boolean).join(" ") || u.telegram_user_id}</span>
-                            {u.telegram_username && <span className="text-muted-foreground text-xs" dir="ltr">@{u.telegram_username}</span>}
-                          </div>
-                          <Badge className={isTrialExpired ? "bg-destructive/20 text-destructive border-destructive/30 text-[10px]" : "bg-success/20 text-success border-success/30 text-[10px]"}>
-                            {isTrialExpired ? t("dash.expiredBadge") : `${daysRemaining(u.expires_at)} ${t("dash.day")}`}
-                          </Badge>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
               <div>
                 <h3 className="text-sm font-semibold text-foreground mb-3">{t("dash.latestSubs")}</h3>
                 <SubList list={subscribers.slice(0, 5)} />
