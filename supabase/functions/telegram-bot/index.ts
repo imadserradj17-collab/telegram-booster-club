@@ -279,7 +279,7 @@ async function finalizeSubscriber(
   });
 }
 
-async function handleUpdate(update: any, botToken: string, ownerId: string, botTokenId: string, adminTelegramId: number | null, nonSubMessage: string, publicChannelId: string | null = null, subscribersChannelId: string | null = null) {
+async function handleUpdate(update: any, botToken: string, ownerId: string, botTokenId: string, adminTelegramId: number | null, nonSubMessage: string, publicChannelId: string | null = null, subscribersChannelId: string | null = null, freeTrialEnabled: boolean = false) {
   // ─── CHAT MEMBER UPDATES (track joins to public channel) ───
   if (update.chat_member) {
     const cm = update.chat_member;
