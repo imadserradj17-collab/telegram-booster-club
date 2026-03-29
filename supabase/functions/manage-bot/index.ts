@@ -438,6 +438,15 @@ Deno.serve(async (req) => {
         const { telegram_user_id } = params;
         if (!telegram_user_id) return new Response(JSON.stringify({ error: "Missing telegram_user_id" }), { status: 400, headers: corsHeaders });
 
+        // Send notification before kicking
+        try {
+          await tg(botToken, "sendMessage", {
+            chat_id: telegram_user_id,
+            text: "⛔ *تم إلغاء اشتراكك التجريبي.*\n\nتم إزالتك من جميع القنوات والمجموعات.\nللاشتراك تواصل مع المسؤول.",
+            parse_mode: "Markdown",
+          });
+        } catch {}
+
         const { data: allChannels } = await sb.from("telegram_channels").select("channel_id").eq("owner_id", user.id).eq("bot_token_id", botTokenId);
         const channelIds = (allChannels || []).map((c: any) => c.channel_id);
 
@@ -445,9 +454,12 @@ Deno.serve(async (req) => {
         for (let i = 0; i < channelIds.length; i += 5) {
           const batch = channelIds.slice(i, i + 5);
           const results = await Promise.allSettled(batch.map(async (chId: number) => {
-            const res = await tg(botData.token, "banChatMember", { chat_id: chId, user_id: telegram_user_id });
-            if (res.ok) await tg(botData.token, "unbanChatMember", { chat_id: chId, user_id: telegram_user_id, only_if_banned: true });
-            return res.ok;
+            const banRes = await tg(botToken, "banChatMember", { chat_id: chId, user_id: telegram_user_id });
+            if (banRes.ok) {
+              await tg(botToken, "unbanChatMember", { chat_id: chId, user_id: telegram_user_id, only_if_banned: true });
+              return true;
+            }
+            return false;
           }));
           for (const r of results) {
             if (r.status === "fulfilled" && r.value) kicked++;
