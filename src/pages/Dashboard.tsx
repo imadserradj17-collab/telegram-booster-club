@@ -1085,127 +1085,213 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                 </div>
               </div>
 
-              {/* Trial Users List */}
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-muted-foreground">{freeTrialUsers.length} {t("dash.freeTrialCount")}</p>
-              </div>
+              {/* Active Trial Users */}
+              {(() => {
+                const activeTrials = freeTrialUsers.filter(u => new Date(u.expires_at) >= new Date());
+                const expiredTrials = freeTrialUsers.filter(u => new Date(u.expires_at) < new Date());
 
-              {freeTrialUsers.length === 0 ? (
-                <div className="text-center py-16 glass-card">
-                  <Zap className="w-8 h-8 mx-auto mb-2 text-muted-foreground/30" />
-                  <p className="text-muted-foreground">{t("dash.noTrialUsers")}</p>
-                </div>
-              ) : (
-                <>
-                  {/* Desktop Table */}
-                  <div className="glass-card overflow-hidden hidden md:block">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="border-border/50 hover:bg-transparent">
-                          <TableHead className="text-muted-foreground font-medium">{t("dash.subscriber")}</TableHead>
-                          <TableHead className="text-muted-foreground font-medium">{t("dash.id")}</TableHead>
-                          <TableHead className="text-muted-foreground font-medium">{t("dash.trialActivatedAt")}</TableHead>
-                          <TableHead className="text-muted-foreground font-medium">{t("dash.trialExpiresAt")}</TableHead>
-                          <TableHead className="text-muted-foreground font-medium">{t("dash.status")}</TableHead>
-                          <TableHead className="text-muted-foreground font-medium w-12"></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {freeTrialUsers.map(u => {
-                          const isTrialExpired = new Date(u.expires_at) < new Date();
-                          const displayName = [u.first_name, u.last_name].filter(Boolean).join(" ");
-                          return (
-                            <TableRow key={u.id} className="border-border/30 hover:bg-secondary/30">
-                              <TableCell>
-                                <div>
-                                  <p className="font-medium text-foreground text-sm">{displayName || `${t("dash.user")} ${u.telegram_user_id}`}</p>
-                                  {u.telegram_username && <p className="text-xs text-muted-foreground" dir="ltr">@{u.telegram_username}</p>}
-                                </div>
-                              </TableCell>
-                              <TableCell><span className="font-mono text-xs text-muted-foreground" dir="ltr">{u.telegram_user_id}</span></TableCell>
-                              <TableCell className="text-sm text-muted-foreground">{new Date(u.activated_at).toLocaleDateString(lang === "ar" ? "ar-SA" : "en-US")}</TableCell>
-                              <TableCell className="text-sm text-muted-foreground">{new Date(u.expires_at).toLocaleDateString(lang === "ar" ? "ar-SA" : "en-US")}</TableCell>
-                              <TableCell>
-                                <Badge className={isTrialExpired ? "bg-destructive/20 text-destructive border-destructive/30 text-[10px]" : "bg-success/20 text-success border-success/30 text-[10px]"}>
-                                  {isTrialExpired ? t("dash.expiredBadge") : `${daysRemaining(u.expires_at)} ${t("dash.day")}`}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                <Button variant="ghost" size="icon" disabled={kickingId === u.id}
-                                  className="text-muted-foreground hover:text-destructive h-8 w-8"
-                                  onClick={async () => {
-                                    if (!confirm(lang === "ar" ? "هل تريد طرد هذا المستخدم وحذف تجربته المجانية؟" : "Kick this user and remove their free trial?")) return;
-                                    setKickingId(u.id);
-                                    try {
-                                      const { data, error } = await supabase.functions.invoke("manage-bot", {
-                                        body: { action: "kick_trial_user", telegram_user_id: u.telegram_user_id },
-                                      });
-                                      if (error) throw error;
-                                      if (data?.error) throw new Error(data.error);
-                                      setFreeTrialUsers(prev => prev.filter(t => t.id !== u.id));
-                                      toast({ title: lang === "ar" ? "تم طرد المستخدم وحذف التجربة ✅" : "User kicked and trial removed ✅" });
-                                      fetchData();
-                                    } catch (error: any) {
-                                      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
-                                    } finally { setKickingId(null); }
-                                  }}>
-                                  {kickingId === u.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                  {/* Mobile Cards */}
-                  <div className="space-y-3 md:hidden">
-                    {freeTrialUsers.map(u => {
-                      const isTrialExpired = new Date(u.expires_at) < new Date();
-                      const displayName = [u.first_name, u.last_name].filter(Boolean).join(" ");
-                      return (
-                        <div key={u.id} className="glass-card p-4">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <p className="font-medium text-foreground text-sm truncate">{displayName || `${t("dash.user")} ${u.telegram_user_id}`}</p>
-                                <Badge className={isTrialExpired ? "bg-destructive/20 text-destructive border-destructive/30 text-[10px] flex-shrink-0" : "bg-success/20 text-success border-success/30 text-[10px] flex-shrink-0"}>
-                                  {isTrialExpired ? t("dash.expiredBadge") : `${daysRemaining(u.expires_at)} ${t("dash.day")}`}
-                                </Badge>
-                              </div>
-                              <div className="flex flex-wrap gap-x-3 text-xs text-muted-foreground">
-                                <span className="font-mono" dir="ltr">{u.telegram_user_id}</span>
-                                {u.telegram_username && <span dir="ltr">@{u.telegram_username}</span>}
-                              </div>
-                              <p className="text-xs text-muted-foreground mt-1">{t("dash.trialActivatedAt")}: {new Date(u.activated_at).toLocaleDateString(lang === "ar" ? "ar-SA" : "en-US")}</p>
-                            </div>
-                            <Button variant="ghost" size="icon" disabled={kickingId === u.id}
-                              className="text-muted-foreground hover:text-destructive h-8 w-8 flex-shrink-0"
-                              onClick={async () => {
-                                if (!confirm(lang === "ar" ? "هل تريد طرد هذا المستخدم وحذف تجربته المجانية؟" : "Kick this user and remove their free trial?")) return;
-                                setKickingId(u.id);
-                                try {
-                                  const { data, error } = await supabase.functions.invoke("manage-bot", {
-                                    body: { action: "kick_trial_user", telegram_user_id: u.telegram_user_id },
-                                  });
-                                  if (error) throw error;
-                                  if (data?.error) throw new Error(data.error);
-                                  setFreeTrialUsers(prev => prev.filter(t => t.id !== u.id));
-                                  toast({ title: lang === "ar" ? "تم طرد المستخدم وحذف التجربة ✅" : "User kicked and trial removed ✅" });
-                                  fetchData();
-                                } catch (error: any) {
-                                  toast({ title: t("common.error"), description: error.message, variant: "destructive" });
-                                } finally { setKickingId(null); }
-                              }}>
-                              {kickingId === u.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                            </Button>
-                          </div>
+                const renderTrialKickButton = (u: FreeTrialUser) => (
+                  <Button variant="ghost" size="icon" disabled={kickingId === u.id}
+                    className="text-muted-foreground hover:text-destructive h-8 w-8 flex-shrink-0"
+                    onClick={async () => {
+                      if (!confirm(lang === "ar" ? "هل تريد طرد هذا المستخدم؟" : "Kick this user?")) return;
+                      setKickingId(u.id);
+                      try {
+                        const { data, error } = await supabase.functions.invoke("manage-bot", {
+                          body: { action: "kick_trial_user", telegram_user_id: u.telegram_user_id },
+                        });
+                        if (error) throw error;
+                        if (data?.error) throw new Error(data.error);
+                        toast({ title: lang === "ar" ? "تم طرد المستخدم ✅" : "User kicked ✅" });
+                        fetchData();
+                      } catch (error: any) {
+                        toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+                      } finally { setKickingId(null); }
+                    }}>
+                    {kickingId === u.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                  </Button>
+                );
+
+                const renderDeleteRecordButton = (u: FreeTrialUser) => (
+                  <Button variant="ghost" size="icon"
+                    className="text-muted-foreground hover:text-destructive h-8 w-8 flex-shrink-0"
+                    onClick={async () => {
+                      if (!confirm(lang === "ar" ? "هل تريد حذف هذا السجل؟ (سيتمكن من التجربة المجانية مرة أخرى)" : "Delete this record? (User will be able to use free trial again)")) return;
+                      try {
+                        const { error } = await supabase.from("free_trial_users").delete().eq("id", u.id);
+                        if (error) throw error;
+                        toast({ title: lang === "ar" ? "تم حذف السجل ✅" : "Record deleted ✅" });
+                        fetchData();
+                      } catch (error: any) {
+                        toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+                      }
+                    }}>
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                );
+
+                return (
+                  <>
+                    {/* Active Trials Section */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <Badge className="bg-success/20 text-success border-success/30">{activeTrials.length}</Badge>
+                        <p className="text-sm font-medium text-foreground">{lang === "ar" ? "مستفيدون حاليًا" : "Currently Active"}</p>
+                      </div>
+                      {activeTrials.length === 0 ? (
+                        <div className="text-center py-8 glass-card">
+                          <p className="text-muted-foreground text-sm">{lang === "ar" ? "لا يوجد مستفيدون حاليًا" : "No active trial users"}</p>
                         </div>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
+                      ) : (
+                        <>
+                          <div className="glass-card overflow-hidden hidden md:block">
+                            <Table>
+                              <TableHeader>
+                                <TableRow className="border-border/50 hover:bg-transparent">
+                                  <TableHead className="text-muted-foreground font-medium">{t("dash.subscriber")}</TableHead>
+                                  <TableHead className="text-muted-foreground font-medium">{t("dash.id")}</TableHead>
+                                  <TableHead className="text-muted-foreground font-medium">{t("dash.trialActivatedAt")}</TableHead>
+                                  <TableHead className="text-muted-foreground font-medium">{t("dash.trialExpiresAt")}</TableHead>
+                                  <TableHead className="text-muted-foreground font-medium">{lang === "ar" ? "متبقي" : "Remaining"}</TableHead>
+                                  <TableHead className="text-muted-foreground font-medium w-12"></TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {activeTrials.map(u => {
+                                  const displayName = [u.first_name, u.last_name].filter(Boolean).join(" ");
+                                  return (
+                                    <TableRow key={u.id} className="border-border/30 hover:bg-secondary/30">
+                                      <TableCell>
+                                        <div>
+                                          <p className="font-medium text-foreground text-sm">{displayName || `${t("dash.user")} ${u.telegram_user_id}`}</p>
+                                          {u.telegram_username && <p className="text-xs text-muted-foreground" dir="ltr">@{u.telegram_username}</p>}
+                                        </div>
+                                      </TableCell>
+                                      <TableCell><span className="font-mono text-xs text-muted-foreground" dir="ltr">{u.telegram_user_id}</span></TableCell>
+                                      <TableCell className="text-sm text-muted-foreground">{new Date(u.activated_at).toLocaleDateString(lang === "ar" ? "ar-SA" : "en-US")}</TableCell>
+                                      <TableCell className="text-sm text-muted-foreground">{new Date(u.expires_at).toLocaleDateString(lang === "ar" ? "ar-SA" : "en-US")}</TableCell>
+                                      <TableCell>
+                                        <Badge className="bg-success/20 text-success border-success/30 text-[10px]">
+                                          {daysRemaining(u.expires_at)} {t("dash.day")}
+                                        </Badge>
+                                      </TableCell>
+                                      <TableCell>{renderTrialKickButton(u)}</TableCell>
+                                    </TableRow>
+                                  );
+                                })}
+                              </TableBody>
+                            </Table>
+                          </div>
+                          <div className="space-y-3 md:hidden">
+                            {activeTrials.map(u => {
+                              const displayName = [u.first_name, u.last_name].filter(Boolean).join(" ");
+                              return (
+                                <div key={u.id} className="glass-card p-4">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <p className="font-medium text-foreground text-sm truncate">{displayName || `${t("dash.user")} ${u.telegram_user_id}`}</p>
+                                        <Badge className="bg-success/20 text-success border-success/30 text-[10px] flex-shrink-0">
+                                          {daysRemaining(u.expires_at)} {t("dash.day")}
+                                        </Badge>
+                                      </div>
+                                      <div className="flex flex-wrap gap-x-3 text-xs text-muted-foreground">
+                                        <span className="font-mono" dir="ltr">{u.telegram_user_id}</span>
+                                        {u.telegram_username && <span dir="ltr">@{u.telegram_username}</span>}
+                                      </div>
+                                      <p className="text-xs text-muted-foreground mt-1">{t("dash.trialExpiresAt")}: {new Date(u.expires_at).toLocaleDateString(lang === "ar" ? "ar-SA" : "en-US")}</p>
+                                    </div>
+                                    {renderTrialKickButton(u)}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Expired Trials Section */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <Badge className="bg-destructive/20 text-destructive border-destructive/30">{expiredTrials.length}</Badge>
+                        <p className="text-sm font-medium text-foreground">{lang === "ar" ? "منتهية الصلاحية" : "Expired Trials"}</p>
+                      </div>
+                      {expiredTrials.length === 0 ? (
+                        <div className="text-center py-8 glass-card">
+                          <p className="text-muted-foreground text-sm">{lang === "ar" ? "لا يوجد تجارب منتهية" : "No expired trials"}</p>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="glass-card overflow-hidden hidden md:block">
+                            <Table>
+                              <TableHeader>
+                                <TableRow className="border-border/50 hover:bg-transparent">
+                                  <TableHead className="text-muted-foreground font-medium">{t("dash.subscriber")}</TableHead>
+                                  <TableHead className="text-muted-foreground font-medium">{t("dash.id")}</TableHead>
+                                  <TableHead className="text-muted-foreground font-medium">{t("dash.trialActivatedAt")}</TableHead>
+                                  <TableHead className="text-muted-foreground font-medium">{t("dash.trialExpiresAt")}</TableHead>
+                                  <TableHead className="text-muted-foreground font-medium">{t("dash.status")}</TableHead>
+                                  <TableHead className="text-muted-foreground font-medium w-12"></TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {expiredTrials.map(u => {
+                                  const displayName = [u.first_name, u.last_name].filter(Boolean).join(" ");
+                                  return (
+                                    <TableRow key={u.id} className="border-border/30 hover:bg-secondary/30">
+                                      <TableCell>
+                                        <div>
+                                          <p className="font-medium text-foreground text-sm">{displayName || `${t("dash.user")} ${u.telegram_user_id}`}</p>
+                                          {u.telegram_username && <p className="text-xs text-muted-foreground" dir="ltr">@{u.telegram_username}</p>}
+                                        </div>
+                                      </TableCell>
+                                      <TableCell><span className="font-mono text-xs text-muted-foreground" dir="ltr">{u.telegram_user_id}</span></TableCell>
+                                      <TableCell className="text-sm text-muted-foreground">{new Date(u.activated_at).toLocaleDateString(lang === "ar" ? "ar-SA" : "en-US")}</TableCell>
+                                      <TableCell className="text-sm text-muted-foreground">{new Date(u.expires_at).toLocaleDateString(lang === "ar" ? "ar-SA" : "en-US")}</TableCell>
+                                      <TableCell>
+                                        <Badge className="bg-destructive/20 text-destructive border-destructive/30 text-[10px]">
+                                          {t("dash.expiredBadge")}
+                                        </Badge>
+                                      </TableCell>
+                                      <TableCell>{renderDeleteRecordButton(u)}</TableCell>
+                                    </TableRow>
+                                  );
+                                })}
+                              </TableBody>
+                            </Table>
+                          </div>
+                          <div className="space-y-3 md:hidden">
+                            {expiredTrials.map(u => {
+                              const displayName = [u.first_name, u.last_name].filter(Boolean).join(" ");
+                              return (
+                                <div key={u.id} className="glass-card p-4">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <p className="font-medium text-foreground text-sm truncate">{displayName || `${t("dash.user")} ${u.telegram_user_id}`}</p>
+                                        <Badge className="bg-destructive/20 text-destructive border-destructive/30 text-[10px] flex-shrink-0">
+                                          {t("dash.expiredBadge")}
+                                        </Badge>
+                                      </div>
+                                      <div className="flex flex-wrap gap-x-3 text-xs text-muted-foreground">
+                                        <span className="font-mono" dir="ltr">{u.telegram_user_id}</span>
+                                        {u.telegram_username && <span dir="ltr">@{u.telegram_username}</span>}
+                                      </div>
+                                      <p className="text-xs text-muted-foreground mt-1">{t("dash.trialActivatedAt")}: {new Date(u.activated_at).toLocaleDateString(lang === "ar" ? "ar-SA" : "en-US")}</p>
+                                    </div>
+                                    {renderDeleteRecordButton(u)}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           )}
 
