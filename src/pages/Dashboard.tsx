@@ -1107,6 +1107,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                           <TableHead className="text-muted-foreground font-medium">{t("dash.trialActivatedAt")}</TableHead>
                           <TableHead className="text-muted-foreground font-medium">{t("dash.trialExpiresAt")}</TableHead>
                           <TableHead className="text-muted-foreground font-medium">{t("dash.status")}</TableHead>
+                          <TableHead className="text-muted-foreground font-medium w-12"></TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1129,6 +1130,28 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                                   {isTrialExpired ? t("dash.expiredBadge") : `${daysRemaining(u.expires_at)} ${t("dash.day")}`}
                                 </Badge>
                               </TableCell>
+                              <TableCell>
+                                <Button variant="ghost" size="icon" disabled={kickingId === u.id}
+                                  className="text-muted-foreground hover:text-destructive h-8 w-8"
+                                  onClick={async () => {
+                                    if (!confirm(lang === "ar" ? "هل تريد طرد هذا المستخدم وحذف تجربته المجانية؟" : "Kick this user and remove their free trial?")) return;
+                                    setKickingId(u.id);
+                                    try {
+                                      const { data, error } = await supabase.functions.invoke("manage-bot", {
+                                        body: { action: "kick_trial_user", telegram_user_id: u.telegram_user_id },
+                                      });
+                                      if (error) throw error;
+                                      if (data?.error) throw new Error(data.error);
+                                      setFreeTrialUsers(prev => prev.filter(t => t.id !== u.id));
+                                      toast({ title: lang === "ar" ? "تم طرد المستخدم وحذف التجربة ✅" : "User kicked and trial removed ✅" });
+                                      fetchData();
+                                    } catch (error: any) {
+                                      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+                                    } finally { setKickingId(null); }
+                                  }}>
+                                  {kickingId === u.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                                </Button>
+                              </TableCell>
                             </TableRow>
                           );
                         })}
@@ -1142,18 +1165,40 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                       const displayName = [u.first_name, u.last_name].filter(Boolean).join(" ");
                       return (
                         <div key={u.id} className="glass-card p-4">
-                          <div className="flex items-center justify-between">
-                            <div className="min-w-0">
-                              <p className="font-medium text-foreground text-sm truncate">{displayName || `${t("dash.user")} ${u.telegram_user_id}`}</p>
-                              <div className="flex flex-wrap gap-x-3 text-xs text-muted-foreground mt-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <p className="font-medium text-foreground text-sm truncate">{displayName || `${t("dash.user")} ${u.telegram_user_id}`}</p>
+                                <Badge className={isTrialExpired ? "bg-destructive/20 text-destructive border-destructive/30 text-[10px] flex-shrink-0" : "bg-success/20 text-success border-success/30 text-[10px] flex-shrink-0"}>
+                                  {isTrialExpired ? t("dash.expiredBadge") : `${daysRemaining(u.expires_at)} ${t("dash.day")}`}
+                                </Badge>
+                              </div>
+                              <div className="flex flex-wrap gap-x-3 text-xs text-muted-foreground">
                                 <span className="font-mono" dir="ltr">{u.telegram_user_id}</span>
                                 {u.telegram_username && <span dir="ltr">@{u.telegram_username}</span>}
                               </div>
                               <p className="text-xs text-muted-foreground mt-1">{t("dash.trialActivatedAt")}: {new Date(u.activated_at).toLocaleDateString(lang === "ar" ? "ar-SA" : "en-US")}</p>
                             </div>
-                            <Badge className={isTrialExpired ? "bg-destructive/20 text-destructive border-destructive/30 text-[10px] flex-shrink-0" : "bg-success/20 text-success border-success/30 text-[10px] flex-shrink-0"}>
-                              {isTrialExpired ? t("dash.expiredBadge") : `${daysRemaining(u.expires_at)} ${t("dash.day")}`}
-                            </Badge>
+                            <Button variant="ghost" size="icon" disabled={kickingId === u.id}
+                              className="text-muted-foreground hover:text-destructive h-8 w-8 flex-shrink-0"
+                              onClick={async () => {
+                                if (!confirm(lang === "ar" ? "هل تريد طرد هذا المستخدم وحذف تجربته المجانية؟" : "Kick this user and remove their free trial?")) return;
+                                setKickingId(u.id);
+                                try {
+                                  const { data, error } = await supabase.functions.invoke("manage-bot", {
+                                    body: { action: "kick_trial_user", telegram_user_id: u.telegram_user_id },
+                                  });
+                                  if (error) throw error;
+                                  if (data?.error) throw new Error(data.error);
+                                  setFreeTrialUsers(prev => prev.filter(t => t.id !== u.id));
+                                  toast({ title: lang === "ar" ? "تم طرد المستخدم وحذف التجربة ✅" : "User kicked and trial removed ✅" });
+                                  fetchData();
+                                } catch (error: any) {
+                                  toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+                                } finally { setKickingId(null); }
+                              }}>
+                              {kickingId === u.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                            </Button>
                           </div>
                         </div>
                       );

@@ -434,6 +434,40 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ ok: true, kicked, failed, total: allMembers.length }), { headers: corsHeaders });
       }
 
+      case "kick_trial_user": {
+        const { telegram_user_id } = params;
+        if (!telegram_user_id) return new Response(JSON.stringify({ error: "Missing telegram_user_id" }), { status: 400, headers: corsHeaders });
+
+        const { data: allChannels } = await sb.from("telegram_channels").select("channel_id").eq("owner_id", user.id).eq("bot_token_id", botTokenId);
+        const channelIds = (allChannels || []).map((c: any) => c.channel_id);
+
+        let kicked = 0, failed = 0;
+        for (let i = 0; i < channelIds.length; i += 5) {
+          const batch = channelIds.slice(i, i + 5);
+          const results = await Promise.allSettled(batch.map(async (chId: number) => {
+            const res = await tg(botData.token, "banChatMember", { chat_id: chId, user_id: telegram_user_id });
+            if (res.ok) await tg(botData.token, "unbanChatMember", { chat_id: chId, user_id: telegram_user_id, only_if_banned: true });
+            return res.ok;
+          }));
+          for (const r of results) {
+            if (r.status === "fulfilled" && r.value) kicked++;
+            else failed++;
+          }
+        }
+
+        const { data: sub } = await sb.from("telegram_subscribers").select("id").eq("owner_id", user.id).eq("bot_token_id", botTokenId).eq("telegram_user_id", telegram_user_id).maybeSingle();
+        if (sub) {
+          await Promise.all([
+            sb.from("subscriber_channels").delete().eq("subscriber_id", sub.id),
+            sb.from("telegram_subscribers").delete().eq("id", sub.id),
+          ]);
+        }
+
+        await sb.from("free_trial_users").delete().eq("owner_id", user.id).eq("telegram_user_id", telegram_user_id);
+
+        return new Response(JSON.stringify({ ok: true, kicked, failed }), { headers: corsHeaders });
+      }
+
       default:
         return new Response(JSON.stringify({ error: "Unknown action" }), { status: 400, headers: corsHeaders });
     }
