@@ -1102,7 +1102,9 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                         });
                         if (error) throw error;
                         if (data?.error) throw new Error(data.error);
-                        toast({ title: lang === "ar" ? "تم طرد المستخدم ✅" : "User kicked ✅" });
+                        // Move to expired by setting expires_at to now
+                        await supabase.from("free_trial_users").update({ expires_at: new Date().toISOString() }).eq("id", u.id);
+                        toast({ title: lang === "ar" ? "تم طرد المستخدم ونقله إلى المنتهية ✅" : "User kicked and moved to expired ✅" });
                         fetchData();
                       } catch (error: any) {
                         toast({ title: t("common.error"), description: error.message, variant: "destructive" });
