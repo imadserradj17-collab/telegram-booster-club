@@ -56,6 +56,17 @@ interface BotSettings {
   non_subscriber_message: string;
   public_channel_id: string | null;
   subscribers_channel_id: string | null;
+  free_trial_enabled: boolean;
+}
+
+interface FreeTrialUser {
+  id: string;
+  telegram_user_id: number;
+  telegram_username: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  activated_at: string;
+  expires_at: string;
 }
 
 type TabKey = "overview" | "subscribers" | "expired" | "channels" | "broadcast" | "analytics" | "settings";
