@@ -366,6 +366,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     { key: "subscribers", icon: Users, label: t("dash.subscribers"), badge: activeSubs.length },
     { key: "expired", icon: Clock, label: t("dash.expired"), badge: expiredSubs.length },
     { key: "channels", icon: Tv, label: t("channels.title"), badge: channels.length },
+    { key: "free_trial", icon: Zap, label: t("dash.freeTrial"), badge: freeTrialUsers.length },
     { key: "broadcast", icon: Send, label: t("broadcast.title") },
     { key: "analytics", icon: BarChart3, label: t("dash.analytics") },
     { key: "settings", icon: Settings, label: t("dash.settings") },
