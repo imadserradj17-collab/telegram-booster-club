@@ -942,6 +942,71 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
       return;
     }
 
+    if (data === "activate_free_trial") {
+      await tg(botToken, "answerCallbackQuery", { callback_query_id: cb.id });
+      
+      if (!freeTrialEnabled) {
+        await tg(botToken, "sendMessage", { chat_id: chatId, text: "❌ التجربة المجانية غير متاحة حالياً." });
+        return;
+      }
+
+      // Check if already used
+      const { data: existingTrial } = await sb.from("free_trial_users").select("id").eq("owner_id", ownerId).eq("telegram_user_id", cbFromId).maybeSingle();
+      if (existingTrial) {
+        await tg(botToken, "sendMessage", { chat_id: chatId, text: "⚠️ لقد استخدمت التجربة المجانية مسبقاً. لا يمكن الاستفادة أكثر من مرة." });
+        return;
+      }
+
+      const expiresAt = new Date(Date.now() + 3 * 86400000).toISOString();
+
+      // Save trial user + create subscriber with 3 days
+      const [, { data: allChannels }] = await Promise.all([
+        sb.from("free_trial_users").insert({
+          bot_token_id: botTokenId,
+          owner_id: ownerId,
+          telegram_user_id: cbFromId,
+          telegram_username: cb.from.username || null,
+          first_name: cb.from.first_name || null,
+          last_name: cb.from.last_name || null,
+          expires_at: expiresAt,
+        }),
+        sb.from("telegram_channels").select("id, channel_name, invite_link").eq("owner_id", ownerId).eq("bot_token_id", botTokenId),
+      ]);
+
+      const channelIds = (allChannels || []).map((ch: any) => ch.id);
+
+      // Create subscriber with 3 days trial
+      const { data: upsertedSub } = await sb.from("telegram_subscribers").upsert(
+        { owner_id: ownerId, bot_token_id: botTokenId, telegram_user_id: cbFromId, telegram_username: cb.from.username || null, first_name: cb.from.first_name || null, last_name: cb.from.last_name || null, subscription_days: 3, expires_at: expiresAt, is_permanent: false, expiry_notified: false },
+        { onConflict: "owner_id,telegram_user_id" }
+      ).select("id").single();
+
+      if (upsertedSub && channelIds.length > 0) {
+        await sb.from("subscriber_channels").delete().eq("subscriber_id", upsertedSub.id);
+        const rows = channelIds.map((chId: string) => ({ subscriber_id: upsertedSub.id, channel_id: chId }));
+        await sb.from("subscriber_channels").insert(rows);
+      }
+
+      const buttons = (allChannels || []).filter((ch: any) => ch.invite_link).map((ch: any) => [{ text: `📺 ${ch.channel_name}`, url: ch.invite_link }]);
+
+      await tg(botToken, "sendMessage", {
+        chat_id: chatId,
+        text: `🎉 *تم تفعيل التجربة المجانية!*\n\n📅 المدة: *3 أيام*\n⏰ تنتهي: ${formatDate(expiresAt)}\n\n📺 اضغط على القنوات للانضمام:`,
+        parse_mode: "Markdown",
+        reply_markup: buttons.length > 0 ? { inline_keyboard: buttons } : undefined,
+      });
+
+      // Notify admin
+      if (adminTelegramId) {
+        tgFire(botToken, "sendMessage", {
+          chat_id: adminTelegramId,
+          text: `🎁 *تجربة مجانية جديدة*\n\n👤 ${cb.from.first_name || ""} (\`${cbFromId}\`)\n📅 تنتهي: ${formatDate(expiresAt)}`,
+          parse_mode: "Markdown",
+        });
+      }
+      return;
+    }
+
     const isCbAdmin = !adminTelegramId || cbFromId === adminTelegramId;
     if (!isCbAdmin) {
       await tg(botToken, "answerCallbackQuery", { callback_query_id: cb.id, text: "⛔ غير مصرح لك" });
