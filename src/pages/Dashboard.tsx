@@ -25,6 +25,7 @@ import {
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { Switch } from "@/components/ui/switch";
 
 interface TelegramSubscriber {
   id: string;
@@ -56,6 +57,17 @@ interface BotSettings {
   non_subscriber_message: string;
   public_channel_id: string | null;
   subscribers_channel_id: string | null;
+  free_trial_enabled: boolean;
+}
+
+interface FreeTrialUser {
+  id: string;
+  telegram_user_id: number;
+  telegram_username: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  activated_at: string;
+  expires_at: string;
 }
 
 type TabKey = "overview" | "subscribers" | "expired" | "channels" | "broadcast" | "analytics" | "settings";
@@ -106,6 +118,8 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const [kickingPublic, setKickingPublic] = useState(false);
   const [kickingExpired, setKickingExpired] = useState(false);
   const [unbanningAll, setUnbanningAll] = useState(false);
+  const [freeTrialEnabled, setFreeTrialEnabled] = useState(false);
+  const [freeTrialUsers, setFreeTrialUsers] = useState<FreeTrialUser[]>([]);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -124,6 +138,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
       setNonSubMessage(settingsRes.data.non_subscriber_message || "");
       setPublicChannelId((settingsRes.data as any).public_channel_id || null);
       setSubscribersChannelId((settingsRes.data as any).subscribers_channel_id || null);
+      setFreeTrialEnabled((settingsRes.data as any).free_trial_enabled ?? false);
     }
 
     // Fetch channels
@@ -132,14 +147,16 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
 
     // Fetch subscriber-channel mappings + bot users count + public members count
     try {
-      const [scRes, buRes, pmRes] = await Promise.all([
+      const [scRes, buRes, pmRes, trialRes] = await Promise.all([
         supabase.functions.invoke("manage-bot", { body: { action: "get_subscriber_channels" } }),
         supabase.functions.invoke("manage-bot", { body: { action: "get_bot_users" } }),
         supabase.from("public_channel_members").select("id", { count: "exact", head: true }),
+        supabase.from("free_trial_users").select("*").order("activated_at", { ascending: false }),
       ]);
       if (scRes.data?.subscriber_channels) setSubscriberChannels(scRes.data.subscriber_channels);
       if (buRes.data?.count !== undefined) setBotUsersCount(buRes.data.count);
       setPublicMembersCount(pmRes.count ?? 0);
+      if (trialRes.data) setFreeTrialUsers(trialRes.data);
     } catch {}
 
     setLoading(false);
@@ -184,7 +201,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     if (!botSettings) return;
     setSavingSettings(true);
     try {
-      const updates: any = { non_subscriber_message: nonSubMessage.trim(), public_channel_id: publicChannelId || null, subscribers_channel_id: subscribersChannelId || null };
+      const updates: any = { non_subscriber_message: nonSubMessage.trim(), public_channel_id: publicChannelId || null, subscribers_channel_id: subscribersChannelId || null, free_trial_enabled: freeTrialEnabled };
       updates.admin_telegram_id = adminId.trim() ? parseInt(adminId.trim()) : null;
       const { error } = await supabase.from("bot_tokens").update(updates).eq("id", botSettings.id);
       if (error) throw error;
@@ -820,6 +837,38 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   {t("dash.unbanAll")}
                 </Button>
               </div>
+              {/* Free Trial Users */}
+              {freeTrialUsers.length > 0 && (
+                <div className="glass-card p-4 md:p-5 border-primary/20">
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                        <Zap className="w-5 h-5 text-primary" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-semibold text-foreground">{t("dash.freeTrialUsers")}</h3>
+                        <p className="text-xs text-muted-foreground">{freeTrialUsers.length} {t("dash.freeTrialCount")}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {freeTrialUsers.map(u => {
+                      const isTrialExpired = new Date(u.expires_at) < new Date();
+                      return (
+                        <div key={u.id} className="flex items-center justify-between py-2 px-3 rounded-lg bg-secondary/30 text-sm">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-foreground truncate">{[u.first_name, u.last_name].filter(Boolean).join(" ") || u.telegram_user_id}</span>
+                            {u.telegram_username && <span className="text-muted-foreground text-xs" dir="ltr">@{u.telegram_username}</span>}
+                          </div>
+                          <Badge className={isTrialExpired ? "bg-destructive/20 text-destructive border-destructive/30 text-[10px]" : "bg-success/20 text-success border-success/30 text-[10px]"}>
+                            {isTrialExpired ? t("dash.expiredBadge") : `${daysRemaining(u.expires_at)} ${t("dash.day")}`}
+                          </Badge>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               <div>
                 <h3 className="text-sm font-semibold text-foreground mb-3">{t("dash.latestSubs")}</h3>
                 <SubList list={subscribers.slice(0, 5)} />
@@ -1204,6 +1253,15 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">{t("dash.subscribersChannelHint")}</p>
+                </div>
+                <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 border border-border/30">
+                  <div className="flex-1">
+                    <Label className="text-foreground/80 flex items-center gap-2">
+                      <Zap className="w-4 h-4" />{t("dash.freeTrialEnabled")}
+                    </Label>
+                    <p className="text-xs text-muted-foreground mt-1">{t("dash.freeTrialHint")}</p>
+                  </div>
+                  <Switch checked={freeTrialEnabled} onCheckedChange={setFreeTrialEnabled} />
                 </div>
                 <Button onClick={handleSaveSettings} disabled={savingSettings} className="w-full gradient-telegram text-primary-foreground hover:opacity-90">
                   {savingSettings ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : <Save className="w-4 h-4 ml-2" />}

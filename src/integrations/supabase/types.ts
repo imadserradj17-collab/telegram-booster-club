@@ -45,6 +45,7 @@ export type Database = {
         Row: {
           admin_telegram_id: number | null
           created_at: string
+          free_trial_enabled: boolean
           id: string
           non_subscriber_message: string
           public_channel_id: string | null
@@ -56,6 +57,7 @@ export type Database = {
         Insert: {
           admin_telegram_id?: number | null
           created_at?: string
+          free_trial_enabled?: boolean
           id?: string
           non_subscriber_message?: string
           public_channel_id?: string | null
@@ -67,6 +69,7 @@ export type Database = {
         Update: {
           admin_telegram_id?: number | null
           created_at?: string
+          free_trial_enabled?: boolean
           id?: string
           non_subscriber_message?: string
           public_channel_id?: string | null
@@ -123,6 +126,42 @@ export type Database = {
           last_name?: string | null
           owner_id?: string
           photo_url?: string | null
+          telegram_user_id?: number
+          telegram_username?: string | null
+        }
+        Relationships: []
+      }
+      free_trial_users: {
+        Row: {
+          activated_at: string
+          bot_token_id: string
+          expires_at: string
+          first_name: string | null
+          id: string
+          last_name: string | null
+          owner_id: string
+          telegram_user_id: number
+          telegram_username: string | null
+        }
+        Insert: {
+          activated_at?: string
+          bot_token_id: string
+          expires_at: string
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          owner_id: string
+          telegram_user_id: number
+          telegram_username?: string | null
+        }
+        Update: {
+          activated_at?: string
+          bot_token_id?: string
+          expires_at?: string
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          owner_id?: string
           telegram_user_id?: number
           telegram_username?: string | null
         }
