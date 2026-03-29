@@ -526,15 +526,23 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
             ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
           });
         } else {
-          // Not a subscriber - show public channel if available
-          let replyMarkup: any = undefined;
+          // Not a subscriber - show public channel + free trial if enabled
+          const buttons: any[][] = [];
           if (publicChannelId) {
             const { data: pubCh } = await sb.from("telegram_channels").select("channel_name, invite_link, channel_type").eq("id", publicChannelId).maybeSingle();
             if (pubCh?.invite_link) {
               const icon = pubCh.channel_type === "group" ? "👥" : "📺";
-              replyMarkup = { inline_keyboard: [[{ text: `${icon} ${pubCh.channel_name}`, url: pubCh.invite_link }]] };
+              buttons.push([{ text: `${icon} ${pubCh.channel_name}`, url: pubCh.invite_link }]);
             }
           }
+          if (freeTrialEnabled) {
+            // Check if already used free trial
+            const { data: existingTrial } = await sb.from("free_trial_users").select("id").eq("owner_id", ownerId).eq("telegram_user_id", fromId).maybeSingle();
+            if (!existingTrial) {
+              buttons.push([{ text: "🎁 تجربة مجانية (3 أيام)", callback_data: "activate_free_trial" }]);
+            }
+          }
+          const replyMarkup = buttons.length > 0 ? { inline_keyboard: buttons } : undefined;
           await tg(botToken, "sendMessage", { chat_id: chatId, text: nonSubMessage, ...(replyMarkup ? { reply_markup: replyMarkup } : {}) });
         }
       }
