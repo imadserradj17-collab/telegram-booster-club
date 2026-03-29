@@ -475,8 +475,7 @@ Deno.serve(async (req) => {
           ]);
         }
 
-        await sb.from("free_trial_users").delete().eq("owner_id", user.id).eq("telegram_user_id", telegram_user_id);
-
+        // Keep free_trial_users record so user cannot re-activate free trial
         return new Response(JSON.stringify({ ok: true, kicked, failed }), { headers: corsHeaders });
       }
 
