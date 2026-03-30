@@ -867,7 +867,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                         toast({ title: t("dash.checkBlockedNone") });
                       } else {
                         const names = data.blocked_users?.map((u: any) => u.name).join(", ") || "";
-                        toast({ title: `${t("dash.checkBlockedDone")}: ${data.blocked} 🚫 | ${t("dash.kicked")}: ${data.kicked} ✅`, description: names });
+                        toast({ title: `${t("dash.checkBlockedDone")}: ${data.blocked} 🚫 | ✅ ${data.kicked}`, description: names });
                       }
                     } catch (error: any) {
                       toast({ title: t("common.error"), description: error.message, variant: "destructive" });
