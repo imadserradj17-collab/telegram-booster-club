@@ -118,6 +118,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const [kickingPublic, setKickingPublic] = useState(false);
   const [kickingExpired, setKickingExpired] = useState(false);
   const [unbanningAll, setUnbanningAll] = useState(false);
+  const [checkingBlocked, setCheckingBlocked] = useState(false);
   const [freeTrialEnabled, setFreeTrialEnabled] = useState(false);
   const [freeTrialUsers, setFreeTrialUsers] = useState<FreeTrialUser[]>([]);
 
@@ -836,6 +837,45 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                 >
                   {unbanningAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
                   {t("dash.unbanAll")}
+                </Button>
+              </div>
+              {/* Check Blocked Subscribers */}
+              <div className="glass-card p-4 md:p-5 border-orange-500/20">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center flex-shrink-0">
+                    <AlertTriangle className="w-5 h-5 text-orange-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground">{t("dash.checkBlocked")}</h3>
+                    <p className="text-xs text-muted-foreground">{t("dash.checkBlockedConfirm").split("؟")[0]}</p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  className="w-full mt-3 border-orange-500/30 text-orange-500 hover:bg-orange-500/10 hover:text-orange-400"
+                  disabled={checkingBlocked}
+                  onClick={async () => {
+                    if (!confirm(t("dash.checkBlockedConfirm"))) return;
+                    setCheckingBlocked(true);
+                    try {
+                      const { data, error } = await supabase.functions.invoke("manage-bot", {
+                        body: { action: "check_blocked_subscribers" },
+                      });
+                      if (error) throw error;
+                      if (data?.error) throw new Error(data.error);
+                      if (data.blocked === 0) {
+                        toast({ title: t("dash.checkBlockedNone") });
+                      } else {
+                        const names = data.blocked_users?.map((u: any) => u.name).join(", ") || "";
+                        toast({ title: `${t("dash.checkBlockedDone")}: ${data.blocked} 🚫 | ✅ ${data.kicked}`, description: names });
+                      }
+                    } catch (error: any) {
+                      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+                    } finally { setCheckingBlocked(false); }
+                  }}
+                >
+                  {checkingBlocked ? <Loader2 className="w-4 h-4 animate-spin" /> : <AlertTriangle className="w-4 h-4" />}
+                  {t("dash.checkBlocked")}
                 </Button>
               </div>
               <div>

@@ -479,6 +479,72 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ ok: true, kicked, failed }), { headers: corsHeaders });
       }
 
+      // ── CHECK BLOCKED SUBSCRIBERS & KICK ──
+      case "check_blocked_subscribers": {
+        // Get all active subscribers
+        const { data: allSubs } = await sb.from("telegram_subscribers")
+          .select("id, telegram_user_id, telegram_username, first_name, last_name")
+          .eq("owner_id", user.id)
+          .eq("bot_token_id", botTokenId);
+
+        const activeSubs2 = allSubs || [];
+        if (activeSubs2.length === 0) {
+          return new Response(JSON.stringify({ ok: true, blocked: 0, kicked: 0, failed: 0 }), { headers: corsHeaders });
+        }
+
+        // Get all channels
+        const { data: allChs2 } = await sb.from("telegram_channels")
+          .select("channel_id")
+          .eq("owner_id", user.id)
+          .eq("bot_token_id", botTokenId);
+        const chIds2 = (allChs2 || []).map((c: any) => c.channel_id).filter(Boolean);
+
+        const blockedUsers: any[] = [];
+        const BATCH2 = 10;
+
+        // Check each subscriber by trying to send a test action (getChat)
+        for (let i = 0; i < activeSubs2.length; i += BATCH2) {
+          const batch = activeSubs2.slice(i, i + BATCH2);
+          await Promise.allSettled(batch.map(async (sub: any) => {
+            try {
+              const res = await tg(botToken, "sendChatAction", { chat_id: sub.telegram_user_id, action: "typing" });
+              if (!res.ok && res.description?.includes("bot was blocked")) {
+                blockedUsers.push(sub);
+              }
+            } catch {}
+          }));
+        }
+
+        if (blockedUsers.length === 0) {
+          return new Response(JSON.stringify({ ok: true, blocked: 0, kicked: 0, failed: 0 }), { headers: corsHeaders });
+        }
+
+        // Kick blocked users from all channels
+        let kicked2 = 0, failed2 = 0;
+        for (const bUser of blockedUsers) {
+          for (const chId of chIds2) {
+            try {
+              const banRes = await tg(botToken, "banChatMember", { chat_id: chId, user_id: bUser.telegram_user_id });
+              if (banRes.ok) {
+                kicked2++;
+                await tg(botToken, "unbanChatMember", { chat_id: chId, user_id: bUser.telegram_user_id, only_if_banned: true });
+              } else { failed2++; }
+            } catch { failed2++; }
+          }
+        }
+
+        return new Response(JSON.stringify({
+          ok: true,
+          blocked: blockedUsers.length,
+          kicked: kicked2,
+          failed: failed2,
+          blocked_users: blockedUsers.map((u: any) => ({
+            telegram_user_id: u.telegram_user_id,
+            name: [u.first_name, u.last_name].filter(Boolean).join(" ") || u.telegram_username || String(u.telegram_user_id),
+          })),
+        }), { headers: corsHeaders });
+      }
+
       default:
         return new Response(JSON.stringify({ error: "Unknown action" }), { status: 400, headers: corsHeaders });
     }
