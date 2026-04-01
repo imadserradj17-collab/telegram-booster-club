@@ -142,6 +142,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
       setPublicChannelId((settingsRes.data as any).public_channel_id || null);
       setSubscribersChannelId((settingsRes.data as any).subscribers_channel_id || null);
       setFreeTrialEnabled((settingsRes.data as any).free_trial_enabled ?? false);
+      setMandatoryChannelId((settingsRes.data as any).mandatory_channel_id || null);
     }
 
     // Fetch channels
