@@ -47,6 +47,7 @@ export type Database = {
           created_at: string
           free_trial_enabled: boolean
           id: string
+          mandatory_channel_id: string | null
           non_subscriber_message: string
           public_channel_id: string | null
           subscribers_channel_id: string | null
@@ -59,6 +60,7 @@ export type Database = {
           created_at?: string
           free_trial_enabled?: boolean
           id?: string
+          mandatory_channel_id?: string | null
           non_subscriber_message?: string
           public_channel_id?: string | null
           subscribers_channel_id?: string | null
@@ -71,6 +73,7 @@ export type Database = {
           created_at?: string
           free_trial_enabled?: boolean
           id?: string
+          mandatory_channel_id?: string | null
           non_subscriber_message?: string
           public_channel_id?: string | null
           subscribers_channel_id?: string | null
@@ -79,6 +82,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "bot_tokens_mandatory_channel_id_fkey"
+            columns: ["mandatory_channel_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_channels"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "bot_tokens_public_channel_id_fkey"
             columns: ["public_channel_id"]

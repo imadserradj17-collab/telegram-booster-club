@@ -58,6 +58,7 @@ interface BotSettings {
   public_channel_id: string | null;
   subscribers_channel_id: string | null;
   free_trial_enabled: boolean;
+  mandatory_channel_id: string | null;
 }
 
 interface FreeTrialUser {
@@ -92,6 +93,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const [nonSubMessage, setNonSubMessage] = useState("");
   const [publicChannelId, setPublicChannelId] = useState<string | null>(null);
   const [subscribersChannelId, setSubscribersChannelId] = useState<string | null>(null);
+  const [mandatoryChannelId, setMandatoryChannelId] = useState<string | null>(null);
 
   // Add subscriber dialog
   const [showAddSub, setShowAddSub] = useState(false);
@@ -140,6 +142,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
       setPublicChannelId((settingsRes.data as any).public_channel_id || null);
       setSubscribersChannelId((settingsRes.data as any).subscribers_channel_id || null);
       setFreeTrialEnabled((settingsRes.data as any).free_trial_enabled ?? false);
+      setMandatoryChannelId((settingsRes.data as any).mandatory_channel_id || null);
     }
 
     // Fetch channels
@@ -202,7 +205,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     if (!botSettings) return;
     setSavingSettings(true);
     try {
-      const updates: any = { non_subscriber_message: nonSubMessage.trim(), public_channel_id: publicChannelId || null, subscribers_channel_id: subscribersChannelId || null, free_trial_enabled: freeTrialEnabled };
+      const updates: any = { non_subscriber_message: nonSubMessage.trim(), public_channel_id: publicChannelId || null, subscribers_channel_id: subscribersChannelId || null, free_trial_enabled: freeTrialEnabled, mandatory_channel_id: mandatoryChannelId || null };
       updates.admin_telegram_id = adminId.trim() ? parseInt(adminId.trim()) : null;
       const { error } = await supabase.from("bot_tokens").update(updates).eq("id", botSettings.id);
       if (error) throw error;
@@ -1505,7 +1508,24 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   </Select>
                   <p className="text-xs text-muted-foreground">{t("dash.subscribersChannelHint")}</p>
                 </div>
-                <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 border border-border/30">
+                <div className="space-y-2">
+                  <Label className="text-foreground/80 flex items-center gap-2">
+                    <Shield className="w-4 h-4" />{t("dash.mandatoryChannel")}
+                  </Label>
+                  <Select value={mandatoryChannelId || "none"} onValueChange={(v) => setMandatoryChannelId(v === "none" ? null : v)}>
+                    <SelectTrigger className="bg-secondary/50 border-border/50">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">{t("dash.mandatoryChannelNone")}</SelectItem>
+                      {channels.map(ch => (
+                        <SelectItem key={ch.id} value={ch.id}>
+                          {ch.channel_type === "group" ? "👥" : "📺"} {ch.channel_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">{t("dash.mandatoryChannelHint")}</p>
                   <div className="flex-1">
                     <Label className="text-foreground/80 flex items-center gap-2">
                       <Zap className="w-4 h-4" />{t("dash.freeTrialEnabled")}

@@ -14,7 +14,7 @@ const sb = createClient(supabaseUrl, supabaseServiceKey);
 async function getBotSettingsByToken(token: string) {
   const { data } = await sb
     .from("bot_tokens")
-    .select("id, user_id, admin_telegram_id, non_subscriber_message, public_channel_id, subscribers_channel_id, free_trial_enabled")
+    .select("id, user_id, admin_telegram_id, non_subscriber_message, public_channel_id, subscribers_channel_id, free_trial_enabled, mandatory_channel_id")
     .eq("token", token)
     .maybeSingle();
   return data || null;
@@ -279,7 +279,22 @@ async function finalizeSubscriber(
   });
 }
 
-async function handleUpdate(update: any, botToken: string, ownerId: string, botTokenId: string, adminTelegramId: number | null, nonSubMessage: string, publicChannelId: string | null = null, subscribersChannelId: string | null = null, freeTrialEnabled: boolean = false) {
+// Check if user is member of mandatory channel
+async function checkMandatoryChannel(botToken: string, mandatoryChannelId: string, telegramUserId: number): Promise<{ isMember: boolean; channelInfo: any | null }> {
+  const { data: ch } = await sb.from("telegram_channels").select("channel_id, channel_name, invite_link, channel_type").eq("id", mandatoryChannelId).maybeSingle();
+  if (!ch) return { isMember: true, channelInfo: null }; // If channel not found, skip check
+  try {
+    const result = await tg(botToken, "getChatMember", { chat_id: ch.channel_id, user_id: telegramUserId });
+    if (result.ok) {
+      const status = result.result.status;
+      const isMember = ["member", "administrator", "creator"].includes(status);
+      return { isMember, channelInfo: ch };
+    }
+  } catch {}
+  return { isMember: false, channelInfo: ch };
+}
+
+async function handleUpdate(update: any, botToken: string, ownerId: string, botTokenId: string, adminTelegramId: number | null, nonSubMessage: string, publicChannelId: string | null = null, subscribersChannelId: string | null = null, freeTrialEnabled: boolean = false, mandatoryChannelId: string | null = null) {
   // ─── CHAT MEMBER UPDATES (track joins to public channel) ───
   if (update.chat_member) {
     const cm = update.chat_member;
@@ -309,6 +324,45 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
           last_name: user.last_name || null,
         }, { onConflict: "owner_id,channel_id,telegram_user_id" });
         console.log(`Tracked public channel join: user ${userId} in channel ${chatId}`);
+      }
+    }
+
+    // ─── MANDATORY CHANNEL: kick if user leaves it ───
+    if (mandatoryChannelId && userId && (newStatus === "left" || newStatus === "kicked")) {
+      const { data: mandatoryCh } = await sb.from("telegram_channels")
+        .select("id, channel_id")
+        .eq("id", mandatoryChannelId)
+        .maybeSingle();
+
+      if (mandatoryCh && mandatoryCh.channel_id === chatId) {
+        // User left the mandatory channel - kick from all other channels
+        const { data: sub } = await sb.from("telegram_subscribers")
+          .select("id")
+          .eq("owner_id", ownerId)
+          .eq("bot_token_id", botTokenId)
+          .eq("telegram_user_id", userId)
+          .maybeSingle();
+
+        if (sub) {
+          const kickChannelIds = await getKickChannels(sub.id, ownerId, botTokenId);
+          // Also kick from subscribers channel and public channel
+          const allKickIds = [...kickChannelIds];
+          if (subscribersChannelId) {
+            const { data: subsCh } = await sb.from("telegram_channels").select("channel_id").eq("id", subscribersChannelId).maybeSingle();
+            if (subsCh) allKickIds.push(subsCh.channel_id);
+          }
+          // Remove the mandatory channel itself from kick list
+          const filteredKickIds = allKickIds.filter(id => id !== chatId);
+          if (filteredKickIds.length > 0) {
+            await kickFromChannels(botToken, userId, filteredKickIds);
+          }
+          // Notify user
+          tgFire(botToken, "sendMessage", {
+            chat_id: userId,
+            text: "⚠️ *تم إزالتك من جميع القنوات*\n\nلقد خرجت من القناة الإجبارية. يجب عليك الانضمام إليها أولاً لاستعادة الوصول.",
+            parse_mode: "Markdown",
+          });
+        }
       }
     }
     return;
@@ -477,6 +531,25 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
           reply_markup: adminKeyboard(),
         });
       } else {
+        // ─── MANDATORY CHANNEL CHECK FOR NON-ADMIN ───
+        if (mandatoryChannelId) {
+          const { isMember, channelInfo } = await checkMandatoryChannel(botToken, mandatoryChannelId, fromId);
+          if (!isMember && channelInfo) {
+            const icon = channelInfo.channel_type === "group" ? "👥" : "📺";
+            const buttons: any[][] = [];
+            if (channelInfo.invite_link) {
+              buttons.push([{ text: `${icon} ${channelInfo.channel_name}`, url: channelInfo.invite_link }]);
+            }
+            await tg(botToken, "sendMessage", {
+              chat_id: chatId,
+              text: `⚠️ مرحباً *${firstName}*!\n\n🔒 يجب عليك الانضمام إلى القناة الإجبارية أولاً قبل الوصول إلى أي محتوى.\n\nانضم ثم اضغط /start مرة أخرى.`,
+              parse_mode: "Markdown",
+              ...(buttons.length > 0 ? { reply_markup: { inline_keyboard: buttons } } : {}),
+            });
+            return;
+          }
+        }
+
         const { data: sub } = await sb.from("telegram_subscribers").select("*").eq("owner_id", ownerId).eq("bot_token_id", botTokenId).eq("telegram_user_id", fromId).maybeSingle();
 
         if (sub && (sub.is_permanent || (sub.expires_at && new Date(sub.expires_at) > new Date()))) {
@@ -1298,7 +1371,7 @@ Deno.serve(async (req) => {
       }
 
       const update = await req.json();
-      await handleUpdate(update, tokenFromPath, settings.user_id, settings.id, settings.admin_telegram_id, settings.non_subscriber_message, settings.public_channel_id, settings.subscribers_channel_id, settings.free_trial_enabled ?? false);
+      await handleUpdate(update, tokenFromPath, settings.user_id, settings.id, settings.admin_telegram_id, settings.non_subscriber_message, settings.public_channel_id, settings.subscribers_channel_id, settings.free_trial_enabled ?? false, settings.mandatory_channel_id ?? null);
       return new Response("ok", { headers: corsHeaders });
     }
 
