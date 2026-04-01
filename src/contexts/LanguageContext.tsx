@@ -235,6 +235,9 @@ const translations: Record<string, Record<Lang, string>> = {
   "dash.noTrialUsers": { ar: "لا يوجد مستفيدون من التجربة المجانية", en: "No free trial users" },
   "dash.trialActivatedAt": { ar: "تاريخ التفعيل", en: "Activated" },
   "dash.trialExpiresAt": { ar: "ينتهي", en: "Expires" },
+  "dash.mandatoryChannel": { ar: "قناة/مجموعة إجبارية", en: "Mandatory Channel/Group" },
+  "dash.mandatoryChannelHint": { ar: "يجب على المستخدم الانضمام لهذه القناة أولاً لرؤية باقي القنوات. إذا خرج منها يتم طرده من جميع القنوات.", en: "Users must join this channel first to see other channels. If they leave, they get kicked from all channels." },
+  "dash.mandatoryChannelNone": { ar: "بدون قناة إجبارية", en: "No mandatory channel" },
 
   // Common
   "common.logout": { ar: "تسجيل الخروج", en: "Sign Out" },

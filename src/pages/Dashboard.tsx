@@ -58,6 +58,7 @@ interface BotSettings {
   public_channel_id: string | null;
   subscribers_channel_id: string | null;
   free_trial_enabled: boolean;
+  mandatory_channel_id: string | null;
 }
 
 interface FreeTrialUser {
