@@ -536,10 +536,13 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
           reply_markup: adminKeyboard(),
         });
       } else {
+        // ─── NON-ADMIN /start FLOW ───
         const { data: sub } = await sb.from("telegram_subscribers").select("*").eq("owner_id", ownerId).eq("bot_token_id", botTokenId).eq("telegram_user_id", fromId).maybeSingle();
+        const isActiveSub = sub && (sub.is_permanent || (sub.expires_at && new Date(sub.expires_at) > new Date()));
 
-        if (sub && (sub.is_permanent || (sub.expires_at && new Date(sub.expires_at) > new Date()))) {
-          // ─── MANDATORY CHANNEL CHECK FOR ACTIVE SUBSCRIBERS ONLY ───
+        if (isActiveSub) {
+          // ── ACTIVE SUBSCRIBER ──
+          // 1. Mandatory channel check first
           if (mandatoryChannelId) {
             const { isMember, channelInfo } = await checkMandatoryChannel(botToken, mandatoryChannelId, fromId);
             if (!isMember && channelInfo) {
@@ -558,8 +561,8 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
             }
           }
 
+          // 2. Show subscriber channels
           const assignedChannelIds = await getSubscriberChannels(sub.id);
-          
           let channels: any[];
           if (assignedChannelIds.length > 0) {
             const { data } = await sb.from("telegram_channels").select("channel_name, invite_link").in("id", assignedChannelIds);
@@ -571,7 +574,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
 
           const subStatus = sub.is_permanent ? "♾ *دائم*" : `📅 متبقي *${daysRemaining(sub.expires_at!)}* يوم (حتى ${formatDate(sub.expires_at!)})`;
           const buttons = channels.filter((ch: any) => ch.invite_link).map((ch: any) => [{ text: `📺 ${ch.channel_name}`, url: ch.invite_link }]);
-          // Add subscribers-only channel (e.g. discussion group)
+          
           if (subscribersChannelId) {
             const { data: subsCh } = await sb.from("telegram_channels").select("channel_name, invite_link, channel_type").eq("id", subscribersChannelId).maybeSingle();
             if (subsCh?.invite_link) {
@@ -587,7 +590,9 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
             parse_mode: "Markdown",
             reply_markup: { inline_keyboard: buttons },
           });
-          // Expired subscriber - show public channel if available
+
+        } else if (sub) {
+          // ── EXPIRED SUBSCRIBER ──
           let replyMarkup: any = undefined;
           if (publicChannelId) {
             const { data: pubCh } = await sb.from("telegram_channels").select("channel_name, invite_link, channel_type").eq("id", publicChannelId).maybeSingle();
@@ -602,8 +607,9 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
             parse_mode: "Markdown",
             ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
           });
+
         } else {
-          // Not a subscriber - show public channel + free trial if enabled
+          // ── NOT A SUBSCRIBER ──
           const buttons: any[][] = [];
           if (publicChannelId) {
             const { data: pubCh } = await sb.from("telegram_channels").select("channel_name, invite_link, channel_type").eq("id", publicChannelId).maybeSingle();
@@ -613,7 +619,6 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
             }
           }
           if (freeTrialEnabled) {
-            // Check if already used free trial
             const { data: existingTrial } = await sb.from("free_trial_users").select("id").eq("owner_id", ownerId).eq("telegram_user_id", fromId).maybeSingle();
             if (!existingTrial) {
               buttons.push([{ text: "🎁 تجربة مجانية (3 أيام)", callback_data: "activate_free_trial" }]);
