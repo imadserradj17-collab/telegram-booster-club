@@ -640,6 +640,24 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
     }
 
     if (!isAdmin) {
+      // Mandatory channel check for all non-admin interactions
+      if (mandatoryChannelId) {
+        const { isMember, channelInfo } = await checkMandatoryChannel(botToken, mandatoryChannelId, fromId);
+        if (!isMember && channelInfo) {
+          const icon = channelInfo.channel_type === "group" ? "👥" : "📺";
+          const buttons: any[][] = [];
+          if (channelInfo.invite_link) {
+            buttons.push([{ text: `${icon} ${channelInfo.channel_name}`, url: channelInfo.invite_link }]);
+          }
+          await tg(botToken, "sendMessage", {
+            chat_id: chatId,
+            text: `⚠️ يجب عليك الانضمام إلى القناة الإجبارية أولاً.\n\nانضم ثم اضغط /start مرة أخرى.`,
+            parse_mode: "Markdown",
+            ...(buttons.length > 0 ? { reply_markup: { inline_keyboard: buttons } } : {}),
+          });
+          return;
+        }
+      }
       if (text === "/status" || text === "/حالتي") {
         const { data: sub } = await sb.from("telegram_subscribers").select("*").eq("owner_id", ownerId).eq("bot_token_id", botTokenId).eq("telegram_user_id", fromId).maybeSingle();
         if (sub) {
