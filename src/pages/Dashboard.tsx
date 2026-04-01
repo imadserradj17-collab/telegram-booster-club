@@ -1508,7 +1508,24 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   </Select>
                   <p className="text-xs text-muted-foreground">{t("dash.subscribersChannelHint")}</p>
                 </div>
-                <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 border border-border/30">
+                <div className="space-y-2">
+                  <Label className="text-foreground/80 flex items-center gap-2">
+                    <Shield className="w-4 h-4" />{t("dash.mandatoryChannel")}
+                  </Label>
+                  <Select value={mandatoryChannelId || "none"} onValueChange={(v) => setMandatoryChannelId(v === "none" ? null : v)}>
+                    <SelectTrigger className="bg-secondary/50 border-border/50">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">{t("dash.mandatoryChannelNone")}</SelectItem>
+                      {channels.map(ch => (
+                        <SelectItem key={ch.id} value={ch.id}>
+                          {ch.channel_type === "group" ? "👥" : "📺"} {ch.channel_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">{t("dash.mandatoryChannelHint")}</p>
                   <div className="flex-1">
                     <Label className="text-foreground/80 flex items-center gap-2">
                       <Zap className="w-4 h-4" />{t("dash.freeTrialEnabled")}
