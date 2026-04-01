@@ -8,9 +8,7 @@ const corsHeaders = {
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-function supabaseAdmin() {
-  return createClient(supabaseUrl, supabaseServiceKey);
-}
+const sb = createClient(supabaseUrl, supabaseServiceKey);
 
 async function tg(token: string, method: string, body?: any) {
   const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
@@ -41,7 +39,6 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
     }
 
-    const sb = supabaseAdmin();
     const { action, ...params } = await req.json();
 
     // Get bot token for this user
@@ -138,11 +135,16 @@ Deno.serve(async (req) => {
         const activeSubs = (subs || []).filter((s: any) => s.is_permanent || (s.expires_at && new Date(s.expires_at) > new Date()));
 
         let sent = 0, failed = 0;
-        for (const sub of activeSubs) {
-          try {
-            const res = await tg(botToken, "sendMessage", { chat_id: sub.telegram_user_id, text: message, parse_mode: "Markdown" });
-            if (res.ok) sent++; else failed++;
-          } catch { failed++; }
+        const BATCH_SIZE = 20;
+        for (let i = 0; i < activeSubs.length; i += BATCH_SIZE) {
+          const batch = activeSubs.slice(i, i + BATCH_SIZE);
+          const results = await Promise.allSettled(batch.map((sub: any) =>
+            tg(botToken, "sendMessage", { chat_id: sub.telegram_user_id, text: message, parse_mode: "Markdown" })
+          ));
+          for (const r of results) {
+            if (r.status === "fulfilled" && r.value?.ok) sent++;
+            else failed++;
+          }
         }
 
         return new Response(JSON.stringify({ ok: true, sent, failed, total: activeSubs.length }), { headers: corsHeaders });
@@ -519,17 +521,28 @@ Deno.serve(async (req) => {
           return new Response(JSON.stringify({ ok: true, blocked: 0, kicked: 0, failed: 0 }), { headers: corsHeaders });
         }
 
-        // Kick blocked users from all channels
+        // Kick blocked users from all channels — parallel batches
         let kicked2 = 0, failed2 = 0;
+        const kickTasks: { chId: number; userId: number }[] = [];
         for (const bUser of blockedUsers) {
           for (const chId of chIds2) {
-            try {
-              const banRes = await tg(botToken, "banChatMember", { chat_id: chId, user_id: bUser.telegram_user_id });
-              if (banRes.ok) {
-                kicked2++;
-                await tg(botToken, "unbanChatMember", { chat_id: chId, user_id: bUser.telegram_user_id, only_if_banned: true });
-              } else { failed2++; }
-            } catch { failed2++; }
+            kickTasks.push({ chId, userId: bUser.telegram_user_id });
+          }
+        }
+        const KICK_BATCH = 20;
+        for (let i = 0; i < kickTasks.length; i += KICK_BATCH) {
+          const batch = kickTasks.slice(i, i + KICK_BATCH);
+          const results = await Promise.allSettled(batch.map(async ({ chId, userId }) => {
+            const banRes = await tg(botToken, "banChatMember", { chat_id: chId, user_id: userId });
+            if (banRes.ok) {
+              tg(botToken, "unbanChatMember", { chat_id: chId, user_id: userId, only_if_banned: true }).catch(() => {});
+              return true;
+            }
+            return false;
+          }));
+          for (const r of results) {
+            if (r.status === "fulfilled" && r.value) kicked2++;
+            else failed2++;
           }
         }
 
