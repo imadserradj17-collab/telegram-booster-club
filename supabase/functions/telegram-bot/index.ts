@@ -531,6 +531,25 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
           reply_markup: adminKeyboard(),
         });
       } else {
+        // ─── MANDATORY CHANNEL CHECK FOR NON-ADMIN ───
+        if (mandatoryChannelId) {
+          const { isMember, channelInfo } = await checkMandatoryChannel(botToken, mandatoryChannelId, fromId);
+          if (!isMember && channelInfo) {
+            const icon = channelInfo.channel_type === "group" ? "👥" : "📺";
+            const buttons: any[][] = [];
+            if (channelInfo.invite_link) {
+              buttons.push([{ text: `${icon} ${channelInfo.channel_name}`, url: channelInfo.invite_link }]);
+            }
+            await tg(botToken, "sendMessage", {
+              chat_id: chatId,
+              text: `⚠️ مرحباً *${firstName}*!\n\n🔒 يجب عليك الانضمام إلى القناة الإجبارية أولاً قبل الوصول إلى أي محتوى.\n\nانضم ثم اضغط /start مرة أخرى.`,
+              parse_mode: "Markdown",
+              ...(buttons.length > 0 ? { reply_markup: { inline_keyboard: buttons } } : {}),
+            });
+            return;
+          }
+        }
+
         const { data: sub } = await sb.from("telegram_subscribers").select("*").eq("owner_id", ownerId).eq("bot_token_id", botTokenId).eq("telegram_user_id", fromId).maybeSingle();
 
         if (sub && (sub.is_permanent || (sub.expires_at && new Date(sub.expires_at) > new Date()))) {
