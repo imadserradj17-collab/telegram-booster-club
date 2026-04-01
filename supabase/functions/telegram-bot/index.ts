@@ -531,28 +531,28 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
           reply_markup: adminKeyboard(),
         });
       } else {
-        // ─── MANDATORY CHANNEL CHECK FOR NON-ADMIN ───
-        if (mandatoryChannelId) {
-          const { isMember, channelInfo } = await checkMandatoryChannel(botToken, mandatoryChannelId, fromId);
-          if (!isMember && channelInfo) {
-            const icon = channelInfo.channel_type === "group" ? "👥" : "📺";
-            const buttons: any[][] = [];
-            if (channelInfo.invite_link) {
-              buttons.push([{ text: `${icon} ${channelInfo.channel_name}`, url: channelInfo.invite_link }]);
-            }
-            await tg(botToken, "sendMessage", {
-              chat_id: chatId,
-              text: `⚠️ مرحباً *${firstName}*!\n\n🔒 يجب عليك الانضمام إلى القناة الإجبارية أولاً قبل الوصول إلى أي محتوى.\n\nانضم ثم اضغط /start مرة أخرى.`,
-              parse_mode: "Markdown",
-              ...(buttons.length > 0 ? { reply_markup: { inline_keyboard: buttons } } : {}),
-            });
-            return;
-          }
-        }
-
         const { data: sub } = await sb.from("telegram_subscribers").select("*").eq("owner_id", ownerId).eq("bot_token_id", botTokenId).eq("telegram_user_id", fromId).maybeSingle();
 
         if (sub && (sub.is_permanent || (sub.expires_at && new Date(sub.expires_at) > new Date()))) {
+          // ─── MANDATORY CHANNEL CHECK FOR ACTIVE SUBSCRIBERS ONLY ───
+          if (mandatoryChannelId) {
+            const { isMember, channelInfo } = await checkMandatoryChannel(botToken, mandatoryChannelId, fromId);
+            if (!isMember && channelInfo) {
+              const icon = channelInfo.channel_type === "group" ? "👥" : "📺";
+              const buttons: any[][] = [];
+              if (channelInfo.invite_link) {
+                buttons.push([{ text: `${icon} ${channelInfo.channel_name}`, url: channelInfo.invite_link }]);
+              }
+              await tg(botToken, "sendMessage", {
+                chat_id: chatId,
+                text: `⚠️ مرحباً *${firstName}*!\n\n🔒 يجب عليك الانضمام إلى القناة الإجبارية أولاً قبل الوصول إلى القنوات.\n\nانضم ثم اضغط /start مرة أخرى.`,
+                parse_mode: "Markdown",
+                ...(buttons.length > 0 ? { reply_markup: { inline_keyboard: buttons } } : {}),
+              });
+              return;
+            }
+          }
+
           const assignedChannelIds = await getSubscriberChannels(sub.id);
           
           let channels: any[];
@@ -582,7 +582,6 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
             parse_mode: "Markdown",
             reply_markup: { inline_keyboard: buttons },
           });
-        } else if (sub) {
           // Expired subscriber - show public channel if available
           let replyMarkup: any = undefined;
           if (publicChannelId) {
@@ -640,8 +639,11 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
     }
 
     if (!isAdmin) {
-      // Mandatory channel check for all non-admin interactions
-      if (mandatoryChannelId) {
+      // Check subscription + mandatory channel for non-admin interactions
+      const { data: subCheck } = await sb.from("telegram_subscribers").select("id, is_permanent, expires_at").eq("owner_id", ownerId).eq("bot_token_id", botTokenId).eq("telegram_user_id", fromId).maybeSingle();
+      const isActiveSub = subCheck && (subCheck.is_permanent || (subCheck.expires_at && new Date(subCheck.expires_at) > new Date()));
+      
+      if (isActiveSub && mandatoryChannelId) {
         const { isMember, channelInfo } = await checkMandatoryChannel(botToken, mandatoryChannelId, fromId);
         if (!isMember && channelInfo) {
           const icon = channelInfo.channel_type === "group" ? "👥" : "📺";
@@ -659,13 +661,12 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
         }
       }
       if (text === "/status" || text === "/حالتي") {
-        const { data: sub } = await sb.from("telegram_subscribers").select("*").eq("owner_id", ownerId).eq("bot_token_id", botTokenId).eq("telegram_user_id", fromId).maybeSingle();
-        if (sub) {
-          const status = sub.is_permanent
+        if (subCheck) {
+          const status = subCheck.is_permanent
             ? "♾ *دائم* — لا ينتهي"
-            : sub.expires_at && new Date(sub.expires_at) > new Date()
-            ? `✅ *نشط* — متبقي *${daysRemaining(sub.expires_at!)}* يوم\n📅 ينتهي: ${formatDate(sub.expires_at!)}`
-            : `❌ *منتهي* منذ ${formatDate(sub.expires_at!)}`;
+            : subCheck.expires_at && new Date(subCheck.expires_at) > new Date()
+            ? `✅ *نشط* — متبقي *${daysRemaining(subCheck.expires_at!)}* يوم\n📅 ينتهي: ${formatDate(subCheck.expires_at!)}`
+            : `❌ *منتهي* منذ ${formatDate(subCheck.expires_at!)}`;
           await tg(botToken, "sendMessage", { chat_id: chatId, text: `📋 *حالة اشتراكك:*\n\n${status}`, parse_mode: "Markdown" });
         } else {
           await tg(botToken, "sendMessage", { chat_id: chatId, text: nonSubMessage });
