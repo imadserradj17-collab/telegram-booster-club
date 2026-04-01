@@ -8,9 +8,7 @@ const corsHeaders = {
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-function supabaseAdmin() {
-  return createClient(supabaseUrl, supabaseServiceKey);
-}
+const sb = createClient(supabaseUrl, supabaseServiceKey);
 
 async function tg(token: string, method: string, body?: any) {
   const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
