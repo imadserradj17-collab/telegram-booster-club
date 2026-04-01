@@ -335,35 +335,45 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
         .maybeSingle();
 
       if (mandatoryCh && mandatoryCh.channel_id === chatId) {
-        // User left the mandatory channel - check if subscriber (paid or trial)
-        const { data: sub } = await sb.from("telegram_subscribers")
-          .select("id")
-          .eq("owner_id", ownerId)
-          .eq("bot_token_id", botTokenId)
-          .eq("telegram_user_id", userId)
-          .maybeSingle();
+        // Check both paid subscribers and free trial users in parallel
+        const [subRes, trialRes] = await Promise.all([
+          sb.from("telegram_subscribers").select("id, is_permanent, expires_at").eq("owner_id", ownerId).eq("bot_token_id", botTokenId).eq("telegram_user_id", userId).maybeSingle(),
+          sb.from("free_trial_users").select("id, expires_at").eq("owner_id", ownerId).eq("bot_token_id", botTokenId).eq("telegram_user_id", userId).maybeSingle(),
+        ]);
 
-        if (sub) {
-          const kickChannelIds = await getKickChannels(sub.id, ownerId, botTokenId);
-          const allKickIds = [...kickChannelIds];
+        const sub = subRes.data;
+        const trial = trialRes.data;
+        const isActiveSub = sub && (sub.is_permanent || (sub.expires_at && new Date(sub.expires_at) > new Date()));
+        const isActiveTrial = trial && new Date(trial.expires_at) > new Date();
+
+        if (isActiveSub || isActiveTrial) {
+          // Get all channels to kick from
+          const kickChannelIds = sub ? await getKickChannels(sub.id, ownerId, botTokenId) : [];
+          // Also get all bot channels for trial users
+          if (isActiveTrial && !isActiveSub) {
+            const { data: allCh } = await sb.from("telegram_channels").select("channel_id").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+            for (const c of (allCh || [])) {
+              if (!kickChannelIds.includes(c.channel_id)) kickChannelIds.push(c.channel_id);
+            }
+          }
           if (subscribersChannelId) {
             const { data: subsCh } = await sb.from("telegram_channels").select("channel_id").eq("id", subscribersChannelId).maybeSingle();
-            if (subsCh) allKickIds.push(subsCh.channel_id);
+            if (subsCh && !kickChannelIds.includes(subsCh.channel_id)) kickChannelIds.push(subsCh.channel_id);
           }
           // Remove the mandatory channel itself from kick list
-          const filteredKickIds = allKickIds.filter(id => id !== chatId);
+          const filteredKickIds = kickChannelIds.filter(id => id !== chatId);
           if (filteredKickIds.length > 0) {
             await kickFromChannels(botToken, userId, filteredKickIds);
           }
-          // Send message with mandatory channel join button
+          // Send ban/unban notification with mandatory channel join button
           const icon = mandatoryCh.channel_type === "group" ? "👥" : "📺";
           const buttons: any[][] = [];
           if (mandatoryCh.invite_link) {
-            buttons.push([{ text: `${icon} ${mandatoryCh.channel_name}`, url: mandatoryCh.invite_link }]);
+            buttons.push([{ text: `${icon} انضم إلى ${mandatoryCh.channel_name}`, url: mandatoryCh.invite_link }]);
           }
-          tgFire(botToken, "sendMessage", {
+          await tg(botToken, "sendMessage", {
             chat_id: userId,
-            text: "⚠️ *تم إزالتك من جميع القنوات*\n\nلقد خرجت من القناة الإجبارية.\n🔒 يجب عليك الانضمام إليها أولاً لاستعادة الوصول ثم اضغط /start.",
+            text: "🚫 *تم طردك من جميع القنوات والمجموعات!*\n\n❌ لقد غادرت القناة/المجموعة الإجبارية.\n\n⚠️ لن تتمكن من الوصول إلى أي قناة حتى تنضم مرة أخرى.\n\n👇 اضغط على الزر أدناه للانضمام ثم أرسل /start لاستعادة الوصول:",
             parse_mode: "Markdown",
             ...(buttons.length > 0 ? { reply_markup: { inline_keyboard: buttons } } : {}),
           });
