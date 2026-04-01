@@ -133,6 +133,12 @@ async function getSubscriberChannels(subscriberId: string): Promise<string[]> {
   return (data || []).map((r: any) => r.channel_id);
 }
 
+// Check if subscriber has ALL channels (no specific assignments) — mandatory channel only applies to these
+async function subscriberHasAllChannels(subscriberId: string): Promise<boolean> {
+  const assigned = await getSubscriberChannels(subscriberId);
+  return assigned.length === 0; // No specific assignments = has all channels
+}
+
 function adminKeyboard() {
   return {
     inline_keyboard: [
@@ -359,7 +365,10 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
         const isActiveTrial = trial && new Date(trial.expires_at) > new Date();
         console.log(`Sub: ${JSON.stringify(sub)}, Trial: ${JSON.stringify(trial)}, isActiveSub=${isActiveSub}, isActiveTrial=${isActiveTrial}`);
 
-        if (isActiveSub || isActiveTrial) {
+        // Only enforce mandatory channel for subscribers with ALL channels
+        const subHasAll = isActiveSub && sub ? await subscriberHasAllChannels(sub.id) : false;
+        const trialHasAll = isActiveTrial; // Free trial always gets all channels
+        if ((subHasAll || trialHasAll) && (isActiveSub || isActiveTrial)) {
           // Get all channels to kick from
           const kickChannelIds: number[] = [];
           if (isActiveSub && sub) {
@@ -577,7 +586,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
         if (isActiveSub) {
           // ── ACTIVE SUBSCRIBER ──
           // 1. Mandatory channel check first
-          if (mandatoryChannelId) {
+          if (mandatoryChannelId && await subscriberHasAllChannels(sub.id)) {
             const { isMember, channelInfo } = await checkMandatoryChannel(botToken, mandatoryChannelId, fromId);
             if (!isMember && channelInfo) {
               const icon = channelInfo.channel_type === "group" ? "👥" : "📺";
@@ -687,7 +696,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
       const { data: subCheck } = await sb.from("telegram_subscribers").select("id, is_permanent, expires_at").eq("owner_id", ownerId).eq("bot_token_id", botTokenId).eq("telegram_user_id", fromId).maybeSingle();
       const isActiveSub = subCheck && (subCheck.is_permanent || (subCheck.expires_at && new Date(subCheck.expires_at) > new Date()));
       
-      if (isActiveSub && mandatoryChannelId) {
+      if (isActiveSub && mandatoryChannelId && subCheck && await subscriberHasAllChannels(subCheck.id)) {
         const { isMember, channelInfo } = await checkMandatoryChannel(botToken, mandatoryChannelId, fromId);
         if (!isMember && channelInfo) {
           const icon = channelInfo.channel_type === "group" ? "👥" : "📺";
