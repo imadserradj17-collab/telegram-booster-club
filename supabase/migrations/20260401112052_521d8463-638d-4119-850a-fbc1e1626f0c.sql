@@ -1,0 +1,1 @@
+ALTER TABLE public.bot_tokens ADD COLUMN mandatory_channel_id uuid REFERENCES public.telegram_channels(id) ON DELETE SET NULL DEFAULT NULL;
