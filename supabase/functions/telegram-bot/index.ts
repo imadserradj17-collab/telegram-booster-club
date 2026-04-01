@@ -295,13 +295,17 @@ async function checkMandatoryChannel(botToken: string, mandatoryChannelId: strin
 }
 
 async function handleUpdate(update: any, botToken: string, ownerId: string, botTokenId: string, adminTelegramId: number | null, nonSubMessage: string, publicChannelId: string | null = null, subscribersChannelId: string | null = null, freeTrialEnabled: boolean = false, mandatoryChannelId: string | null = null) {
-  // ─── CHAT MEMBER UPDATES (track joins to public channel) ───
+  console.log("handleUpdate called, keys:", Object.keys(update).join(","));
+
+  // ─── CHAT MEMBER UPDATES (track joins to public channel + mandatory channel enforcement) ───
   if (update.chat_member) {
     const cm = update.chat_member;
     const newStatus = cm.new_chat_member?.status;
     const oldStatus = cm.old_chat_member?.status;
     const chatId = cm.chat.id;
     const userId = cm.new_chat_member?.user?.id;
+
+    console.log(`chat_member update: chatId=${chatId}, userId=${userId}, old=${oldStatus}, new=${newStatus}, mandatoryChannelId=${mandatoryChannelId}`);
 
     // Track when someone joins the public channel
     if (publicChannelId && userId && (newStatus === "member" || newStatus === "administrator") && (oldStatus === "left" || oldStatus === "kicked" || oldStatus === "restricted")) {
@@ -328,13 +332,21 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
     }
 
     // ─── MANDATORY CHANNEL: kick if user leaves it ───
-    if (mandatoryChannelId && userId && (newStatus === "left" || newStatus === "kicked")) {
+    const wasActive = ["member", "administrator", "creator"].includes(oldStatus);
+    const isNowInactive = ["left", "kicked", "restricted"].includes(newStatus);
+    const userLeft = wasActive && isNowInactive;
+
+    if (mandatoryChannelId && userId && userLeft) {
+      console.log(`User ${userId} left/kicked from chat ${chatId}, checking if mandatory channel...`);
       const { data: mandatoryCh } = await sb.from("telegram_channels")
         .select("id, channel_id, channel_name, invite_link, channel_type")
         .eq("id", mandatoryChannelId)
         .maybeSingle();
 
-      if (mandatoryCh && mandatoryCh.channel_id === chatId) {
+      console.log(`mandatoryCh: id=${mandatoryCh?.id}, channel_id=${mandatoryCh?.channel_id}, chatId=${chatId}, match=${mandatoryCh?.channel_id == chatId}`);
+
+      if (mandatoryCh && Number(mandatoryCh.channel_id) === Number(chatId)) {
+        console.log(`Mandatory channel match! Checking subscriber status...`);
         // Check both paid subscribers and free trial users in parallel
         const [subRes, trialRes] = await Promise.all([
           sb.from("telegram_subscribers").select("id, is_permanent, expires_at").eq("owner_id", ownerId).eq("bot_token_id", botTokenId).eq("telegram_user_id", userId).maybeSingle(),
@@ -345,12 +357,16 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
         const trial = trialRes.data;
         const isActiveSub = sub && (sub.is_permanent || (sub.expires_at && new Date(sub.expires_at) > new Date()));
         const isActiveTrial = trial && new Date(trial.expires_at) > new Date();
+        console.log(`Sub: ${JSON.stringify(sub)}, Trial: ${JSON.stringify(trial)}, isActiveSub=${isActiveSub}, isActiveTrial=${isActiveTrial}`);
 
         if (isActiveSub || isActiveTrial) {
           // Get all channels to kick from
-          const kickChannelIds = sub ? await getKickChannels(sub.id, ownerId, botTokenId) : [];
-          // Also get all bot channels for trial users
-          if (isActiveTrial && !isActiveSub) {
+          const kickChannelIds: number[] = [];
+          if (isActiveSub && sub) {
+            const subKickIds = await getKickChannels(sub.id, ownerId, botTokenId);
+            for (const id of subKickIds) if (!kickChannelIds.includes(id)) kickChannelIds.push(id);
+          }
+          if (isActiveTrial) {
             const { data: allCh } = await sb.from("telegram_channels").select("channel_id").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
             for (const c of (allCh || [])) {
               if (!kickChannelIds.includes(c.channel_id)) kickChannelIds.push(c.channel_id);
@@ -361,22 +377,30 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
             if (subsCh && !kickChannelIds.includes(subsCh.channel_id)) kickChannelIds.push(subsCh.channel_id);
           }
           // Remove the mandatory channel itself from kick list
-          const filteredKickIds = kickChannelIds.filter(id => id !== chatId);
+          const filteredKickIds = kickChannelIds.filter(id => Number(id) !== Number(chatId));
+          console.log(`Kicking user ${userId} from ${filteredKickIds.length} channels: ${filteredKickIds.join(",")}`);
+          
           if (filteredKickIds.length > 0) {
-            await kickFromChannels(botToken, userId, filteredKickIds);
+            const kicked = await kickFromChannels(botToken, userId, filteredKickIds);
+            console.log(`Kicked from ${kicked} channels`);
           }
-          // Send ban/unban notification with mandatory channel join button
+          // Send notification with mandatory channel join button
           const icon = mandatoryCh.channel_type === "group" ? "👥" : "📺";
           const buttons: any[][] = [];
           if (mandatoryCh.invite_link) {
             buttons.push([{ text: `${icon} انضم إلى ${mandatoryCh.channel_name}`, url: mandatoryCh.invite_link }]);
           }
-          await tg(botToken, "sendMessage", {
-            chat_id: userId,
-            text: "🚫 *تم طردك من جميع القنوات والمجموعات!*\n\n❌ لقد غادرت القناة/المجموعة الإجبارية.\n\n⚠️ لن تتمكن من الوصول إلى أي قناة حتى تنضم مرة أخرى.\n\n👇 اضغط على الزر أدناه للانضمام ثم أرسل /start لاستعادة الوصول:",
-            parse_mode: "Markdown",
-            ...(buttons.length > 0 ? { reply_markup: { inline_keyboard: buttons } } : {}),
-          });
+          try {
+            const sendRes = await tg(botToken, "sendMessage", {
+              chat_id: userId,
+              text: "🚫 *تم طردك من جميع القنوات والمجموعات!*\n\n❌ لقد غادرت القناة/المجموعة الإجبارية.\n\n⚠️ لن تتمكن من الوصول إلى أي قناة حتى تنضم مرة أخرى.\n\n👇 اضغط على الزر أدناه للانضمام ثم أرسل /start لاستعادة الوصول:",
+              parse_mode: "Markdown",
+              ...(buttons.length > 0 ? { reply_markup: { inline_keyboard: buttons } } : {}),
+            });
+            console.log(`Notification sent to ${userId}: ok=${sendRes.ok}`);
+          } catch (e) {
+            console.error(`Failed to send notification to ${userId}:`, e.message);
+          }
         }
       }
     }
