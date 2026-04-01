@@ -586,7 +586,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
         if (isActiveSub) {
           // ── ACTIVE SUBSCRIBER ──
           // 1. Mandatory channel check first
-          if (mandatoryChannelId) {
+          if (mandatoryChannelId && await subscriberHasAllChannels(sub.id)) {
             const { isMember, channelInfo } = await checkMandatoryChannel(botToken, mandatoryChannelId, fromId);
             if (!isMember && channelInfo) {
               const icon = channelInfo.channel_type === "group" ? "👥" : "📺";
