@@ -1054,6 +1054,15 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                       <Bot className="w-3.5 h-3.5" />
                       {t("broadcast.allBotUsers")} ({botUsersCount})
                     </Button>
+                    <Button
+                      variant={broadcastTarget === "channels" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setBroadcastTarget("channels")}
+                      className={broadcastTarget === "channels" ? "gradient-telegram text-primary-foreground" : ""}
+                    >
+                      <Tv className="w-3.5 h-3.5" />
+                      {lang === "ar" ? "القنوات والمجموعات" : "Channels"} ({channels.length})
+                    </Button>
                   </div>
                 </div>
                 <div className="space-y-2">
