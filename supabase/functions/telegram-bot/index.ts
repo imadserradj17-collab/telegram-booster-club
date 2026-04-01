@@ -696,7 +696,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
       const { data: subCheck } = await sb.from("telegram_subscribers").select("id, is_permanent, expires_at").eq("owner_id", ownerId).eq("bot_token_id", botTokenId).eq("telegram_user_id", fromId).maybeSingle();
       const isActiveSub = subCheck && (subCheck.is_permanent || (subCheck.expires_at && new Date(subCheck.expires_at) > new Date()));
       
-      if (isActiveSub && mandatoryChannelId) {
+      if (isActiveSub && mandatoryChannelId && subCheck && await subscriberHasAllChannels(subCheck.id)) {
         const { isMember, channelInfo } = await checkMandatoryChannel(botToken, mandatoryChannelId, fromId);
         if (!isMember && channelInfo) {
           const icon = channelInfo.channel_type === "group" ? "👥" : "📺";
