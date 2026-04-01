@@ -639,8 +639,11 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
     }
 
     if (!isAdmin) {
-      // Mandatory channel check for all non-admin interactions
-      if (mandatoryChannelId) {
+      // Check subscription + mandatory channel for non-admin interactions
+      const { data: subCheck } = await sb.from("telegram_subscribers").select("id, is_permanent, expires_at").eq("owner_id", ownerId).eq("bot_token_id", botTokenId).eq("telegram_user_id", fromId).maybeSingle();
+      const isActiveSub = subCheck && (subCheck.is_permanent || (subCheck.expires_at && new Date(subCheck.expires_at) > new Date()));
+      
+      if (isActiveSub && mandatoryChannelId) {
         const { isMember, channelInfo } = await checkMandatoryChannel(botToken, mandatoryChannelId, fromId);
         if (!isMember && channelInfo) {
           const icon = channelInfo.channel_type === "group" ? "👥" : "📺";
@@ -658,13 +661,12 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
         }
       }
       if (text === "/status" || text === "/حالتي") {
-        const { data: sub } = await sb.from("telegram_subscribers").select("*").eq("owner_id", ownerId).eq("bot_token_id", botTokenId).eq("telegram_user_id", fromId).maybeSingle();
-        if (sub) {
-          const status = sub.is_permanent
+        if (subCheck) {
+          const status = subCheck.is_permanent
             ? "♾ *دائم* — لا ينتهي"
-            : sub.expires_at && new Date(sub.expires_at) > new Date()
-            ? `✅ *نشط* — متبقي *${daysRemaining(sub.expires_at!)}* يوم\n📅 ينتهي: ${formatDate(sub.expires_at!)}`
-            : `❌ *منتهي* منذ ${formatDate(sub.expires_at!)}`;
+            : subCheck.expires_at && new Date(subCheck.expires_at) > new Date()
+            ? `✅ *نشط* — متبقي *${daysRemaining(subCheck.expires_at!)}* يوم\n📅 ينتهي: ${formatDate(subCheck.expires_at!)}`
+            : `❌ *منتهي* منذ ${formatDate(subCheck.expires_at!)}`;
           await tg(botToken, "sendMessage", { chat_id: chatId, text: `📋 *حالة اشتراكك:*\n\n${status}`, parse_mode: "Markdown" });
         } else {
           await tg(botToken, "sendMessage", { chat_id: chatId, text: nonSubMessage });
