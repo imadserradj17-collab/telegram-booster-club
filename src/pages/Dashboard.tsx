@@ -112,7 +112,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const [broadcastMsg, setBroadcastMsg] = useState("");
   const [broadcasting, setBroadcasting] = useState(false);
   const [broadcastResult, setBroadcastResult] = useState<{ sent: number; failed: number; total: number } | null>(null);
-  const [broadcastTarget, setBroadcastTarget] = useState<"subscribers" | "all_users">("subscribers");
+  const [broadcastTarget, setBroadcastTarget] = useState<"subscribers" | "all_users" | "channels">("subscribers");
   const [botUsersCount, setBotUsersCount] = useState(0);
   const [kickingId, setKickingId] = useState<string | null>(null);
   const [channelSearch, setChannelSearch] = useState("");
