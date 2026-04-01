@@ -133,6 +133,12 @@ async function getSubscriberChannels(subscriberId: string): Promise<string[]> {
   return (data || []).map((r: any) => r.channel_id);
 }
 
+// Check if subscriber has ALL channels (no specific assignments) — mandatory channel only applies to these
+async function subscriberHasAllChannels(subscriberId: string): Promise<boolean> {
+  const assigned = await getSubscriberChannels(subscriberId);
+  return assigned.length === 0; // No specific assignments = has all channels
+}
+
 function adminKeyboard() {
   return {
     inline_keyboard: [
