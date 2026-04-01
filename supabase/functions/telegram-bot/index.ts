@@ -1084,6 +1084,32 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
         await sb.from("subscriber_channels").insert(rows);
       }
 
+      // Check mandatory channel before showing channel links
+      if (mandatoryChannelId) {
+        const { isMember, channelInfo } = await checkMandatoryChannel(botToken, mandatoryChannelId, cbFromId);
+        if (!isMember && channelInfo) {
+          const mIcon = channelInfo.channel_type === "group" ? "👥" : "📺";
+          const mButtons: any[][] = [];
+          if (channelInfo.invite_link) {
+            mButtons.push([{ text: `${mIcon} ${channelInfo.channel_name}`, url: channelInfo.invite_link }]);
+          }
+          await tg(botToken, "sendMessage", {
+            chat_id: chatId,
+            text: `🎉 *تم تفعيل التجربة المجانية!*\n\n📅 المدة: *3 أيام*\n⏰ تنتهي: ${formatDate(expiresAt)}\n\n⚠️ يجب عليك الانضمام إلى القناة الإجبارية أولاً للوصول إلى القنوات.\n\nانضم ثم اضغط /start`,
+            parse_mode: "Markdown",
+            ...(mButtons.length > 0 ? { reply_markup: { inline_keyboard: mButtons } } : {}),
+          });
+          if (adminTelegramId) {
+            tgFire(botToken, "sendMessage", {
+              chat_id: adminTelegramId,
+              text: `🎁 *تجربة مجانية جديدة*\n\n👤 ${cb.from.first_name || ""} (\`${cbFromId}\`)\n📅 تنتهي: ${formatDate(expiresAt)}`,
+              parse_mode: "Markdown",
+            });
+          }
+          return;
+        }
+      }
+
       const buttons = (allChannels || []).filter((ch: any) => ch.invite_link).map((ch: any) => [{ text: `📺 ${ch.channel_name}`, url: ch.invite_link }]);
 
       await tg(botToken, "sendMessage", {
