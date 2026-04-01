@@ -39,7 +39,6 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
     }
 
-    const sb = supabaseAdmin();
     const { action, ...params } = await req.json();
 
     // Get bot token for this user
