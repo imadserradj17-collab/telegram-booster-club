@@ -326,6 +326,45 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
         console.log(`Tracked public channel join: user ${userId} in channel ${chatId}`);
       }
     }
+
+    // ─── MANDATORY CHANNEL: kick if user leaves it ───
+    if (mandatoryChannelId && userId && (newStatus === "left" || newStatus === "kicked")) {
+      const { data: mandatoryCh } = await sb.from("telegram_channels")
+        .select("id, channel_id")
+        .eq("id", mandatoryChannelId)
+        .maybeSingle();
+
+      if (mandatoryCh && mandatoryCh.channel_id === chatId) {
+        // User left the mandatory channel - kick from all other channels
+        const { data: sub } = await sb.from("telegram_subscribers")
+          .select("id")
+          .eq("owner_id", ownerId)
+          .eq("bot_token_id", botTokenId)
+          .eq("telegram_user_id", userId)
+          .maybeSingle();
+
+        if (sub) {
+          const kickChannelIds = await getKickChannels(sub.id, ownerId, botTokenId);
+          // Also kick from subscribers channel and public channel
+          const allKickIds = [...kickChannelIds];
+          if (subscribersChannelId) {
+            const { data: subsCh } = await sb.from("telegram_channels").select("channel_id").eq("id", subscribersChannelId).maybeSingle();
+            if (subsCh) allKickIds.push(subsCh.channel_id);
+          }
+          // Remove the mandatory channel itself from kick list
+          const filteredKickIds = allKickIds.filter(id => id !== chatId);
+          if (filteredKickIds.length > 0) {
+            await kickFromChannels(botToken, userId, filteredKickIds);
+          }
+          // Notify user
+          tgFire(botToken, "sendMessage", {
+            chat_id: userId,
+            text: "⚠️ *تم إزالتك من جميع القنوات*\n\nلقد خرجت من القناة الإجبارية. يجب عليك الانضمام إليها أولاً لاستعادة الوصول.",
+            parse_mode: "Markdown",
+          });
+        }
+      }
+    }
     return;
   }
 
