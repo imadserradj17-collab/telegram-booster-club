@@ -135,11 +135,16 @@ Deno.serve(async (req) => {
         const activeSubs = (subs || []).filter((s: any) => s.is_permanent || (s.expires_at && new Date(s.expires_at) > new Date()));
 
         let sent = 0, failed = 0;
-        for (const sub of activeSubs) {
-          try {
-            const res = await tg(botToken, "sendMessage", { chat_id: sub.telegram_user_id, text: message, parse_mode: "Markdown" });
-            if (res.ok) sent++; else failed++;
-          } catch { failed++; }
+        const BATCH_SIZE = 20;
+        for (let i = 0; i < activeSubs.length; i += BATCH_SIZE) {
+          const batch = activeSubs.slice(i, i + BATCH_SIZE);
+          const results = await Promise.allSettled(batch.map((sub: any) =>
+            tg(botToken, "sendMessage", { chat_id: sub.telegram_user_id, text: message, parse_mode: "Markdown" })
+          ));
+          for (const r of results) {
+            if (r.status === "fulfilled" && r.value?.ok) sent++;
+            else failed++;
+          }
         }
 
         return new Response(JSON.stringify({ ok: true, sent, failed, total: activeSubs.length }), { headers: corsHeaders });
