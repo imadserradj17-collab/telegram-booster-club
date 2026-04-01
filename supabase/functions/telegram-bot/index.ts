@@ -330,12 +330,12 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
     // ─── MANDATORY CHANNEL: kick if user leaves it ───
     if (mandatoryChannelId && userId && (newStatus === "left" || newStatus === "kicked")) {
       const { data: mandatoryCh } = await sb.from("telegram_channels")
-        .select("id, channel_id")
+        .select("id, channel_id, channel_name, invite_link, channel_type")
         .eq("id", mandatoryChannelId)
         .maybeSingle();
 
       if (mandatoryCh && mandatoryCh.channel_id === chatId) {
-        // User left the mandatory channel - kick from all other channels
+        // User left the mandatory channel - check if subscriber (paid or trial)
         const { data: sub } = await sb.from("telegram_subscribers")
           .select("id")
           .eq("owner_id", ownerId)
@@ -345,7 +345,6 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
 
         if (sub) {
           const kickChannelIds = await getKickChannels(sub.id, ownerId, botTokenId);
-          // Also kick from subscribers channel and public channel
           const allKickIds = [...kickChannelIds];
           if (subscribersChannelId) {
             const { data: subsCh } = await sb.from("telegram_channels").select("channel_id").eq("id", subscribersChannelId).maybeSingle();
@@ -356,11 +355,17 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
           if (filteredKickIds.length > 0) {
             await kickFromChannels(botToken, userId, filteredKickIds);
           }
-          // Notify user
+          // Send message with mandatory channel join button
+          const icon = mandatoryCh.channel_type === "group" ? "👥" : "📺";
+          const buttons: any[][] = [];
+          if (mandatoryCh.invite_link) {
+            buttons.push([{ text: `${icon} ${mandatoryCh.channel_name}`, url: mandatoryCh.invite_link }]);
+          }
           tgFire(botToken, "sendMessage", {
             chat_id: userId,
-            text: "⚠️ *تم إزالتك من جميع القنوات*\n\nلقد خرجت من القناة الإجبارية. يجب عليك الانضمام إليها أولاً لاستعادة الوصول.",
+            text: "⚠️ *تم إزالتك من جميع القنوات*\n\nلقد خرجت من القناة الإجبارية.\n🔒 يجب عليك الانضمام إليها أولاً لاستعادة الوصول ثم اضغط /start.",
             parse_mode: "Markdown",
+            ...(buttons.length > 0 ? { reply_markup: { inline_keyboard: buttons } } : {}),
           });
         }
       }
@@ -1077,6 +1082,32 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
         await sb.from("subscriber_channels").delete().eq("subscriber_id", upsertedSub.id);
         const rows = channelIds.map((chId: string) => ({ subscriber_id: upsertedSub.id, channel_id: chId }));
         await sb.from("subscriber_channels").insert(rows);
+      }
+
+      // Check mandatory channel before showing channel links
+      if (mandatoryChannelId) {
+        const { isMember, channelInfo } = await checkMandatoryChannel(botToken, mandatoryChannelId, cbFromId);
+        if (!isMember && channelInfo) {
+          const mIcon = channelInfo.channel_type === "group" ? "👥" : "📺";
+          const mButtons: any[][] = [];
+          if (channelInfo.invite_link) {
+            mButtons.push([{ text: `${mIcon} ${channelInfo.channel_name}`, url: channelInfo.invite_link }]);
+          }
+          await tg(botToken, "sendMessage", {
+            chat_id: chatId,
+            text: `🎉 *تم تفعيل التجربة المجانية!*\n\n📅 المدة: *3 أيام*\n⏰ تنتهي: ${formatDate(expiresAt)}\n\n⚠️ يجب عليك الانضمام إلى القناة الإجبارية أولاً للوصول إلى القنوات.\n\nانضم ثم اضغط /start`,
+            parse_mode: "Markdown",
+            ...(mButtons.length > 0 ? { reply_markup: { inline_keyboard: mButtons } } : {}),
+          });
+          if (adminTelegramId) {
+            tgFire(botToken, "sendMessage", {
+              chat_id: adminTelegramId,
+              text: `🎁 *تجربة مجانية جديدة*\n\n👤 ${cb.from.first_name || ""} (\`${cbFromId}\`)\n📅 تنتهي: ${formatDate(expiresAt)}`,
+              parse_mode: "Markdown",
+            });
+          }
+          return;
+        }
       }
 
       const buttons = (allChannels || []).filter((ch: any) => ch.invite_link).map((ch: any) => [{ text: `📺 ${ch.channel_name}`, url: ch.invite_link }]);
