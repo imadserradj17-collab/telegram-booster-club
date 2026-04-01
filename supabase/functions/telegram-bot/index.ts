@@ -365,7 +365,10 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
         const isActiveTrial = trial && new Date(trial.expires_at) > new Date();
         console.log(`Sub: ${JSON.stringify(sub)}, Trial: ${JSON.stringify(trial)}, isActiveSub=${isActiveSub}, isActiveTrial=${isActiveTrial}`);
 
-        if (isActiveSub || isActiveTrial) {
+        // Only enforce mandatory channel for subscribers with ALL channels
+        const subHasAll = isActiveSub && sub ? await subscriberHasAllChannels(sub.id) : false;
+        const trialHasAll = isActiveTrial; // Free trial always gets all channels
+        if ((subHasAll || trialHasAll) && (isActiveSub || isActiveTrial)) {
           // Get all channels to kick from
           const kickChannelIds: number[] = [];
           if (isActiveSub && sub) {
