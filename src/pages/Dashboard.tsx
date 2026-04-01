@@ -112,7 +112,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const [broadcastMsg, setBroadcastMsg] = useState("");
   const [broadcasting, setBroadcasting] = useState(false);
   const [broadcastResult, setBroadcastResult] = useState<{ sent: number; failed: number; total: number } | null>(null);
-  const [broadcastTarget, setBroadcastTarget] = useState<"subscribers" | "all_users">("subscribers");
+  const [broadcastTarget, setBroadcastTarget] = useState<"subscribers" | "all_users" | "channels">("subscribers");
   const [botUsersCount, setBotUsersCount] = useState(0);
   const [kickingId, setKickingId] = useState<string | null>(null);
   const [channelSearch, setChannelSearch] = useState("");
@@ -338,7 +338,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     setBroadcasting(true);
     setBroadcastResult(null);
     try {
-      const action = broadcastTarget === "all_users" ? "broadcast_all" : "broadcast";
+      const action = broadcastTarget === "all_users" ? "broadcast_all" : broadcastTarget === "channels" ? "broadcast_channels" : "broadcast";
       const { data, error } = await supabase.functions.invoke("manage-bot", {
         body: { action, message: broadcastMsg },
       });
@@ -1053,6 +1053,15 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                     >
                       <Bot className="w-3.5 h-3.5" />
                       {t("broadcast.allBotUsers")} ({botUsersCount})
+                    </Button>
+                    <Button
+                      variant={broadcastTarget === "channels" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setBroadcastTarget("channels")}
+                      className={broadcastTarget === "channels" ? "gradient-telegram text-primary-foreground" : ""}
+                    >
+                      <Tv className="w-3.5 h-3.5" />
+                      {lang === "ar" ? "القنوات والمجموعات" : "Channels"} ({channels.length})
                     </Button>
                   </div>
                 </div>
