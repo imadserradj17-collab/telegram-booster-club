@@ -279,7 +279,22 @@ async function finalizeSubscriber(
   });
 }
 
-async function handleUpdate(update: any, botToken: string, ownerId: string, botTokenId: string, adminTelegramId: number | null, nonSubMessage: string, publicChannelId: string | null = null, subscribersChannelId: string | null = null, freeTrialEnabled: boolean = false) {
+// Check if user is member of mandatory channel
+async function checkMandatoryChannel(botToken: string, mandatoryChannelId: string, telegramUserId: number): Promise<{ isMember: boolean; channelInfo: any | null }> {
+  const { data: ch } = await sb.from("telegram_channels").select("channel_id, channel_name, invite_link, channel_type").eq("id", mandatoryChannelId).maybeSingle();
+  if (!ch) return { isMember: true, channelInfo: null }; // If channel not found, skip check
+  try {
+    const result = await tg(botToken, "getChatMember", { chat_id: ch.channel_id, user_id: telegramUserId });
+    if (result.ok) {
+      const status = result.result.status;
+      const isMember = ["member", "administrator", "creator"].includes(status);
+      return { isMember, channelInfo: ch };
+    }
+  } catch {}
+  return { isMember: false, channelInfo: ch };
+}
+
+async function handleUpdate(update: any, botToken: string, ownerId: string, botTokenId: string, adminTelegramId: number | null, nonSubMessage: string, publicChannelId: string | null = null, subscribersChannelId: string | null = null, freeTrialEnabled: boolean = false, mandatoryChannelId: string | null = null) {
   // ─── CHAT MEMBER UPDATES (track joins to public channel) ───
   if (update.chat_member) {
     const cm = update.chat_member;
