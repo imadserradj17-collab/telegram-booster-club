@@ -545,6 +545,34 @@ Deno.serve(async (req) => {
         }), { headers: corsHeaders });
       }
 
+      // ── BROADCAST TO ALL CHANNELS ──
+      case "broadcast_channels": {
+        const { message } = params;
+        if (!message?.trim()) {
+          return new Response(JSON.stringify({ error: "Message required" }), { status: 400, headers: corsHeaders });
+        }
+
+        const { data: allChs } = await sb.from("telegram_channels")
+          .select("channel_id, channel_name")
+          .eq("owner_id", user.id)
+          .eq("bot_token_id", botTokenId);
+
+        const chList = allChs || [];
+        if (chList.length === 0) {
+          return new Response(JSON.stringify({ ok: true, sent: 0, failed: 0, total: 0 }), { headers: corsHeaders });
+        }
+
+        let sent = 0, failed = 0;
+        for (const ch of chList) {
+          try {
+            const res = await tg(botToken, "sendMessage", { chat_id: ch.channel_id, text: message, parse_mode: "Markdown" });
+            if (res.ok) sent++; else { console.log(`Failed to send to channel ${ch.channel_id}:`, JSON.stringify(res)); failed++; }
+          } catch { failed++; }
+        }
+
+        return new Response(JSON.stringify({ ok: true, sent, failed, total: chList.length }), { headers: corsHeaders });
+      }
+
       default:
         return new Response(JSON.stringify({ error: "Unknown action" }), { status: 400, headers: corsHeaders });
     }
