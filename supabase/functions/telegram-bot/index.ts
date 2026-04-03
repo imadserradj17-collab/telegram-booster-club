@@ -214,7 +214,25 @@ async function finalizeSubscriber(
   telegramUserId: number, telegramUsername: string | null, fn: string | null, ln: string | null,
   days: number | null, isPermanent: boolean, selectedChannelIds: string[]
 ) {
-  const expiresAt = isPermanent ? null : new Date(Date.now() + days! * 86400000).toISOString();
+  // Check existing subscription to add remaining days
+  let expiresAt: string | null = null;
+  if (!isPermanent && days) {
+    const { data: existingSub } = await sb.from("telegram_subscribers")
+      .select("expires_at, is_permanent")
+      .eq("owner_id", ownerId)
+      .eq("telegram_user_id", telegramUserId)
+      .maybeSingle();
+    
+    let baseDate = Date.now();
+    // If existing sub has remaining time, start from its expiry date
+    if (existingSub && !existingSub.is_permanent && existingSub.expires_at) {
+      const existingExpiry = new Date(existingSub.expires_at).getTime();
+      if (existingExpiry > baseDate) {
+        baseDate = existingExpiry; // Add new days on top of remaining
+      }
+    }
+    expiresAt = new Date(baseDate + days * 86400000).toISOString();
+  }
   
   // Enrich user info (try getChat + getUserProfilePhotos) in parallel with DB upsert
   const enrichPromise = enrichUserInfo(botToken, telegramUserId, { fn, ln, username: telegramUsername });
