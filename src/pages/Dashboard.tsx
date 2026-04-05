@@ -1543,8 +1543,34 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                     </Label>
                     <p className="text-xs text-muted-foreground mt-1">{t("dash.freeTrialHint")}</p>
                   </div>
-                  <Switch checked={freeTrialEnabled} onCheckedChange={setFreeTrialEnabled} />
+                   <Switch checked={freeTrialEnabled} onCheckedChange={setFreeTrialEnabled} />
                 </div>
+                {freeTrialEnabled && (
+                  <div className="space-y-2">
+                    <Label className="text-foreground/80 flex items-center gap-2">
+                      <Tv className="w-4 h-4" />{lang === "ar" ? "قنوات الاشتراك التجريبي" : "Trial Channels"}
+                    </Label>
+                    <p className="text-xs text-muted-foreground">{lang === "ar" ? "اختر القنوات التي يحصل عليها المشترك التجريبي. إذا لم تختر شيئاً سيحصل على جميع القنوات." : "Select channels for trial users. If none selected, they get all channels."}</p>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Checkbox
+                        checked={freeTrialChannelIds.length === channels.length && channels.length > 0}
+                        onCheckedChange={(v) => setFreeTrialChannelIds(v ? channels.map(c => c.id) : [])}
+                      />
+                      <span className="text-sm text-foreground">{t("subs.allChannels")}</span>
+                    </div>
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                      {channels.map(ch => (
+                        <div key={ch.id} className="flex items-center gap-2">
+                          <Checkbox
+                            checked={freeTrialChannelIds.includes(ch.id)}
+                            onCheckedChange={() => setFreeTrialChannelIds(prev => prev.includes(ch.id) ? prev.filter(id => id !== ch.id) : [...prev, ch.id])}
+                          />
+                          <span className="text-sm text-foreground">{ch.channel_type === "group" ? "👥" : "📺"} {ch.channel_name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <Button onClick={handleSaveSettings} disabled={savingSettings} className="w-full gradient-telegram text-primary-foreground hover:opacity-90">
                   {savingSettings ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : <Save className="w-4 h-4 ml-2" />}
                   {t("dash.saveSettings")}
