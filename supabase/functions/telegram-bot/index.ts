@@ -1487,7 +1487,7 @@ Deno.serve(async (req) => {
       }
 
       const update = await req.json();
-      await handleUpdate(update, tokenFromPath, settings.user_id, settings.id, settings.admin_telegram_id, settings.non_subscriber_message, settings.public_channel_id, settings.subscribers_channel_id, settings.free_trial_enabled ?? false, settings.mandatory_channel_id ?? null);
+      await handleUpdate(update, tokenFromPath, settings.user_id, settings.id, settings.admin_telegram_id, settings.non_subscriber_message, settings.public_channel_id, settings.subscribers_channel_id, settings.free_trial_enabled ?? false, settings.mandatory_channel_id ?? null, settings.free_trial_channel_ids ?? []);
       return new Response("ok", { headers: corsHeaders });
     }
 
