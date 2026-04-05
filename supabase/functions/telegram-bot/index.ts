@@ -1122,21 +1122,31 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
 
       const expiresAt = new Date(Date.now() + 3 * 86400000).toISOString();
 
-      // Save trial user + create subscriber with 3 days
-      const [, { data: allChannels }] = await Promise.all([
-        sb.from("free_trial_users").insert({
-          bot_token_id: botTokenId,
-          owner_id: ownerId,
-          telegram_user_id: cbFromId,
-          telegram_username: cb.from.username || null,
-          first_name: cb.from.first_name || null,
-          last_name: cb.from.last_name || null,
-          expires_at: expiresAt,
-        }),
-        sb.from("telegram_channels").select("id, channel_name, invite_link").eq("owner_id", ownerId).eq("bot_token_id", botTokenId),
-      ]);
+      // Save trial user
+      await sb.from("free_trial_users").insert({
+        bot_token_id: botTokenId,
+        owner_id: ownerId,
+        telegram_user_id: cbFromId,
+        telegram_username: cb.from.username || null,
+        first_name: cb.from.first_name || null,
+        last_name: cb.from.last_name || null,
+        expires_at: expiresAt,
+      });
 
-      const channelIds = (allChannels || []).map((ch: any) => ch.id);
+      // Determine which channels the trial user gets
+      let trialChannelIds: string[] = freeTrialChannelIds.length > 0 ? [...freeTrialChannelIds] : [];
+      let channelsForLinks: any[] = [];
+
+      if (trialChannelIds.length > 0) {
+        // Use specific trial channels
+        const { data: selectedChannels } = await sb.from("telegram_channels").select("id, channel_name, invite_link").in("id", trialChannelIds);
+        channelsForLinks = selectedChannels || [];
+      } else {
+        // No specific channels = all channels
+        const { data: allChannels } = await sb.from("telegram_channels").select("id, channel_name, invite_link").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+        channelsForLinks = allChannels || [];
+        trialChannelIds = (allChannels || []).map((ch: any) => ch.id);
+      }
 
       // Create subscriber with 3 days trial
       const { data: upsertedSub } = await sb.from("telegram_subscribers").upsert(
@@ -1144,9 +1154,9 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
         { onConflict: "owner_id,telegram_user_id" }
       ).select("id").single();
 
-      if (upsertedSub && channelIds.length > 0) {
+      if (upsertedSub && trialChannelIds.length > 0) {
         await sb.from("subscriber_channels").delete().eq("subscriber_id", upsertedSub.id);
-        const rows = channelIds.map((chId: string) => ({ subscriber_id: upsertedSub.id, channel_id: chId }));
+        const rows = trialChannelIds.map((chId: string) => ({ subscriber_id: upsertedSub.id, channel_id: chId }));
         await sb.from("subscriber_channels").insert(rows);
       }
 
