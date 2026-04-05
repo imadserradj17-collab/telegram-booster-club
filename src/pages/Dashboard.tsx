@@ -123,6 +123,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const [checkingBlocked, setCheckingBlocked] = useState(false);
   const [freeTrialEnabled, setFreeTrialEnabled] = useState(false);
   const [freeTrialUsers, setFreeTrialUsers] = useState<FreeTrialUser[]>([]);
+  const [freeTrialChannelIds, setFreeTrialChannelIds] = useState<string[]>([]);
 
   useEffect(() => { fetchData(); }, []);
 
