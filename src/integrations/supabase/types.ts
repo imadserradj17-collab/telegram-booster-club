@@ -45,6 +45,7 @@ export type Database = {
         Row: {
           admin_telegram_id: number | null
           created_at: string
+          free_trial_channel_ids: Json | null
           free_trial_enabled: boolean
           id: string
           mandatory_channel_id: string | null
@@ -58,6 +59,7 @@ export type Database = {
         Insert: {
           admin_telegram_id?: number | null
           created_at?: string
+          free_trial_channel_ids?: Json | null
           free_trial_enabled?: boolean
           id?: string
           mandatory_channel_id?: string | null
@@ -71,6 +73,7 @@ export type Database = {
         Update: {
           admin_telegram_id?: number | null
           created_at?: string
+          free_trial_channel_ids?: Json | null
           free_trial_enabled?: boolean
           id?: string
           mandatory_channel_id?: string | null
