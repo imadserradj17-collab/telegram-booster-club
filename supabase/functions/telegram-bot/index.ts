@@ -1186,7 +1186,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
         }
       }
 
-      const buttons = (allChannels || []).filter((ch: any) => ch.invite_link).map((ch: any) => [{ text: `📺 ${ch.channel_name}`, url: ch.invite_link }]);
+      const buttons = channelsForLinks.filter((ch: any) => ch.invite_link).map((ch: any) => [{ text: `📺 ${ch.channel_name}`, url: ch.invite_link }]);
 
       await tg(botToken, "sendMessage", {
         chat_id: chatId,
