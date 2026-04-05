@@ -318,7 +318,7 @@ async function checkMandatoryChannel(botToken: string, mandatoryChannelId: strin
   return { isMember: false, channelInfo: ch };
 }
 
-async function handleUpdate(update: any, botToken: string, ownerId: string, botTokenId: string, adminTelegramId: number | null, nonSubMessage: string, publicChannelId: string | null = null, subscribersChannelId: string | null = null, freeTrialEnabled: boolean = false, mandatoryChannelId: string | null = null) {
+async function handleUpdate(update: any, botToken: string, ownerId: string, botTokenId: string, adminTelegramId: number | null, nonSubMessage: string, publicChannelId: string | null = null, subscribersChannelId: string | null = null, freeTrialEnabled: boolean = false, mandatoryChannelId: string | null = null, freeTrialChannelIds: string[] = []) {
   console.log("handleUpdate called, keys:", Object.keys(update).join(","));
 
   // ─── CHAT MEMBER UPDATES (track joins to public channel + mandatory channel enforcement) ───
