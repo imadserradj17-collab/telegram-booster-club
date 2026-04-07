@@ -293,16 +293,29 @@ Deno.serve(async (req) => {
 
       // ── KICK ALL EXPIRED SUBSCRIBERS FROM ALL CHANNELS ──
       case "kick_expired_from_channels": {
-        // Get all expired subscribers
-        const { data: expiredSubs } = await sb.from("telegram_subscribers")
-          .select("id, telegram_user_id")
-          .eq("owner_id", user.id)
-          .eq("bot_token_id", botTokenId)
-          .eq("is_permanent", false)
-          .not("expires_at", "is", null);
+        async function fetchAllExpiredSubscribers() {
+          const allRows: any[] = [];
+          const PAGE = 1000;
+          let from = 0;
+          while (true) {
+            const { data } = await sb.from("telegram_subscribers")
+              .select("id, telegram_user_id, expires_at")
+              .eq("owner_id", user.id)
+              .eq("bot_token_id", botTokenId)
+              .eq("is_permanent", false)
+              .not("expires_at", "is", null)
+              .range(from, from + PAGE - 1);
+            if (!data || data.length === 0) break;
+            allRows.push(...data);
+            if (data.length < PAGE) break;
+            from += PAGE;
+          }
+          return allRows;
+        }
 
+        const expiredSubs = await fetchAllExpiredSubscribers();
         const nowDate = new Date();
-        const expired = (expiredSubs || []).filter((s: any) => new Date(s.expires_at) < nowDate);
+        const expired = expiredSubs.filter((s: any) => s.expires_at && new Date(s.expires_at) < nowDate);
 
         if (expired.length === 0) {
           return new Response(JSON.stringify({ ok: true, kicked: 0, failed: 0, total: 0 }), { headers: corsHeaders });
@@ -328,8 +341,12 @@ Deno.serve(async (req) => {
               if (banRes.ok) {
                 kicked++;
                 await tg(botToken, "unbanChatMember", { chat_id: chId, user_id: sub.telegram_user_id, only_if_banned: true });
-              } else { failedKick++; }
-            } catch { failedKick++; }
+              } else {
+                failedKick++;
+              }
+            } catch {
+              failedKick++;
+            }
             await sleep(300);
           }
           await sleep(500);
