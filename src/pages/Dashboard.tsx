@@ -71,7 +71,7 @@ interface FreeTrialUser {
   expires_at: string;
 }
 
-type TabKey = "overview" | "subscribers" | "expired" | "channels" | "broadcast" | "analytics" | "settings" | "free_trial";
+type TabKey = "overview" | "subscribers" | "expired" | "channels" | "broadcast" | "analytics" | "settings" | "free_trial" | "kick_nonsubs";
 
 interface DashboardProps {
   onShowAdmin?: () => void;
@@ -380,6 +380,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     { key: "channels", icon: Tv, label: t("channels.title"), badge: channels.length },
     { key: "free_trial", icon: Zap, label: t("dash.freeTrial"), badge: freeTrialUsers.length },
     { key: "broadcast", icon: Send, label: t("broadcast.title") },
+    { key: "kick_nonsubs", icon: Shield, label: t("dash.kickNonSubscribers") },
     { key: "analytics", icon: BarChart3, label: t("dash.analytics") },
     { key: "settings", icon: Settings, label: t("dash.settings") },
   ];
