@@ -607,24 +607,35 @@ Deno.serve(async (req) => {
         const channelsResults: { channel_name: string; channel_id: number; checked: number; kicked: number; failed: number; kicked_users: { telegram_user_id: number; name: string }[] }[] = [];
         const allKickedUserIds = new Set<number>();
 
-        // Collect all known bot_users
-        const { data: buNS } = await sb.from("bot_users")
-          .select("telegram_user_id, first_name, last_name, telegram_username")
-          .eq("owner_id", user.id)
-          .eq("bot_token_id", botTokenId);
+        // Helper to fetch ALL rows with pagination (bypass 1000 limit)
+        async function fetchAll(table: string, selectCols: string, filters: Record<string, any>) {
+          const allRows: any[] = [];
+          const PAGE = 1000;
+          let from = 0;
+          while (true) {
+            let q = sb.from(table).select(selectCols).range(from, from + PAGE - 1);
+            for (const [k, v] of Object.entries(filters)) q = q.eq(k, v);
+            const { data } = await q;
+            if (!data || data.length === 0) break;
+            allRows.push(...data);
+            if (data.length < PAGE) break;
+            from += PAGE;
+          }
+          return allRows;
+        }
+
+        // Collect all known bot_users (paginated)
+        const buNS = await fetchAll("bot_users", "telegram_user_id, first_name, last_name, telegram_username", { owner_id: user.id, bot_token_id: botTokenId });
         const knownUserIds = new Set<number>();
-        for (const b of (buNS || [])) {
+        for (const b of buNS) {
           knownUserIds.add(b.telegram_user_id);
           if (!userInfoMap.has(b.telegram_user_id)) {
             userInfoMap.set(b.telegram_user_id, [b.first_name, b.last_name].filter(Boolean).join(" ") || b.telegram_username || String(b.telegram_user_id));
           }
         }
-        // Also add public_channel_members
-        const { data: pcmNS } = await sb.from("public_channel_members")
-          .select("telegram_user_id, first_name, last_name, telegram_username")
-          .eq("owner_id", user.id)
-          .eq("bot_token_id", botTokenId);
-        for (const p of (pcmNS || [])) {
+        // Also add public_channel_members (paginated)
+        const pcmNS = await fetchAll("public_channel_members", "telegram_user_id, first_name, last_name, telegram_username", { owner_id: user.id, bot_token_id: botTokenId });
+        for (const p of pcmNS) {
           knownUserIds.add(p.telegram_user_id);
           if (!userInfoMap.has(p.telegram_user_id)) {
             userInfoMap.set(p.telegram_user_id, [p.first_name, p.last_name].filter(Boolean).join(" ") || p.telegram_username || String(p.telegram_user_id));
