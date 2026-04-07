@@ -884,20 +884,24 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   {t("dash.checkBlocked")}
                 </Button>
               </div>
-              {/* Kick Non-Subscribers */}
-              <div className="glass-card p-4 md:p-5 border-red-500/20">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center flex-shrink-0">
-                    <Trash2 className="w-5 h-5 text-red-500" />
+              {/* Kick Non-Subscribers - Dedicated Section */}
+              <div className="glass-card p-5 md:p-6 border-red-500/30 bg-gradient-to-br from-red-500/5 to-transparent">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-red-500/15 flex items-center justify-center flex-shrink-0">
+                    <Shield className="w-6 h-6 text-red-500" />
                   </div>
-                  <div>
-                    <h3 className="text-sm font-semibold text-foreground">{t("dash.kickNonSubscribers")}</h3>
-                    <p className="text-xs text-muted-foreground">{t("dash.kickNonSubscribersConfirm").split("؟")[0]}</p>
+                  <div className="flex-1">
+                    <h3 className="text-base font-bold text-foreground">{t("dash.kickNonSubscribers")}</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">{t("dash.kickNonSubscribersHint")}</p>
                   </div>
                 </div>
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/5 border border-red-500/10 mb-4">
+                  <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                  <p className="text-xs text-red-400">{t("dash.kickNonSubscribersWarn")}</p>
+                </div>
                 <Button
-                  variant="outline"
-                  className="w-full mt-3 border-red-500/30 text-red-500 hover:bg-red-500/10 hover:text-red-400"
+                  variant="destructive"
+                  className="w-full"
                   disabled={kickingNonSubs}
                   onClick={async () => {
                     if (!confirm(t("dash.kickNonSubscribersConfirm"))) return;
@@ -908,14 +912,27 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                       });
                       if (error) throw error;
                       if (data?.error) throw new Error(data.error);
-                      toast({ title: `${t("dash.kickNonSubscribersDone")} - ${data.kicked} ✅${data.failed > 0 ? ` / ${data.failed} ❌` : ""} (${data.checked} ${lang === "ar" ? "تم فحصهم" : "checked"})` });
+                      const msg = `✅ ${data.kicked} ${t("dash.kickNonSubscribersKicked")}` +
+                        (data.failed > 0 ? ` | ❌ ${data.failed} ${t("broadcast.failed")}` : "") +
+                        ` | 🔍 ${data.checked} ${t("dash.kickNonSubscribersChecked")}`;
+                      toast({ title: t("dash.kickNonSubscribersDone"), description: msg });
+                      await fetchData();
                     } catch (error: any) {
                       toast({ title: t("common.error"), description: error.message, variant: "destructive" });
                     } finally { setKickingNonSubs(false); }
                   }}
                 >
-                  {kickingNonSubs ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                  {t("dash.kickNonSubscribers")}
+                  {kickingNonSubs ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      {t("dash.kickNonSubscribersProcessing")}
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      {t("dash.kickNonSubscribers")}
+                    </>
+                  )}
                 </Button>
               </div>
               <div>
