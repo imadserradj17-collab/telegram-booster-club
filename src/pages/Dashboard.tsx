@@ -121,6 +121,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const [kickingExpired, setKickingExpired] = useState(false);
   const [unbanningAll, setUnbanningAll] = useState(false);
   const [checkingBlocked, setCheckingBlocked] = useState(false);
+  const [kickingNonSubs, setKickingNonSubs] = useState(false);
   const [freeTrialEnabled, setFreeTrialEnabled] = useState(false);
   const [freeTrialUsers, setFreeTrialUsers] = useState<FreeTrialUser[]>([]);
   const [freeTrialChannelIds, setFreeTrialChannelIds] = useState<string[]>([]);
