@@ -144,6 +144,53 @@ export type Database = {
         }
         Relationships: []
       }
+      channel_members: {
+        Row: {
+          bot_token_id: string
+          channel_id: string
+          first_name: string | null
+          id: string
+          joined_at: string
+          last_name: string | null
+          owner_id: string
+          telegram_channel_id: number
+          telegram_user_id: number
+          telegram_username: string | null
+        }
+        Insert: {
+          bot_token_id: string
+          channel_id: string
+          first_name?: string | null
+          id?: string
+          joined_at?: string
+          last_name?: string | null
+          owner_id: string
+          telegram_channel_id: number
+          telegram_user_id: number
+          telegram_username?: string | null
+        }
+        Update: {
+          bot_token_id?: string
+          channel_id?: string
+          first_name?: string | null
+          id?: string
+          joined_at?: string
+          last_name?: string | null
+          owner_id?: string
+          telegram_channel_id?: number
+          telegram_user_id?: number
+          telegram_username?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "channel_members_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_channels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       free_trial_users: {
         Row: {
           activated_at: string
