@@ -560,54 +560,55 @@ Deno.serve(async (req) => {
 
       // ── KICK NON-SUBSCRIBERS FROM ALL CHANNELS ──
       case "kick_non_subscribers": {
-        // Get all channels
         const { data: allChsNS } = await sb.from("telegram_channels")
-          .select("channel_id")
+          .select("channel_id, channel_name")
           .eq("owner_id", user.id)
           .eq("bot_token_id", botTokenId);
 
-        const chIdsNS = (allChsNS || []).map((c: any) => c.channel_id).filter(Boolean);
-        if (chIdsNS.length === 0) {
-          return new Response(JSON.stringify({ ok: true, kicked: 0, failed: 0, checked: 0, message: "No channels" }), { headers: corsHeaders });
+        const chListNS = (allChsNS || []).filter((c: any) => c.channel_id);
+        if (chListNS.length === 0) {
+          return new Response(JSON.stringify({ ok: true, kicked: 0, failed: 0, checked: 0, channels_results: [], kicked_users: [] }), { headers: corsHeaders });
         }
 
         // Get all active subscriber telegram_user_ids
         const { data: allSubsNS } = await sb.from("telegram_subscribers")
-          .select("telegram_user_id, is_permanent, expires_at")
+          .select("telegram_user_id, is_permanent, expires_at, first_name, last_name, telegram_username")
           .eq("owner_id", user.id)
           .eq("bot_token_id", botTokenId);
 
         const nowNS = new Date();
         const activeUserIds = new Set<number>();
+        const userInfoMap = new Map<number, string>();
         for (const s of (allSubsNS || [])) {
+          const name = [s.first_name, s.last_name].filter(Boolean).join(" ") || s.telegram_username || String(s.telegram_user_id);
+          userInfoMap.set(s.telegram_user_id, name);
           if (s.is_permanent || (s.expires_at && new Date(s.expires_at) > nowNS)) {
             activeUserIds.add(s.telegram_user_id);
           }
         }
 
-        // Also get admin telegram id to exclude
         const adminTgId = botData.admin_telegram_id;
 
-        // For each channel, get members via getChatMember won't work — instead use getChatAdministrators to get admin list
-        // We'll iterate channels and get members from public_channel_members + bot_users as known users
-        // Then check each one
         const knownUserIds = new Set<number>();
         const [buNS, pcmNS, ftNS] = await Promise.all([
-          sb.from("bot_users").select("telegram_user_id").eq("owner_id", user.id).eq("bot_token_id", botTokenId),
-          sb.from("public_channel_members").select("telegram_user_id").eq("owner_id", user.id).eq("bot_token_id", botTokenId),
-          sb.from("free_trial_users").select("telegram_user_id, expires_at").eq("owner_id", user.id).eq("bot_token_id", botTokenId),
+          sb.from("bot_users").select("telegram_user_id, first_name, last_name, telegram_username").eq("owner_id", user.id).eq("bot_token_id", botTokenId),
+          sb.from("public_channel_members").select("telegram_user_id, first_name, last_name, telegram_username").eq("owner_id", user.id).eq("bot_token_id", botTokenId),
+          sb.from("free_trial_users").select("telegram_user_id, expires_at, first_name, last_name, telegram_username").eq("owner_id", user.id).eq("bot_token_id", botTokenId),
         ]);
-        for (const b of (buNS.data || [])) knownUserIds.add(b.telegram_user_id);
-        for (const p of (pcmNS.data || [])) knownUserIds.add(p.telegram_user_id);
-
-        // Active free trial users count as subscribers too
+        for (const b of (buNS.data || [])) {
+          knownUserIds.add(b.telegram_user_id);
+          if (!userInfoMap.has(b.telegram_user_id)) userInfoMap.set(b.telegram_user_id, [b.first_name, b.last_name].filter(Boolean).join(" ") || b.telegram_username || String(b.telegram_user_id));
+        }
+        for (const p of (pcmNS.data || [])) {
+          knownUserIds.add(p.telegram_user_id);
+          if (!userInfoMap.has(p.telegram_user_id)) userInfoMap.set(p.telegram_user_id, [p.first_name, p.last_name].filter(Boolean).join(" ") || p.telegram_username || String(p.telegram_user_id));
+        }
         for (const ft of (ftNS.data || [])) {
           if (ft.expires_at && new Date(ft.expires_at) > nowNS) {
             activeUserIds.add(ft.telegram_user_id);
           }
         }
 
-        // Filter: users who are known but NOT active subscribers and NOT admin
         const toKick = [...knownUserIds].filter(uid => {
           if (activeUserIds.has(uid)) return false;
           if (adminTgId && uid === adminTgId) return false;
@@ -615,42 +616,58 @@ Deno.serve(async (req) => {
         });
 
         if (toKick.length === 0) {
-          return new Response(JSON.stringify({ ok: true, kicked: 0, failed: 0, checked: knownUserIds.size }), { headers: corsHeaders });
+          return new Response(JSON.stringify({ ok: true, kicked: 0, failed: 0, checked: knownUserIds.size, channels_results: [], kicked_users: [] }), { headers: corsHeaders });
         }
 
-        // Get admin IDs for each channel to exclude them
+        // Get channel admins
         const channelAdmins = new Set<number>();
-        await Promise.allSettled(chIdsNS.map(async (chId: number) => {
+        await Promise.allSettled(chListNS.map(async (ch: any) => {
           try {
-            const res = await tg(botToken, "getChatAdministrators", { chat_id: chId });
-            if (res.ok) {
-              for (const admin of res.result) {
-                channelAdmins.add(admin.user.id);
-              }
-            }
+            const res = await tg(botToken, "getChatAdministrators", { chat_id: ch.channel_id });
+            if (res.ok) for (const a of res.result) channelAdmins.add(a.user.id);
           } catch {}
         }));
 
         const finalKick = toKick.filter(uid => !channelAdmins.has(uid));
 
-        let kickedNS = 0, failedNS = 0;
+        // Track per-channel results and kicked users
+        const channelsResults: { channel_name: string; channel_id: number; kicked: number; failed: number }[] = [];
+        const kickedUserIds = new Set<number>();
+
         const KICK_B = 10;
-        for (let i = 0; i < finalKick.length; i += KICK_B) {
-          const batch = finalKick.slice(i, i + KICK_B);
-          await Promise.allSettled(batch.map(async (uid) => {
-            for (const chId of chIdsNS) {
+        for (const ch of chListNS) {
+          let chKicked = 0, chFailed = 0;
+          for (let i = 0; i < finalKick.length; i += KICK_B) {
+            const batch = finalKick.slice(i, i + KICK_B);
+            await Promise.allSettled(batch.map(async (uid) => {
               try {
-                const banRes = await tg(botToken, "banChatMember", { chat_id: chId, user_id: uid });
+                const banRes = await tg(botToken, "banChatMember", { chat_id: ch.channel_id, user_id: uid });
                 if (banRes.ok) {
-                  kickedNS++;
-                  tg(botToken, "unbanChatMember", { chat_id: chId, user_id: uid, only_if_banned: true }).catch(() => {});
-                } else { failedNS++; }
-              } catch { failedNS++; }
-            }
-          }));
+                  chKicked++;
+                  kickedUserIds.add(uid);
+                  tg(botToken, "unbanChatMember", { chat_id: ch.channel_id, user_id: uid, only_if_banned: true }).catch(() => {});
+                } else { chFailed++; }
+              } catch { chFailed++; }
+            }));
+          }
+          channelsResults.push({ channel_name: ch.channel_name, channel_id: ch.channel_id, kicked: chKicked, failed: chFailed });
         }
 
-        return new Response(JSON.stringify({ ok: true, kicked: kickedNS, failed: failedNS, checked: knownUserIds.size }), { headers: corsHeaders });
+        const totalKicked = channelsResults.reduce((s, c) => s + c.kicked, 0);
+        const totalFailed = channelsResults.reduce((s, c) => s + c.failed, 0);
+        const kickedUsers = [...kickedUserIds].map(uid => ({
+          telegram_user_id: uid,
+          name: userInfoMap.get(uid) || String(uid),
+        }));
+
+        return new Response(JSON.stringify({
+          ok: true,
+          kicked: totalKicked,
+          failed: totalFailed,
+          checked: knownUserIds.size,
+          channels_results: channelsResults,
+          kicked_users: kickedUsers,
+        }), { headers: corsHeaders });
       }
 
       // ── BROADCAST TO ALL CHANNELS ──
