@@ -586,78 +586,95 @@ Deno.serve(async (req) => {
           }
         }
 
-        const adminTgId = botData.admin_telegram_id;
-
-        const knownUserIds = new Set<number>();
-        const [buNS, pcmNS, ftNS] = await Promise.all([
-          sb.from("bot_users").select("telegram_user_id, first_name, last_name, telegram_username").eq("owner_id", user.id).eq("bot_token_id", botTokenId),
-          sb.from("public_channel_members").select("telegram_user_id, first_name, last_name, telegram_username").eq("owner_id", user.id).eq("bot_token_id", botTokenId),
-          sb.from("free_trial_users").select("telegram_user_id, expires_at, first_name, last_name, telegram_username").eq("owner_id", user.id).eq("bot_token_id", botTokenId),
-        ]);
-        for (const b of (buNS.data || [])) {
-          knownUserIds.add(b.telegram_user_id);
-          if (!userInfoMap.has(b.telegram_user_id)) userInfoMap.set(b.telegram_user_id, [b.first_name, b.last_name].filter(Boolean).join(" ") || b.telegram_username || String(b.telegram_user_id));
-        }
-        for (const p of (pcmNS.data || [])) {
-          knownUserIds.add(p.telegram_user_id);
-          if (!userInfoMap.has(p.telegram_user_id)) userInfoMap.set(p.telegram_user_id, [p.first_name, p.last_name].filter(Boolean).join(" ") || p.telegram_username || String(p.telegram_user_id));
-        }
-        for (const ft of (ftNS.data || [])) {
+        // Also add active free trial users
+        const { data: ftNS } = await sb.from("free_trial_users")
+          .select("telegram_user_id, expires_at, first_name, last_name, telegram_username")
+          .eq("owner_id", user.id)
+          .eq("bot_token_id", botTokenId);
+        for (const ft of (ftNS || [])) {
           if (ft.expires_at && new Date(ft.expires_at) > nowNS) {
             activeUserIds.add(ft.telegram_user_id);
           }
+          if (!userInfoMap.has(ft.telegram_user_id)) {
+            userInfoMap.set(ft.telegram_user_id, [ft.first_name, ft.last_name].filter(Boolean).join(" ") || ft.telegram_username || String(ft.telegram_user_id));
+          }
         }
 
+        const adminTgId = botData.admin_telegram_id;
+        const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+        // Process channel by channel - get admins for each channel, then check members
+        const channelsResults: { channel_name: string; channel_id: number; checked: number; kicked: number; failed: number; kicked_users: { telegram_user_id: number; name: string }[] }[] = [];
+        const allKickedUserIds = new Set<number>();
+
+        // Collect all known bot_users
+        const { data: buNS } = await sb.from("bot_users")
+          .select("telegram_user_id, first_name, last_name, telegram_username")
+          .eq("owner_id", user.id)
+          .eq("bot_token_id", botTokenId);
+        const knownUserIds = new Set<number>();
+        for (const b of (buNS || [])) {
+          knownUserIds.add(b.telegram_user_id);
+          if (!userInfoMap.has(b.telegram_user_id)) {
+            userInfoMap.set(b.telegram_user_id, [b.first_name, b.last_name].filter(Boolean).join(" ") || b.telegram_username || String(b.telegram_user_id));
+          }
+        }
+        // Also add public_channel_members
+        const { data: pcmNS } = await sb.from("public_channel_members")
+          .select("telegram_user_id, first_name, last_name, telegram_username")
+          .eq("owner_id", user.id)
+          .eq("bot_token_id", botTokenId);
+        for (const p of (pcmNS || [])) {
+          knownUserIds.add(p.telegram_user_id);
+          if (!userInfoMap.has(p.telegram_user_id)) {
+            userInfoMap.set(p.telegram_user_id, [p.first_name, p.last_name].filter(Boolean).join(" ") || p.telegram_username || String(p.telegram_user_id));
+          }
+        }
+
+        // Users to kick = known users who are NOT active subscribers and NOT admin
         const toKick = [...knownUserIds].filter(uid => {
           if (activeUserIds.has(uid)) return false;
           if (adminTgId && uid === adminTgId) return false;
           return true;
         });
 
-        if (toKick.length === 0) {
-          return new Response(JSON.stringify({ ok: true, kicked: 0, failed: 0, checked: knownUserIds.size, channels_results: [], kicked_users: [] }), { headers: corsHeaders });
-        }
-
-        // Get channel admins
-        const channelAdmins = new Set<number>();
-        await Promise.allSettled(chListNS.map(async (ch: any) => {
+        for (const ch of chListNS) {
+          // Get admins for this specific channel
+          const channelAdmins = new Set<number>();
           try {
             const res = await tg(botToken, "getChatAdministrators", { chat_id: ch.channel_id });
             if (res.ok) for (const a of res.result) channelAdmins.add(a.user.id);
           } catch {}
-        }));
 
-        const finalKick = toKick.filter(uid => !channelAdmins.has(uid));
-
-        // Track per-channel results and kicked users
-        const channelsResults: { channel_name: string; channel_id: number; kicked: number; failed: number }[] = [];
-        const kickedUserIds = new Set<number>();
-
-        const KICK_B = 10;
-        for (const ch of chListNS) {
+          const chToKick = toKick.filter(uid => !channelAdmins.has(uid));
           let chKicked = 0, chFailed = 0;
-          for (let i = 0; i < finalKick.length; i += KICK_B) {
-            const batch = finalKick.slice(i, i + KICK_B);
-            await Promise.allSettled(batch.map(async (uid) => {
-              try {
-                const banRes = await tg(botToken, "banChatMember", { chat_id: ch.channel_id, user_id: uid });
-                if (banRes.ok) {
-                  chKicked++;
-                  kickedUserIds.add(uid);
-                  tg(botToken, "unbanChatMember", { chat_id: ch.channel_id, user_id: uid, only_if_banned: true }).catch(() => {});
-                } else { chFailed++; }
-              } catch { chFailed++; }
-            }));
+          const chKickedUsers: { telegram_user_id: number; name: string }[] = [];
+
+          for (const uid of chToKick) {
+            try {
+              const banRes = await tg(botToken, "banChatMember", { chat_id: ch.channel_id, user_id: uid });
+              if (banRes.ok) {
+                chKicked++;
+                allKickedUserIds.add(uid);
+                chKickedUsers.push({ telegram_user_id: uid, name: userInfoMap.get(uid) || String(uid) });
+                tg(botToken, "unbanChatMember", { chat_id: ch.channel_id, user_id: uid, only_if_banned: true }).catch(() => {});
+              } else { chFailed++; }
+            } catch { chFailed++; }
+            await sleep(200);
           }
-          channelsResults.push({ channel_name: ch.channel_name, channel_id: ch.channel_id, kicked: chKicked, failed: chFailed });
+
+          channelsResults.push({
+            channel_name: ch.channel_name,
+            channel_id: ch.channel_id,
+            checked: chToKick.length,
+            kicked: chKicked,
+            failed: chFailed,
+            kicked_users: chKickedUsers,
+          });
         }
 
         const totalKicked = channelsResults.reduce((s, c) => s + c.kicked, 0);
         const totalFailed = channelsResults.reduce((s, c) => s + c.failed, 0);
-        const kickedUsers = [...kickedUserIds].map(uid => ({
-          telegram_user_id: uid,
-          name: userInfoMap.get(uid) || String(uid),
-        }));
 
         return new Response(JSON.stringify({
           ok: true,
@@ -665,7 +682,7 @@ Deno.serve(async (req) => {
           failed: totalFailed,
           checked: knownUserIds.size,
           channels_results: channelsResults,
-          kicked_users: kickedUsers,
+          kicked_users: [...allKickedUserIds].map(uid => ({ telegram_user_id: uid, name: userInfoMap.get(uid) || String(uid) })),
         }), { headers: corsHeaders });
       }
 
