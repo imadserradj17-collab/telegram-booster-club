@@ -890,7 +890,521 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   {t("dash.checkBlocked")}
                 </Button>
               </div>
+              <div>
+                <h3 className="text-sm font-semibold text-foreground mb-3">{t("dash.latestSubs")}</h3>
+                <SubList list={subscribers.slice(0, 5)} />
+              </div>
+            </div>
+          )}
 
+          {/* SUBSCRIBERS */}
+
+          {/* KICK NON-SUBSCRIBERS */}
+          {activeTab === "kick_nonsubs" && (
+            <div className="space-y-4 md:space-y-6 animate-fade-in">
+              <div className="glass-card p-5 md:p-6 border-destructive/30 bg-gradient-to-br from-destructive/5 to-transparent">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-destructive/15 flex items-center justify-center flex-shrink-0">
+                    <Shield className="w-6 h-6 text-destructive" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-base font-bold text-foreground">{t("dash.kickNonSubscribers")}</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">{t("dash.kickNonSubscribersHint")}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/5 border border-destructive/10 mb-4">
+                  <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0" />
+                  <p className="text-xs text-destructive">{t("dash.kickNonSubscribersWarn")}</p>
+                </div>
+                <Button
+                  variant="destructive"
+                  className="w-full"
+                  disabled={kickingNonSubs}
+                  onClick={async () => {
+                    if (!confirm(t("dash.kickNonSubscribersConfirm"))) return;
+                    setKickingNonSubs(true);
+                    setKickNonSubsResult(null);
+                    try {
+                      const { data, error } = await supabase.functions.invoke("manage-bot", {
+                        body: { action: "kick_non_subscribers" },
+                      });
+                      if (error) throw error;
+                      if (data?.error) throw new Error(data.error);
+                      setKickNonSubsResult(data);
+                      await fetchData();
+                    } catch (error: any) {
+                      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+                    } finally { setKickingNonSubs(false); }
+                  }}
+                >
+                  {kickingNonSubs ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      {t("dash.kickNonSubscribersProcessing")}
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      {t("dash.kickNonSubscribers")}
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {/* Results Panel */}
+              {kickNonSubsResult && (
+                <div className="space-y-4 animate-fade-in">
+                  {/* Summary Stats */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="glass-card text-center p-4">
+                      <div className="text-2xl font-bold text-foreground">{kickNonSubsResult.checked}</div>
+                      <div className="text-xs text-muted-foreground mt-1">{t("dash.kickNonSubsCheckedLabel")}</div>
+                    </div>
+                    <div className="glass-card text-center p-4 border-green-500/20">
+                      <div className="text-2xl font-bold text-green-500">{kickNonSubsResult.kicked}</div>
+                      <div className="text-xs text-green-500 mt-1">{t("dash.kickNonSubsKickedLabel")}</div>
+                    </div>
+                    <div className="glass-card text-center p-4 border-destructive/20">
+                      <div className="text-2xl font-bold text-destructive">{kickNonSubsResult.failed}</div>
+                      <div className="text-xs text-destructive mt-1">{t("broadcast.failed")}</div>
+                    </div>
+                  </div>
+
+                  {/* Per-Channel Results */}
+                  {kickNonSubsResult.channels_results.length > 0 && (
+                    <div className="glass-card overflow-hidden">
+                      <div className="px-4 py-3 border-b border-border/50 bg-muted/30">
+                        <h4 className="text-sm font-semibold text-foreground">{t("dash.kickNonSubsChannels")}</h4>
+                      </div>
+                      <div className="divide-y divide-border/30 max-h-60 overflow-y-auto">
+                        {kickNonSubsResult.channels_results.map((ch: any, i: number) => (
+                          <div key={i} className="flex items-center justify-between px-4 py-3 text-sm">
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <Tv className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                              <span className="text-foreground truncate">{ch.channel_name}</span>
+                            </div>
+                            <div className="flex items-center gap-3 flex-shrink-0">
+                              <span className="text-green-500 text-xs font-medium">✅ {ch.kicked}</span>
+                              {ch.failed > 0 && <span className="text-destructive text-xs font-medium">❌ {ch.failed}</span>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Kicked Users List */}
+                  {kickNonSubsResult.kicked_users.length > 0 && (
+                    <div className="glass-card overflow-hidden">
+                      <div className="px-4 py-3 border-b border-border/50 bg-muted/30">
+                        <h4 className="text-sm font-semibold text-foreground">
+                          {t("dash.kickNonSubsUsers")} ({kickNonSubsResult.kicked_users.length})
+                        </h4>
+                      </div>
+                      <div className="divide-y divide-border/30 max-h-60 overflow-y-auto">
+                        {kickNonSubsResult.kicked_users.map((u: any, i: number) => (
+                          <div key={i} className="flex items-center gap-3 px-4 py-3 text-sm">
+                            <div className="w-8 h-8 rounded-full bg-destructive/10 flex items-center justify-center flex-shrink-0">
+                              <User className="w-4 h-4 text-destructive" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-foreground font-medium truncate">{u.name}</p>
+                              <p className="text-xs text-muted-foreground font-mono" dir="ltr">#{u.telegram_user_id}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {kickNonSubsResult.kicked_users.length === 0 && kickNonSubsResult.kicked === 0 && (
+                    <div className="glass-card p-6 text-center">
+                      <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-3">
+                        <Shield className="w-6 h-6 text-green-500" />
+                      </div>
+                      <p className="text-sm text-muted-foreground">{t("dash.kickNonSubsNone")}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === "subscribers" && (
+            <div className="space-y-4 animate-fade-in">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                <div className="relative flex-1">
+                  <Search className={`absolute ${dir === "rtl" ? "right-3" : "left-3"} top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground`} />
+                  <Input placeholder={t("dash.searchPlaceholder")} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                    className={`${dir === "rtl" ? "pr-10" : "pl-10"} bg-secondary/50 border-border/50 text-foreground placeholder:text-muted-foreground`} />
+                </div>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm text-muted-foreground">{activeSubs.length} {t("dash.activeCount")}</p>
+                  <Button size="sm" onClick={() => { setAddSubForm({ telegram_user_id: "", telegram_username: "", first_name: "", last_name: "", duration: "30", customDays: "", is_permanent: false, channel_ids: channels.map(c => c.id) }); setShowAddSub(true); }}
+                    className="gradient-telegram text-primary-foreground hover:opacity-90">
+                    <Plus className="w-4 h-4" />
+                    {t("subs.add")}
+                  </Button>
+                </div>
+              </div>
+              {loading ? <div className="text-center py-16 text-muted-foreground"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></div> : <SubList list={activeSubs} />}
+            </div>
+          )}
+
+          {/* EXPIRED */}
+          {activeTab === "expired" && (
+            <div className="space-y-4 animate-fade-in">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                <div className="relative flex-1">
+                  <Search className={`absolute ${dir === "rtl" ? "right-3" : "left-3"} top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground`} />
+                  <Input placeholder={t("dash.searchPlaceholder")} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                    className={`${dir === "rtl" ? "pr-10" : "pl-10"} bg-secondary/50 border-border/50 text-foreground placeholder:text-muted-foreground`} />
+                </div>
+                <p className="text-sm text-muted-foreground text-center sm:text-start">{expiredSubs.length} {t("dash.expiredCount")}</p>
+              </div>
+              {loading ? <div className="text-center py-16 text-muted-foreground"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></div> : <SubList list={expiredSubs} />}
+            </div>
+          )}
+
+          {/* CHANNELS */}
+          {activeTab === "channels" && (
+            <div className="space-y-4 animate-fade-in">
+              <p className="text-sm text-muted-foreground">{channels.length} {t("channels.title")}</p>
+              {channels.length === 0 ? (
+                <div className="text-center py-16 glass-card">
+                  <Tv className="w-8 h-8 mx-auto mb-2 text-muted-foreground/30" />
+                  <p className="text-muted-foreground">{t("channels.noChannels")}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {lang === "ar" ? "أضف قنوات أو مجموعات عبر البوت أولاً" : "Add channels or groups via the bot first"}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Desktop */}
+                  <div className="glass-card overflow-hidden hidden md:block">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="border-border/50 hover:bg-transparent">
+                          <TableHead className="text-muted-foreground font-medium">{t("channels.name")}</TableHead>
+                          <TableHead className="text-muted-foreground font-medium">{t("channels.channelId")}</TableHead>
+                          <TableHead className="text-muted-foreground font-medium">{t("channels.inviteLink")}</TableHead>
+                          <TableHead className="text-muted-foreground font-medium">{t("channels.addedAt")}</TableHead>
+                          <TableHead className="text-muted-foreground font-medium w-12"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {channels.map((ch) => (
+                          <TableRow key={ch.id} className="border-border/30 hover:bg-secondary/30">
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                {ch.channel_type === "group" ? (
+                                  <Users className="w-4 h-4 text-success flex-shrink-0" />
+                                ) : (
+                                  <Tv className="w-4 h-4 text-primary/60 flex-shrink-0" />
+                                )}
+                                <span className="font-medium text-foreground text-sm">{ch.channel_name}</span>
+                                <Badge variant="outline" className="text-[10px]">
+                                  {ch.channel_type === "group" ? t("channels.group") : t("channels.channel")}
+                                </Badge>
+                              </div>
+                            </TableCell>
+                            <TableCell><span className="font-mono text-xs text-muted-foreground" dir="ltr">{ch.channel_id}</span></TableCell>
+                            <TableCell>
+                              {ch.invite_link ? (
+                                <a href={ch.invite_link} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline flex items-center gap-1">
+                                  <Link className="w-3 h-3" /> {lang === "ar" ? "رابط" : "Link"}
+                                </a>
+                              ) : "—"}
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">{new Date(ch.created_at).toLocaleDateString(lang === "ar" ? "ar-SA" : "en-US")}</TableCell>
+                            <TableCell>
+                              <Button variant="ghost" size="icon" onClick={() => deleteChannel(ch.id)} className="text-muted-foreground hover:text-destructive h-8 w-8">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  {/* Mobile */}
+                  <div className="space-y-3 md:hidden">
+                    {channels.map((ch) => (
+                      <div key={ch.id} className="glass-card p-4">
+                        <div className="flex items-start gap-3">
+                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                            {ch.channel_type === "group" ? (
+                              <Users className="w-5 h-5 text-success" />
+                            ) : (
+                              <Tv className="w-5 h-5 text-primary/60" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-foreground text-sm">{ch.channel_name}</p>
+                              <Badge variant="outline" className="text-[10px]">
+                                {ch.channel_type === "group" ? t("channels.group") : t("channels.channel")}
+                              </Badge>
+                            </div>
+                            <p className="font-mono text-xs text-muted-foreground" dir="ltr">{ch.channel_id}</p>
+                            {ch.invite_link && (
+                              <a href={ch.invite_link} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline mt-1 inline-flex items-center gap-1">
+                                <Link className="w-3 h-3" /> {lang === "ar" ? "رابط الدعوة" : "Invite Link"}
+                              </a>
+                            )}
+                          </div>
+                          <Button variant="ghost" size="icon" onClick={() => deleteChannel(ch.id)} className="text-muted-foreground hover:text-destructive h-8 w-8 flex-shrink-0">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* BROADCAST */}
+          {activeTab === "broadcast" && (
+            <div className="space-y-4 md:space-y-6 max-w-xl animate-fade-in">
+              <div className="glass-card p-4 md:p-6 space-y-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Send className="w-5 h-5 text-primary" />
+                  <h3 className="font-semibold text-foreground">{t("broadcast.title")}</h3>
+                </div>
+                {/* Target selector */}
+                <div className="space-y-2">
+                  <Label className="text-foreground/80">{lang === "ar" ? "الهدف" : "Target"}</Label>
+                  <div className="flex gap-2">
+                    <Button
+                      variant={broadcastTarget === "subscribers" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setBroadcastTarget("subscribers")}
+                      className={broadcastTarget === "subscribers" ? "gradient-telegram text-primary-foreground" : ""}
+                    >
+                      <Users className="w-3.5 h-3.5" />
+                      {t("broadcast.subsOnly")} ({activeSubs.length})
+                    </Button>
+                    <Button
+                      variant={broadcastTarget === "all_users" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setBroadcastTarget("all_users")}
+                      className={broadcastTarget === "all_users" ? "gradient-telegram text-primary-foreground" : ""}
+                    >
+                      <Bot className="w-3.5 h-3.5" />
+                      {t("broadcast.allBotUsers")} ({botUsersCount})
+                    </Button>
+                    <Button
+                      variant={broadcastTarget === "channels" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setBroadcastTarget("channels")}
+                      className={broadcastTarget === "channels" ? "gradient-telegram text-primary-foreground" : ""}
+                    >
+                      <Tv className="w-3.5 h-3.5" />
+                      {lang === "ar" ? "القنوات والمجموعات" : "Channels"} ({channels.length})
+                    </Button>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-foreground/80">{t("broadcast.message")}</Label>
+                  <Textarea
+                    placeholder={t("broadcast.placeholder")}
+                    value={broadcastMsg}
+                    onChange={(e) => setBroadcastMsg(e.target.value)}
+                    rows={5}
+                    className="bg-secondary/50 border-border/50 text-foreground placeholder:text-muted-foreground resize-none"
+                  />
+                  <p className="text-[10px] text-muted-foreground">{lang === "ar" ? "يدعم تنسيق Markdown (*عريض*, _مائل_)" : "Supports Markdown formatting (*bold*, _italic_)"}</p>
+                </div>
+                <Button
+                  onClick={handleBroadcast}
+                  disabled={broadcasting || !broadcastMsg.trim()}
+                  className="w-full gradient-telegram text-primary-foreground hover:opacity-90"
+                >
+                  {broadcasting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  {broadcasting ? t("broadcast.sending") : t("broadcast.send")}
+                </Button>
+                {broadcastResult && (
+                  <div className="glass-card p-4 border-primary/30 bg-primary/5">
+                    <h4 className="text-sm font-semibold text-foreground mb-2">{t("broadcast.result")}</h4>
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div>
+                        <p className="text-lg font-bold text-success">{broadcastResult.sent}</p>
+                        <p className="text-[10px] text-muted-foreground">{t("broadcast.success")}</p>
+                      </div>
+                      <div>
+                        <p className="text-lg font-bold text-destructive">{broadcastResult.failed}</p>
+                        <p className="text-[10px] text-muted-foreground">{t("broadcast.failed")}</p>
+                      </div>
+                      <div>
+                        <p className="text-lg font-bold text-foreground">{broadcastResult.total}</p>
+                        <p className="text-[10px] text-muted-foreground">{t("broadcast.total")}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* FREE TRIAL */}
+          {activeTab === "free_trial" && (
+            <div className="space-y-4 md:space-y-6 animate-fade-in">
+              {/* Toggle Card */}
+              <div className="glass-card p-4 md:p-6">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <Zap className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground">{t("dash.freeTrialEnabled")}</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">{t("dash.freeTrialHint")}</p>
+                    </div>
+                  </div>
+                  <Switch checked={freeTrialEnabled} onCheckedChange={async (v) => {
+                    setFreeTrialEnabled(v);
+                    if (botSettings) {
+                      const { error } = await supabase.from("bot_tokens").update({ free_trial_enabled: v } as any).eq("id", botSettings.id);
+                      if (error) {
+                        toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+                        setFreeTrialEnabled(!v);
+                      } else {
+                        toast({ title: v ? (lang === "ar" ? "تم تفعيل التجربة المجانية ✅" : "Free trial enabled ✅") : (lang === "ar" ? "تم تعطيل التجربة المجانية" : "Free trial disabled") });
+                      }
+                    }
+                  }} />
+                </div>
+              </div>
+
+              {/* Active Trial Users */}
+              {(() => {
+                const activeTrials = freeTrialUsers.filter(u => new Date(u.expires_at) >= new Date());
+                const expiredTrials = freeTrialUsers.filter(u => new Date(u.expires_at) < new Date());
+
+                const renderTrialKickButton = (u: FreeTrialUser) => (
+                  <Button variant="ghost" size="icon" disabled={kickingId === u.id}
+                    className="text-muted-foreground hover:text-destructive h-8 w-8 flex-shrink-0"
+                    onClick={async () => {
+                      if (!confirm(lang === "ar" ? "هل تريد طرد هذا المستخدم؟" : "Kick this user?")) return;
+                      setKickingId(u.id);
+                      try {
+                        const { data, error } = await supabase.functions.invoke("manage-bot", {
+                          body: { action: "kick_trial_user", telegram_user_id: u.telegram_user_id },
+                        });
+                        if (error) throw error;
+                        if (data?.error) throw new Error(data.error);
+                        // Move to expired by setting expires_at to now
+                        await supabase.from("free_trial_users").update({ expires_at: new Date().toISOString() }).eq("id", u.id);
+                        toast({ title: lang === "ar" ? "تم طرد المستخدم ونقله إلى المنتهية ✅" : "User kicked and moved to expired ✅" });
+                        fetchData();
+                      } catch (error: any) {
+                        toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+                      } finally { setKickingId(null); }
+                    }}>
+                    {kickingId === u.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                  </Button>
+                );
+
+                const renderDeleteRecordButton = (u: FreeTrialUser) => (
+                  <Button variant="ghost" size="icon"
+                    className="text-muted-foreground hover:text-destructive h-8 w-8 flex-shrink-0"
+                    onClick={async () => {
+                      if (!confirm(lang === "ar" ? "هل تريد حذف هذا السجل؟ (سيتمكن من التجربة المجانية مرة أخرى)" : "Delete this record? (User will be able to use free trial again)")) return;
+                      try {
+                        const { error } = await supabase.from("free_trial_users").delete().eq("id", u.id);
+                        if (error) throw error;
+                        toast({ title: lang === "ar" ? "تم حذف السجل ✅" : "Record deleted ✅" });
+                        fetchData();
+                      } catch (error: any) {
+                        toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+                      }
+                    }}>
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                );
+
+                return (
+                  <>
+                    {/* Active Trials Section */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <Badge className="bg-success/20 text-success border-success/30">{activeTrials.length}</Badge>
+                        <p className="text-sm font-medium text-foreground">{lang === "ar" ? "مستفيدون حاليًا" : "Currently Active"}</p>
+                      </div>
+                      {activeTrials.length === 0 ? (
+                        <div className="text-center py-8 glass-card">
+                          <p className="text-muted-foreground text-sm">{lang === "ar" ? "لا يوجد مستفيدون حاليًا" : "No active trial users"}</p>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="glass-card overflow-hidden hidden md:block">
+                            <Table>
+                              <TableHeader>
+                                <TableRow className="border-border/50 hover:bg-transparent">
+                                  <TableHead className="text-muted-foreground font-medium">{t("dash.subscriber")}</TableHead>
+                                  <TableHead className="text-muted-foreground font-medium">{t("dash.id")}</TableHead>
+                                  <TableHead className="text-muted-foreground font-medium">{t("dash.trialActivatedAt")}</TableHead>
+                                  <TableHead className="text-muted-foreground font-medium">{t("dash.trialExpiresAt")}</TableHead>
+                                  <TableHead className="text-muted-foreground font-medium">{lang === "ar" ? "متبقي" : "Remaining"}</TableHead>
+                                  <TableHead className="text-muted-foreground font-medium w-12"></TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {activeTrials.map(u => {
+                                  const displayName = [u.first_name, u.last_name].filter(Boolean).join(" ");
+                                  return (
+                                    <TableRow key={u.id} className="border-border/30 hover:bg-secondary/30">
+                                      <TableCell>
+                                        <div>
+                                          <p className="font-medium text-foreground text-sm">{displayName || `${t("dash.user")} ${u.telegram_user_id}`}</p>
+                                          {u.telegram_username && <p className="text-xs text-muted-foreground" dir="ltr">@{u.telegram_username}</p>}
+                                        </div>
+                                      </TableCell>
+                                      <TableCell><span className="font-mono text-xs text-muted-foreground" dir="ltr">{u.telegram_user_id}</span></TableCell>
+                                      <TableCell className="text-sm text-muted-foreground">{new Date(u.activated_at).toLocaleDateString(lang === "ar" ? "ar-SA" : "en-US")}</TableCell>
+                                      <TableCell className="text-sm text-muted-foreground">{new Date(u.expires_at).toLocaleDateString(lang === "ar" ? "ar-SA" : "en-US")}</TableCell>
+                                      <TableCell>
+                                        <Badge className="bg-success/20 text-success border-success/30 text-[10px]">
+                                          {daysRemaining(u.expires_at)} {t("dash.day")}
+                                        </Badge>
+                                      </TableCell>
+                                      <TableCell>{renderTrialKickButton(u)}</TableCell>
+                                    </TableRow>
+                                  );
+                                })}
+                              </TableBody>
+                            </Table>
+                          </div>
+                          <div className="space-y-3 md:hidden">
+                            {activeTrials.map(u => {
+                              const displayName = [u.first_name, u.last_name].filter(Boolean).join(" ");
+                              return (
+                                <div key={u.id} className="glass-card p-4">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <p className="font-medium text-foreground text-sm truncate">{displayName || `${t("dash.user")} ${u.telegram_user_id}`}</p>
+                                        <Badge className="bg-success/20 text-success border-success/30 text-[10px] flex-shrink-0">
+                                          {daysRemaining(u.expires_at)} {t("dash.day")}
+                                        </Badge>
+                                      </div>
+                                      <div className="flex flex-wrap gap-x-3 text-xs text-muted-foreground">
+                                        <span className="font-mono" dir="ltr">{u.telegram_user_id}</span>
+                                        {u.telegram_username && <span dir="ltr">@{u.telegram_username}</span>}
+                                      </div>
+                                      <p className="text-xs text-muted-foreground mt-1">{t("dash.trialExpiresAt")}: {new Date(u.expires_at).toLocaleDateString(lang === "ar" ? "ar-SA" : "en-US")}</p>
+                                    </div>
+                                    {renderTrialKickButton(u)}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </>
+                      )}
+                    </div>
 
                     {/* Expired Trials Section */}
                     <div>
