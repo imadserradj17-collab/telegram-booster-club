@@ -124,9 +124,10 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const [kickingNonSubs, setKickingNonSubs] = useState(false);
   const [kickNonSubsResult, setKickNonSubsResult] = useState<{
     kicked: number; failed: number; checked: number;
-    channels_results: { channel_name: string; channel_id: number; kicked: number; failed: number }[];
+    channels_results: { channel_name: string; channel_id: number; checked: number; kicked: number; failed: number; kicked_users: { telegram_user_id: number; name: string }[] }[];
     kicked_users: { telegram_user_id: number; name: string }[];
   } | null>(null);
+  const [kickNonSubsActiveChannel, setKickNonSubsActiveChannel] = useState<number>(-1);
   const [freeTrialEnabled, setFreeTrialEnabled] = useState(false);
   const [freeTrialUsers, setFreeTrialUsers] = useState<FreeTrialUser[]>([]);
   const [freeTrialChannelIds, setFreeTrialChannelIds] = useState<string[]>([]);
@@ -923,16 +924,24 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                     if (!confirm(t("dash.kickNonSubscribersConfirm"))) return;
                     setKickingNonSubs(true);
                     setKickNonSubsResult(null);
+                    setKickNonSubsActiveChannel(0);
+                    const progressInterval = setInterval(() => {
+                      setKickNonSubsActiveChannel(prev => prev < channels.length - 1 ? prev + 1 : prev);
+                    }, 3000);
                     try {
                       const { data, error } = await supabase.functions.invoke("manage-bot", {
                         body: { action: "kick_non_subscribers" },
                       });
+                      clearInterval(progressInterval);
                       if (error) throw error;
                       if (data?.error) throw new Error(data.error);
                       setKickNonSubsResult(data);
+                      setKickNonSubsActiveChannel(-1);
                       await fetchData();
                     } catch (error: any) {
+                      clearInterval(progressInterval);
                       toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+                      setKickNonSubsActiveChannel(-1);
                     } finally { setKickingNonSubs(false); }
                   }}
                 >
@@ -950,6 +959,52 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                 </Button>
               </div>
 
+              {/* Live scanning animation */}
+              {kickingNonSubs && !kickNonSubsResult && (
+                <div className="glass-card p-5 animate-fade-in">
+                  <div className="flex items-center gap-3 mb-4">
+                    <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                    <h4 className="text-sm font-semibold text-foreground">
+                      {lang === "ar" ? "جاري الانتقال بين القنوات وفحص المشتركين..." : "Moving between channels & checking members..."}
+                    </h4>
+                  </div>
+                  <div className="space-y-2">
+                    {channels.map((ch, idx) => (
+                      <div key={ch.id} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all duration-500 ${
+                        idx === kickNonSubsActiveChannel
+                          ? "border-primary/50 bg-primary/5 shadow-sm shadow-primary/10"
+                          : idx < kickNonSubsActiveChannel
+                          ? "border-green-500/30 bg-green-500/5"
+                          : "border-border/30 bg-secondary/20 opacity-40"
+                      }`}>
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${
+                          idx === kickNonSubsActiveChannel ? "bg-primary/15" : idx < kickNonSubsActiveChannel ? "bg-green-500/10" : "bg-secondary/30"
+                        }`}>
+                          {idx === kickNonSubsActiveChannel ? (
+                            <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                          ) : idx < kickNonSubsActiveChannel ? (
+                            <Shield className="w-4 h-4 text-green-500" />
+                          ) : (
+                            <Tv className="w-4 h-4 text-muted-foreground" />
+                          )}
+                        </div>
+                        <span className={`text-sm truncate flex-1 ${idx === kickNonSubsActiveChannel ? "text-foreground font-medium" : "text-muted-foreground"}`}>
+                          {ch.channel_type === "group" ? "👥" : "📺"} {ch.channel_name}
+                        </span>
+                        {idx === kickNonSubsActiveChannel && (
+                          <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px] animate-pulse flex-shrink-0">
+                            {lang === "ar" ? "⟵ جاري الفحص" : "Scanning ⟶"}
+                          </Badge>
+                        )}
+                        {idx < kickNonSubsActiveChannel && (
+                          <Badge className="bg-green-500/15 text-green-500 border-green-500/30 text-[10px] flex-shrink-0">✓</Badge>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Results Panel */}
               {kickNonSubsResult && (
                 <div className="space-y-4 animate-fade-in">
@@ -964,53 +1019,58 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                     </div>
                     <div className="glass-card text-center p-4 border-destructive/20">
                       <div className="text-2xl font-bold text-destructive">{kickNonSubsResult.failed}</div>
-                      <div className="text-xs text-destructive mt-1">{t("broadcast.failed")}</div>
+                      <div className="text-xs text-destructive mt-1">{lang === "ar" ? "فشل" : "Failed"}</div>
                     </div>
                   </div>
+
                   {kickNonSubsResult.channels_results.length > 0 && (
-                    <div className="glass-card overflow-hidden">
-                      <div className="px-4 py-3 border-b border-border/50 bg-muted/30">
-                        <h4 className="text-sm font-semibold text-foreground">{t("dash.kickNonSubsChannels")}</h4>
-                      </div>
-                      <div className="divide-y divide-border/30 max-h-60 overflow-y-auto">
-                        {kickNonSubsResult.channels_results.map((ch: any, i: number) => (
-                          <div key={i} className="flex items-center justify-between px-4 py-3 text-sm">
+                    <div className="space-y-3">
+                      {kickNonSubsResult.channels_results.map((ch: any, i: number) => (
+                        <div key={i} className="glass-card overflow-hidden animate-fade-in" style={{ animationDelay: `${i * 100}ms` }}>
+                          <div className="flex items-center justify-between px-4 py-3 border-b border-border/30 bg-muted/20">
                             <div className="flex items-center gap-2 min-w-0 flex-1">
-                              <Tv className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                              <span className="text-foreground truncate">{ch.channel_name}</span>
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                                ch.kicked > 0 ? "bg-destructive/10" : "bg-green-500/10"
+                              }`}>
+                                <Shield className={`w-4 h-4 ${ch.kicked > 0 ? "text-destructive" : "text-green-500"}`} />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-semibold text-foreground truncate">{ch.channel_name}</p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  {lang === "ar" ? "فحص" : "Checked"} {ch.checked} · ✅ {ch.kicked} · ❌ {ch.failed}
+                                </p>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-3 flex-shrink-0">
-                              <span className="text-green-500 text-xs font-medium">✅ {ch.kicked}</span>
-                              {ch.failed > 0 && <span className="text-destructive text-xs font-medium">❌ {ch.failed}</span>}
-                            </div>
+                            {ch.kicked === 0 && ch.failed === 0 && (
+                              <Badge className="bg-green-500/15 text-green-500 border-green-500/30 text-[10px]">
+                                {lang === "ar" ? "نظيفة ✓" : "Clean ✓"}
+                              </Badge>
+                            )}
                           </div>
-                        ))}
-                      </div>
+                          {ch.kicked_users && ch.kicked_users.length > 0 && (
+                            <div className="divide-y divide-border/20 max-h-48 overflow-y-auto">
+                              {ch.kicked_users.map((u: any, j: number) => (
+                                <div key={j} className="flex items-center gap-3 px-4 py-2.5 text-sm">
+                                  <div className="w-7 h-7 rounded-full bg-destructive/10 flex items-center justify-center flex-shrink-0">
+                                    <User className="w-3.5 h-3.5 text-destructive" />
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-foreground text-sm truncate">{u.name}</p>
+                                    <p className="text-[10px] text-muted-foreground font-mono" dir="ltr">#{u.telegram_user_id}</p>
+                                  </div>
+                                  <Badge variant="destructive" className="text-[10px]">
+                                    {lang === "ar" ? "طُرد" : "Kicked"}
+                                  </Badge>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   )}
-                  {kickNonSubsResult.kicked_users.length > 0 && (
-                    <div className="glass-card overflow-hidden">
-                      <div className="px-4 py-3 border-b border-border/50 bg-muted/30">
-                        <h4 className="text-sm font-semibold text-foreground">
-                          {t("dash.kickNonSubsUsers")} ({kickNonSubsResult.kicked_users.length})
-                        </h4>
-                      </div>
-                      <div className="divide-y divide-border/30 max-h-60 overflow-y-auto">
-                        {kickNonSubsResult.kicked_users.map((u: any, i: number) => (
-                          <div key={i} className="flex items-center gap-3 px-4 py-3 text-sm">
-                            <div className="w-8 h-8 rounded-full bg-destructive/10 flex items-center justify-center flex-shrink-0">
-                              <User className="w-4 h-4 text-destructive" />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-foreground font-medium truncate">{u.name}</p>
-                              <p className="text-xs text-muted-foreground font-mono" dir="ltr">#{u.telegram_user_id}</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {kickNonSubsResult.kicked_users.length === 0 && kickNonSubsResult.kicked === 0 && (
+
+                  {kickNonSubsResult.kicked === 0 && kickNonSubsResult.failed === 0 && (
                     <div className="glass-card p-6 text-center">
                       <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-3">
                         <Shield className="w-6 h-6 text-green-500" />
