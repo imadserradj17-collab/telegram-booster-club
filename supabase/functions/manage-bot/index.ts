@@ -597,18 +597,15 @@ Deno.serve(async (req) => {
         const adminTgId = botData.admin_telegram_id;
         const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-        // Helper to fetch ALL rows with pagination
-        async function fetchAllMembers(channelId: string) {
+        // Helper to fetch ALL rows with pagination (bypass 1000 limit)
+        async function fetchAllPaged(table: string, selectCols: string, filters: Record<string, any>) {
           const allRows: any[] = [];
           const PAGE = 1000;
           let from = 0;
           while (true) {
-            const { data } = await sb.from("channel_members")
-              .select("telegram_user_id, first_name, last_name, telegram_username")
-              .eq("owner_id", user.id)
-              .eq("bot_token_id", botTokenId)
-              .eq("channel_id", channelId)
-              .range(from, from + PAGE - 1);
+            let q = sb.from(table).select(selectCols).range(from, from + PAGE - 1);
+            for (const [k, v] of Object.entries(filters)) q = q.eq(k, v);
+            const { data } = await q;
             if (!data || data.length === 0) break;
             allRows.push(...data);
             if (data.length < PAGE) break;
@@ -616,6 +613,32 @@ Deno.serve(async (req) => {
           }
           return allRows;
         }
+
+        // Collect ALL known users from all sources (paginated)
+        const [buAll, pcmAll, cmAll] = await Promise.all([
+          fetchAllPaged("bot_users", "telegram_user_id, first_name, last_name, telegram_username", { owner_id: user.id, bot_token_id: botTokenId }),
+          fetchAllPaged("public_channel_members", "telegram_user_id, first_name, last_name, telegram_username", { owner_id: user.id, bot_token_id: botTokenId }),
+          fetchAllPaged("channel_members", "telegram_user_id, first_name, last_name, telegram_username", { owner_id: user.id, bot_token_id: botTokenId }),
+        ]);
+
+        // Build map of all known users with their names
+        const userInfoMap = new Map<number, string>();
+        const allKnownIds = new Set<number>();
+        for (const list of [buAll, pcmAll, cmAll]) {
+          for (const u of list) {
+            allKnownIds.add(u.telegram_user_id);
+            if (!userInfoMap.has(u.telegram_user_id)) {
+              userInfoMap.set(u.telegram_user_id, [u.first_name, u.last_name].filter(Boolean).join(" ") || u.telegram_username || String(u.telegram_user_id));
+            }
+          }
+        }
+
+        // Users to kick = known users NOT in active subscribers and NOT admin
+        const toKickGlobal = [...allKnownIds].filter(uid => {
+          if (activeUserIds.has(uid)) return false;
+          if (adminTgId && uid === adminTgId) return false;
+          return true;
+        });
 
         // Process channel by channel
         const channelsResults: any[] = [];
@@ -629,31 +652,23 @@ Deno.serve(async (req) => {
             if (res.ok) for (const a of res.result) channelAdmins.add(a.user.id);
           } catch {}
 
-          // Get tracked members for THIS channel
-          const members = await fetchAllMembers(ch.id);
-          
-          // Filter: non-subscribers, non-admins
-          const toKick = members.filter((m: any) => {
-            if (activeUserIds.has(m.telegram_user_id)) return false;
-            if (adminTgId && m.telegram_user_id === adminTgId) return false;
-            if (channelAdmins.has(m.telegram_user_id)) return false;
-            return true;
-          });
+          // Filter out channel admins
+          const chToKick = toKickGlobal.filter(uid => !channelAdmins.has(uid));
 
           let chKicked = 0, chFailed = 0;
           const chKickedUsers: { telegram_user_id: number; name: string }[] = [];
 
-          for (const m of toKick) {
-            const name = [m.first_name, m.last_name].filter(Boolean).join(" ") || m.telegram_username || String(m.telegram_user_id);
+          for (const uid of chToKick) {
+            const name = userInfoMap.get(uid) || String(uid);
             try {
-              const banRes = await tg(botToken, "banChatMember", { chat_id: ch.channel_id, user_id: m.telegram_user_id });
+              const banRes = await tg(botToken, "banChatMember", { chat_id: ch.channel_id, user_id: uid });
               if (banRes.ok) {
                 chKicked++;
-                chKickedUsers.push({ telegram_user_id: m.telegram_user_id, name });
-                allKickedUsers.push({ telegram_user_id: m.telegram_user_id, name });
-                tg(botToken, "unbanChatMember", { chat_id: ch.channel_id, user_id: m.telegram_user_id, only_if_banned: true }).catch(() => {});
-                // Remove from channel_members
-                sb.from("channel_members").delete().eq("owner_id", user.id).eq("channel_id", ch.id).eq("telegram_user_id", m.telegram_user_id).then(() => {});
+                chKickedUsers.push({ telegram_user_id: uid, name });
+                if (!allKickedUsers.some(u => u.telegram_user_id === uid)) {
+                  allKickedUsers.push({ telegram_user_id: uid, name });
+                }
+                tg(botToken, "unbanChatMember", { chat_id: ch.channel_id, user_id: uid, only_if_banned: true }).catch(() => {});
               } else { chFailed++; }
             } catch { chFailed++; }
             await sleep(200);
@@ -662,7 +677,7 @@ Deno.serve(async (req) => {
           channelsResults.push({
             channel_name: ch.channel_name,
             channel_id: ch.channel_id,
-            checked: members.length,
+            checked: chToKick.length,
             kicked: chKicked,
             failed: chFailed,
             kicked_users: chKickedUsers,
@@ -671,7 +686,7 @@ Deno.serve(async (req) => {
 
         const totalKicked = channelsResults.reduce((s: number, c: any) => s + c.kicked, 0);
         const totalFailed = channelsResults.reduce((s: number, c: any) => s + c.failed, 0);
-        const totalChecked = channelsResults.reduce((s: number, c: any) => s + c.checked, 0);
+        const totalChecked = allKnownIds.size;
 
         return new Response(JSON.stringify({
           ok: true,
