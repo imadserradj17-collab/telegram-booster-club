@@ -911,16 +911,14 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   onClick={async () => {
                     if (!confirm(t("dash.kickNonSubscribersConfirm"))) return;
                     setKickingNonSubs(true);
+                    setKickNonSubsResult(null);
                     try {
                       const { data, error } = await supabase.functions.invoke("manage-bot", {
                         body: { action: "kick_non_subscribers" },
                       });
                       if (error) throw error;
                       if (data?.error) throw new Error(data.error);
-                      const msg = `✅ ${data.kicked} ${t("dash.kickNonSubscribersKicked")}` +
-                        (data.failed > 0 ? ` | ❌ ${data.failed} ${t("broadcast.failed")}` : "") +
-                        ` | 🔍 ${data.checked} ${t("dash.kickNonSubscribersChecked")}`;
-                      toast({ title: t("dash.kickNonSubscribersDone"), description: msg });
+                      setKickNonSubsResult(data);
                       await fetchData();
                     } catch (error: any) {
                       toast({ title: t("common.error"), description: error.message, variant: "destructive" });
@@ -939,7 +937,69 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                     </>
                   )}
                 </Button>
-              </div>
+
+                {/* Results Panel */}
+                {kickNonSubsResult && (
+                  <div className="mt-4 space-y-3 animate-fade-in">
+                    {/* Summary */}
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="text-center p-2 rounded-lg bg-muted/50">
+                        <div className="text-lg font-bold text-foreground">{kickNonSubsResult.checked}</div>
+                        <div className="text-[10px] text-muted-foreground">{t("dash.kickNonSubsCheckedLabel")}</div>
+                      </div>
+                      <div className="text-center p-2 rounded-lg bg-green-500/10">
+                        <div className="text-lg font-bold text-green-500">{kickNonSubsResult.kicked}</div>
+                        <div className="text-[10px] text-green-500">{t("dash.kickNonSubsKickedLabel")}</div>
+                      </div>
+                      <div className="text-center p-2 rounded-lg bg-red-500/10">
+                        <div className="text-lg font-bold text-red-500">{kickNonSubsResult.failed}</div>
+                        <div className="text-[10px] text-red-500">{t("broadcast.failed")}</div>
+                      </div>
+                    </div>
+
+                    {/* Per-Channel Results */}
+                    {kickNonSubsResult.channels_results.length > 0 && (
+                      <div className="rounded-lg border border-border overflow-hidden">
+                        <div className="px-3 py-2 bg-muted/30 text-xs font-semibold text-foreground">{t("dash.kickNonSubsChannels")}</div>
+                        <div className="max-h-40 overflow-y-auto">
+                          {kickNonSubsResult.channels_results.map((ch, i) => (
+                            <div key={i} className="flex items-center justify-between px-3 py-2 border-t border-border/50 text-xs">
+                              <span className="text-foreground truncate flex-1">{ch.channel_name}</span>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <span className="text-green-500">✅ {ch.kicked}</span>
+                                {ch.failed > 0 && <span className="text-red-500">❌ {ch.failed}</span>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Kicked Users List */}
+                    {kickNonSubsResult.kicked_users.length > 0 && (
+                      <div className="rounded-lg border border-border overflow-hidden">
+                        <div className="px-3 py-2 bg-muted/30 text-xs font-semibold text-foreground">
+                          {t("dash.kickNonSubsUsers")} ({kickNonSubsResult.kicked_users.length})
+                        </div>
+                        <div className="max-h-40 overflow-y-auto">
+                          {kickNonSubsResult.kicked_users.map((u, i) => (
+                            <div key={i} className="flex items-center gap-2 px-3 py-2 border-t border-border/50 text-xs">
+                              <User className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                              <span className="text-foreground truncate">{u.name}</span>
+                              <span className="text-muted-foreground text-[10px] flex-shrink-0">#{u.telegram_user_id}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {kickNonSubsResult.kicked_users.length === 0 && kickNonSubsResult.kicked === 0 && (
+                      <div className="text-center text-xs text-muted-foreground py-2">
+                        ✅ {t("dash.kickNonSubsNone")}
+                      </div>
+                    )}
+                  </div>
+                )}
               <div>
                 <h3 className="text-sm font-semibold text-foreground mb-3">{t("dash.latestSubs")}</h3>
                 <SubList list={subscribers.slice(0, 5)} />
