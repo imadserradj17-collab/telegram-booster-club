@@ -331,8 +331,8 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
 
     console.log(`chat_member update: chatId=${chatId}, userId=${userId}, old=${oldStatus}, new=${newStatus}, mandatoryChannelId=${mandatoryChannelId}`);
 
-    // Track when someone joins the public channel
-    if (publicChannelId && userId && (newStatus === "member" || newStatus === "administrator") && (oldStatus === "left" || oldStatus === "kicked" || oldStatus === "restricted")) {
+    // Track when someone joins ANY channel
+    if (userId && (newStatus === "member" || newStatus === "administrator") && (oldStatus === "left" || oldStatus === "kicked" || oldStatus === "restricted")) {
       const { data: myChannel } = await sb.from("telegram_channels")
         .select("id")
         .eq("owner_id", ownerId)
@@ -340,19 +340,44 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
         .eq("channel_id", chatId)
         .maybeSingle();
 
-      if (myChannel && myChannel.id === publicChannelId) {
+      if (myChannel) {
         const user = cm.new_chat_member.user;
-        await sb.from("public_channel_members").upsert({
+        // Track in channel_members (all channels)
+        sb.from("channel_members").upsert({
           owner_id: ownerId,
           bot_token_id: botTokenId,
           channel_id: myChannel.id,
+          telegram_channel_id: chatId,
           telegram_user_id: userId,
           telegram_username: user.username || null,
           first_name: user.first_name || null,
           last_name: user.last_name || null,
-        }, { onConflict: "owner_id,channel_id,telegram_user_id" });
-        console.log(`Tracked public channel join: user ${userId} in channel ${chatId}`);
+        }, { onConflict: "owner_id,channel_id,telegram_user_id" }).then(() => {});
+
+        // Also track in public_channel_members if public channel
+        if (publicChannelId && myChannel.id === publicChannelId) {
+          sb.from("public_channel_members").upsert({
+            owner_id: ownerId,
+            bot_token_id: botTokenId,
+            channel_id: myChannel.id,
+            telegram_user_id: userId,
+            telegram_username: user.username || null,
+            first_name: user.first_name || null,
+            last_name: user.last_name || null,
+          }, { onConflict: "owner_id,channel_id,telegram_user_id" }).then(() => {});
+        }
+        console.log(`Tracked channel join: user ${userId} in channel ${chatId} (${myChannel.id})`);
       }
+    }
+
+    // Remove from channel_members when someone leaves
+    if (userId && (newStatus === "left" || newStatus === "kicked")) {
+      sb.from("channel_members")
+        .delete()
+        .eq("owner_id", ownerId)
+        .eq("telegram_channel_id", chatId)
+        .eq("telegram_user_id", userId)
+        .then(() => {});
     }
 
     // ─── MANDATORY CHANNEL: kick if user leaves it ───
