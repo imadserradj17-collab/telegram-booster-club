@@ -558,6 +558,101 @@ Deno.serve(async (req) => {
         }), { headers: corsHeaders });
       }
 
+      // ── KICK NON-SUBSCRIBERS FROM ALL CHANNELS ──
+      case "kick_non_subscribers": {
+        // Get all channels
+        const { data: allChsNS } = await sb.from("telegram_channels")
+          .select("channel_id")
+          .eq("owner_id", user.id)
+          .eq("bot_token_id", botTokenId);
+
+        const chIdsNS = (allChsNS || []).map((c: any) => c.channel_id).filter(Boolean);
+        if (chIdsNS.length === 0) {
+          return new Response(JSON.stringify({ ok: true, kicked: 0, failed: 0, checked: 0, message: "No channels" }), { headers: corsHeaders });
+        }
+
+        // Get all active subscriber telegram_user_ids
+        const { data: allSubsNS } = await sb.from("telegram_subscribers")
+          .select("telegram_user_id, is_permanent, expires_at")
+          .eq("owner_id", user.id)
+          .eq("bot_token_id", botTokenId);
+
+        const nowNS = new Date();
+        const activeUserIds = new Set<number>();
+        for (const s of (allSubsNS || [])) {
+          if (s.is_permanent || (s.expires_at && new Date(s.expires_at) > nowNS)) {
+            activeUserIds.add(s.telegram_user_id);
+          }
+        }
+
+        // Also get admin telegram id to exclude
+        const adminTgId = botData.admin_telegram_id;
+
+        // For each channel, get members via getChatMember won't work — instead use getChatAdministrators to get admin list
+        // We'll iterate channels and get members from public_channel_members + bot_users as known users
+        // Then check each one
+        const knownUserIds = new Set<number>();
+        const [buNS, pcmNS, ftNS] = await Promise.all([
+          sb.from("bot_users").select("telegram_user_id").eq("owner_id", user.id).eq("bot_token_id", botTokenId),
+          sb.from("public_channel_members").select("telegram_user_id").eq("owner_id", user.id).eq("bot_token_id", botTokenId),
+          sb.from("free_trial_users").select("telegram_user_id, expires_at").eq("owner_id", user.id).eq("bot_token_id", botTokenId),
+        ]);
+        for (const b of (buNS.data || [])) knownUserIds.add(b.telegram_user_id);
+        for (const p of (pcmNS.data || [])) knownUserIds.add(p.telegram_user_id);
+
+        // Active free trial users count as subscribers too
+        for (const ft of (ftNS.data || [])) {
+          if (ft.expires_at && new Date(ft.expires_at) > nowNS) {
+            activeUserIds.add(ft.telegram_user_id);
+          }
+        }
+
+        // Filter: users who are known but NOT active subscribers and NOT admin
+        const toKick = [...knownUserIds].filter(uid => {
+          if (activeUserIds.has(uid)) return false;
+          if (adminTgId && uid === adminTgId) return false;
+          return true;
+        });
+
+        if (toKick.length === 0) {
+          return new Response(JSON.stringify({ ok: true, kicked: 0, failed: 0, checked: knownUserIds.size }), { headers: corsHeaders });
+        }
+
+        // Get admin IDs for each channel to exclude them
+        const channelAdmins = new Set<number>();
+        await Promise.allSettled(chIdsNS.map(async (chId: number) => {
+          try {
+            const res = await tg(botToken, "getChatAdministrators", { chat_id: chId });
+            if (res.ok) {
+              for (const admin of res.result) {
+                channelAdmins.add(admin.user.id);
+              }
+            }
+          } catch {}
+        }));
+
+        const finalKick = toKick.filter(uid => !channelAdmins.has(uid));
+
+        let kickedNS = 0, failedNS = 0;
+        const KICK_B = 10;
+        for (let i = 0; i < finalKick.length; i += KICK_B) {
+          const batch = finalKick.slice(i, i + KICK_B);
+          await Promise.allSettled(batch.map(async (uid) => {
+            for (const chId of chIdsNS) {
+              try {
+                const banRes = await tg(botToken, "banChatMember", { chat_id: chId, user_id: uid });
+                if (banRes.ok) {
+                  kickedNS++;
+                  tg(botToken, "unbanChatMember", { chat_id: chId, user_id: uid, only_if_banned: true }).catch(() => {});
+                } else { failedNS++; }
+              } catch { failedNS++; }
+            }
+          }));
+        }
+
+        return new Response(JSON.stringify({ ok: true, kicked: kickedNS, failed: failedNS, checked: knownUserIds.size }), { headers: corsHeaders });
+      }
+
       // ── BROADCAST TO ALL CHANNELS ──
       case "broadcast_channels": {
         const { message } = params;

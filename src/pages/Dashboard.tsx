@@ -884,6 +884,40 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   {t("dash.checkBlocked")}
                 </Button>
               </div>
+              {/* Kick Non-Subscribers */}
+              <div className="glass-card p-4 md:p-5 border-red-500/20">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center flex-shrink-0">
+                    <Trash2 className="w-5 h-5 text-red-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground">{t("dash.kickNonSubscribers")}</h3>
+                    <p className="text-xs text-muted-foreground">{t("dash.kickNonSubscribersConfirm").split("؟")[0]}</p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  className="w-full mt-3 border-red-500/30 text-red-500 hover:bg-red-500/10 hover:text-red-400"
+                  disabled={kickingNonSubs}
+                  onClick={async () => {
+                    if (!confirm(t("dash.kickNonSubscribersConfirm"))) return;
+                    setKickingNonSubs(true);
+                    try {
+                      const { data, error } = await supabase.functions.invoke("manage-bot", {
+                        body: { action: "kick_non_subscribers" },
+                      });
+                      if (error) throw error;
+                      if (data?.error) throw new Error(data.error);
+                      toast({ title: `${t("dash.kickNonSubscribersDone")} - ${data.kicked} ✅${data.failed > 0 ? ` / ${data.failed} ❌` : ""} (${data.checked} ${lang === "ar" ? "تم فحصهم" : "checked"})` });
+                    } catch (error: any) {
+                      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+                    } finally { setKickingNonSubs(false); }
+                  }}
+                >
+                  {kickingNonSubs ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  {t("dash.kickNonSubscribers")}
+                </Button>
+              </div>
               <div>
                 <h3 className="text-sm font-semibold text-foreground mb-3">{t("dash.latestSubs")}</h3>
                 <SubList list={subscribers.slice(0, 5)} />
