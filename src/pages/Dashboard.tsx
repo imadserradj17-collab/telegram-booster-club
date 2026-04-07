@@ -898,7 +898,6 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
           )}
 
           {/* SUBSCRIBERS */}
-
           {/* KICK NON-SUBSCRIBERS */}
           {activeTab === "kick_nonsubs" && (
             <div className="space-y-4 md:space-y-6 animate-fade-in">
@@ -954,7 +953,6 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
               {/* Results Panel */}
               {kickNonSubsResult && (
                 <div className="space-y-4 animate-fade-in">
-                  {/* Summary Stats */}
                   <div className="grid grid-cols-3 gap-3">
                     <div className="glass-card text-center p-4">
                       <div className="text-2xl font-bold text-foreground">{kickNonSubsResult.checked}</div>
@@ -969,8 +967,6 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                       <div className="text-xs text-destructive mt-1">{t("broadcast.failed")}</div>
                     </div>
                   </div>
-
-                  {/* Per-Channel Results */}
                   {kickNonSubsResult.channels_results.length > 0 && (
                     <div className="glass-card overflow-hidden">
                       <div className="px-4 py-3 border-b border-border/50 bg-muted/30">
@@ -992,8 +988,6 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                       </div>
                     </div>
                   )}
-
-                  {/* Kicked Users List */}
                   {kickNonSubsResult.kicked_users.length > 0 && (
                     <div className="glass-card overflow-hidden">
                       <div className="px-4 py-3 border-b border-border/50 bg-muted/30">
@@ -1016,7 +1010,6 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                       </div>
                     </div>
                   )}
-
                   {kickNonSubsResult.kicked_users.length === 0 && kickNonSubsResult.kicked === 0 && (
                     <div className="glass-card p-6 text-center">
                       <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-3">

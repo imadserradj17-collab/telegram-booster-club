@@ -320,20 +320,19 @@ Deno.serve(async (req) => {
         }
 
         let kicked = 0, failedKick = 0;
-        const BATCH = 5;
-        for (let i = 0; i < expired.length; i += BATCH) {
-          const batch = expired.slice(i, i + BATCH);
-          await Promise.allSettled(batch.map(async (sub: any) => {
-            for (const chId of chIds) {
-              try {
-                const banRes = await tg(botToken, "banChatMember", { chat_id: chId, user_id: sub.telegram_user_id });
-                if (banRes.ok) {
-                  kicked++;
-                  await tg(botToken, "unbanChatMember", { chat_id: chId, user_id: sub.telegram_user_id, only_if_banned: true });
-                } else { failedKick++; }
-              } catch { failedKick++; }
-            }
-          }));
+        const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+        for (const sub of expired) {
+          for (const chId of chIds) {
+            try {
+              const banRes = await tg(botToken, "banChatMember", { chat_id: chId, user_id: sub.telegram_user_id });
+              if (banRes.ok) {
+                kicked++;
+                await tg(botToken, "unbanChatMember", { chat_id: chId, user_id: sub.telegram_user_id, only_if_banned: true });
+              } else { failedKick++; }
+            } catch { failedKick++; }
+            await sleep(300);
+          }
+          await sleep(500);
         }
 
         return new Response(JSON.stringify({ ok: true, kicked, failed: failedKick, total: expired.length }), { headers: corsHeaders });
