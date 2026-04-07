@@ -71,7 +71,7 @@ interface FreeTrialUser {
   expires_at: string;
 }
 
-type TabKey = "overview" | "subscribers" | "expired" | "channels" | "broadcast" | "analytics" | "settings" | "free_trial";
+type TabKey = "overview" | "subscribers" | "expired" | "channels" | "broadcast" | "analytics" | "settings" | "free_trial" | "kick_nonsubs";
 
 interface DashboardProps {
   onShowAdmin?: () => void;
@@ -380,6 +380,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     { key: "channels", icon: Tv, label: t("channels.title"), badge: channels.length },
     { key: "free_trial", icon: Zap, label: t("dash.freeTrial"), badge: freeTrialUsers.length },
     { key: "broadcast", icon: Send, label: t("broadcast.title") },
+    { key: "kick_nonsubs", icon: Shield, label: t("dash.kickNonSubscribers") },
     { key: "analytics", icon: BarChart3, label: t("dash.analytics") },
     { key: "settings", icon: Settings, label: t("dash.settings") },
   ];
@@ -889,20 +890,31 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   {t("dash.checkBlocked")}
                 </Button>
               </div>
-              {/* Kick Non-Subscribers - Dedicated Section */}
-              <div className="glass-card p-5 md:p-6 border-red-500/30 bg-gradient-to-br from-red-500/5 to-transparent">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground mb-3">{t("dash.latestSubs")}</h3>
+                <SubList list={subscribers.slice(0, 5)} />
+              </div>
+            </div>
+          )}
+
+          {/* SUBSCRIBERS */}
+
+          {/* KICK NON-SUBSCRIBERS */}
+          {activeTab === "kick_nonsubs" && (
+            <div className="space-y-4 md:space-y-6 animate-fade-in">
+              <div className="glass-card p-5 md:p-6 border-destructive/30 bg-gradient-to-br from-destructive/5 to-transparent">
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 rounded-xl bg-red-500/15 flex items-center justify-center flex-shrink-0">
-                    <Shield className="w-6 h-6 text-red-500" />
+                  <div className="w-12 h-12 rounded-xl bg-destructive/15 flex items-center justify-center flex-shrink-0">
+                    <Shield className="w-6 h-6 text-destructive" />
                   </div>
                   <div className="flex-1">
                     <h3 className="text-base font-bold text-foreground">{t("dash.kickNonSubscribers")}</h3>
                     <p className="text-xs text-muted-foreground mt-0.5">{t("dash.kickNonSubscribersHint")}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/5 border border-red-500/10 mb-4">
-                  <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
-                  <p className="text-xs text-red-400">{t("dash.kickNonSubscribersWarn")}</p>
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/5 border border-destructive/10 mb-4">
+                  <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0" />
+                  <p className="text-xs text-destructive">{t("dash.kickNonSubscribersWarn")}</p>
                 </div>
                 <Button
                   variant="destructive"
@@ -937,78 +949,87 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                     </>
                   )}
                 </Button>
+              </div>
 
-                {/* Results Panel */}
-                {kickNonSubsResult && (
-                  <div className="mt-4 space-y-3 animate-fade-in">
-                    {/* Summary */}
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="text-center p-2 rounded-lg bg-muted/50">
-                        <div className="text-lg font-bold text-foreground">{kickNonSubsResult.checked}</div>
-                        <div className="text-[10px] text-muted-foreground">{t("dash.kickNonSubsCheckedLabel")}</div>
+              {/* Results Panel */}
+              {kickNonSubsResult && (
+                <div className="space-y-4 animate-fade-in">
+                  {/* Summary Stats */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="glass-card text-center p-4">
+                      <div className="text-2xl font-bold text-foreground">{kickNonSubsResult.checked}</div>
+                      <div className="text-xs text-muted-foreground mt-1">{t("dash.kickNonSubsCheckedLabel")}</div>
+                    </div>
+                    <div className="glass-card text-center p-4 border-green-500/20">
+                      <div className="text-2xl font-bold text-green-500">{kickNonSubsResult.kicked}</div>
+                      <div className="text-xs text-green-500 mt-1">{t("dash.kickNonSubsKickedLabel")}</div>
+                    </div>
+                    <div className="glass-card text-center p-4 border-destructive/20">
+                      <div className="text-2xl font-bold text-destructive">{kickNonSubsResult.failed}</div>
+                      <div className="text-xs text-destructive mt-1">{t("broadcast.failed")}</div>
+                    </div>
+                  </div>
+
+                  {/* Per-Channel Results */}
+                  {kickNonSubsResult.channels_results.length > 0 && (
+                    <div className="glass-card overflow-hidden">
+                      <div className="px-4 py-3 border-b border-border/50 bg-muted/30">
+                        <h4 className="text-sm font-semibold text-foreground">{t("dash.kickNonSubsChannels")}</h4>
                       </div>
-                      <div className="text-center p-2 rounded-lg bg-green-500/10">
-                        <div className="text-lg font-bold text-green-500">{kickNonSubsResult.kicked}</div>
-                        <div className="text-[10px] text-green-500">{t("dash.kickNonSubsKickedLabel")}</div>
-                      </div>
-                      <div className="text-center p-2 rounded-lg bg-red-500/10">
-                        <div className="text-lg font-bold text-red-500">{kickNonSubsResult.failed}</div>
-                        <div className="text-[10px] text-red-500">{t("broadcast.failed")}</div>
+                      <div className="divide-y divide-border/30 max-h-60 overflow-y-auto">
+                        {kickNonSubsResult.channels_results.map((ch: any, i: number) => (
+                          <div key={i} className="flex items-center justify-between px-4 py-3 text-sm">
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <Tv className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                              <span className="text-foreground truncate">{ch.channel_name}</span>
+                            </div>
+                            <div className="flex items-center gap-3 flex-shrink-0">
+                              <span className="text-green-500 text-xs font-medium">✅ {ch.kicked}</span>
+                              {ch.failed > 0 && <span className="text-destructive text-xs font-medium">❌ {ch.failed}</span>}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
+                  )}
 
-                    {/* Per-Channel Results */}
-                    {kickNonSubsResult.channels_results.length > 0 && (
-                      <div className="rounded-lg border border-border overflow-hidden">
-                        <div className="px-3 py-2 bg-muted/30 text-xs font-semibold text-foreground">{t("dash.kickNonSubsChannels")}</div>
-                        <div className="max-h-40 overflow-y-auto">
-                          {kickNonSubsResult.channels_results.map((ch, i) => (
-                            <div key={i} className="flex items-center justify-between px-3 py-2 border-t border-border/50 text-xs">
-                              <span className="text-foreground truncate flex-1">{ch.channel_name}</span>
-                              <div className="flex items-center gap-2 flex-shrink-0">
-                                <span className="text-green-500">✅ {ch.kicked}</span>
-                                {ch.failed > 0 && <span className="text-red-500">❌ {ch.failed}</span>}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Kicked Users List */}
-                    {kickNonSubsResult.kicked_users.length > 0 && (
-                      <div className="rounded-lg border border-border overflow-hidden">
-                        <div className="px-3 py-2 bg-muted/30 text-xs font-semibold text-foreground">
+                  {/* Kicked Users List */}
+                  {kickNonSubsResult.kicked_users.length > 0 && (
+                    <div className="glass-card overflow-hidden">
+                      <div className="px-4 py-3 border-b border-border/50 bg-muted/30">
+                        <h4 className="text-sm font-semibold text-foreground">
                           {t("dash.kickNonSubsUsers")} ({kickNonSubsResult.kicked_users.length})
-                        </div>
-                        <div className="max-h-40 overflow-y-auto">
-                          {kickNonSubsResult.kicked_users.map((u, i) => (
-                            <div key={i} className="flex items-center gap-2 px-3 py-2 border-t border-border/50 text-xs">
-                              <User className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-                              <span className="text-foreground truncate">{u.name}</span>
-                              <span className="text-muted-foreground text-[10px] flex-shrink-0">#{u.telegram_user_id}</span>
+                        </h4>
+                      </div>
+                      <div className="divide-y divide-border/30 max-h-60 overflow-y-auto">
+                        {kickNonSubsResult.kicked_users.map((u: any, i: number) => (
+                          <div key={i} className="flex items-center gap-3 px-4 py-3 text-sm">
+                            <div className="w-8 h-8 rounded-full bg-destructive/10 flex items-center justify-center flex-shrink-0">
+                              <User className="w-4 h-4 text-destructive" />
                             </div>
-                          ))}
-                        </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-foreground font-medium truncate">{u.name}</p>
+                              <p className="text-xs text-muted-foreground font-mono" dir="ltr">#{u.telegram_user_id}</p>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    )}
+                    </div>
+                  )}
 
-                    {kickNonSubsResult.kicked_users.length === 0 && kickNonSubsResult.kicked === 0 && (
-                      <div className="text-center text-xs text-muted-foreground py-2">
-                        ✅ {t("dash.kickNonSubsNone")}
+                  {kickNonSubsResult.kicked_users.length === 0 && kickNonSubsResult.kicked === 0 && (
+                    <div className="glass-card p-6 text-center">
+                      <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-3">
+                        <Shield className="w-6 h-6 text-green-500" />
                       </div>
-                    )}
-                  </div>
-                )}
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-foreground mb-3">{t("dash.latestSubs")}</h3>
-                <SubList list={subscribers.slice(0, 5)} />
-              </div>
+                      <p className="text-sm text-muted-foreground">{t("dash.kickNonSubsNone")}</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
-          {/* SUBSCRIBERS */}
           {activeTab === "subscribers" && (
             <div className="space-y-4 animate-fade-in">
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
