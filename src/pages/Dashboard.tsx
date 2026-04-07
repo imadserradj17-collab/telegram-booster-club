@@ -999,7 +999,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                       </div>
                     )}
                   </div>
-                )}
+              </div>
               <div>
                 <h3 className="text-sm font-semibold text-foreground mb-3">{t("dash.latestSubs")}</h3>
                 <SubList list={subscribers.slice(0, 5)} />
