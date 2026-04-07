@@ -1008,6 +1008,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
               {/* Results Panel */}
               {kickNonSubsResult && (
                 <div className="space-y-4 animate-fade-in">
+                  {/* Summary stats */}
                   <div className="grid grid-cols-3 gap-3">
                     <div className="glass-card text-center p-4">
                       <div className="text-2xl font-bold text-foreground">{kickNonSubsResult.checked}</div>
@@ -1023,8 +1024,59 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                     </div>
                   </div>
 
+                  {/* All kicked users list */}
+                  {kickNonSubsResult.kicked > 0 && (
+                    <div className="glass-card overflow-hidden animate-fade-in">
+                      <div className="flex items-center justify-between px-4 py-3 border-b border-border/30 bg-destructive/5">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-lg bg-destructive/15 flex items-center justify-center">
+                            <User className="w-4 h-4 text-destructive" />
+                          </div>
+                          <h4 className="text-sm font-bold text-foreground">
+                            {t("dash.kickNonSubsUsers")}
+                          </h4>
+                        </div>
+                        <Badge variant="destructive" className="text-xs">
+                          {kickNonSubsResult.kicked} {lang === "ar" ? "شخص" : "users"}
+                        </Badge>
+                      </div>
+                      <div className="divide-y divide-border/20 max-h-72 overflow-y-auto">
+                        {(() => {
+                          const allKicked: { telegram_user_id: number; name: string; channel: string }[] = [];
+                          kickNonSubsResult.channels_results.forEach((ch: any) => {
+                            if (ch.kicked_users) {
+                              ch.kicked_users.forEach((u: any) => {
+                                if (!allKicked.find(k => k.telegram_user_id === u.telegram_user_id)) {
+                                  allKicked.push({ ...u, channel: ch.channel_name });
+                                }
+                              });
+                            }
+                          });
+                          return allKicked.map((u, j) => (
+                            <div key={j} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted/30 transition-colors">
+                              <div className="w-8 h-8 rounded-full bg-destructive/10 flex items-center justify-center flex-shrink-0">
+                                <User className="w-4 h-4 text-destructive" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-foreground text-sm font-medium truncate">{u.name}</p>
+                                <p className="text-[10px] text-muted-foreground font-mono" dir="ltr">ID: {u.telegram_user_id}</p>
+                              </div>
+                              <Badge variant="destructive" className="text-[10px] flex-shrink-0">
+                                {lang === "ar" ? "طُرد" : "Kicked"}
+                              </Badge>
+                            </div>
+                          ));
+                        })()}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Per-channel breakdown */}
                   {kickNonSubsResult.channels_results.length > 0 && (
                     <div className="space-y-3">
+                      <h4 className="text-sm font-semibold text-muted-foreground px-1">
+                        {t("dash.kickNonSubsChannels")}
+                      </h4>
                       {kickNonSubsResult.channels_results.map((ch: any, i: number) => (
                         <div key={i} className="glass-card overflow-hidden animate-fade-in" style={{ animationDelay: `${i * 100}ms` }}>
                           <div className="flex items-center justify-between px-4 py-3 border-b border-border/30 bg-muted/20">
@@ -1037,7 +1089,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                               <div className="min-w-0 flex-1">
                                 <p className="text-sm font-semibold text-foreground truncate">{ch.channel_name}</p>
                                 <p className="text-[11px] text-muted-foreground">
-                                  {lang === "ar" ? "فحص" : "Checked"} {ch.checked} · ✅ {ch.kicked} · ❌ {ch.failed}
+                                  {lang === "ar" ? "فحص" : "Checked"} {ch.checked} · {lang === "ar" ? "طُرد" : "Kicked"} {ch.kicked} · {lang === "ar" ? "فشل" : "Failed"} {ch.failed}
                                 </p>
                               </div>
                             </div>
@@ -1046,25 +1098,12 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                                 {lang === "ar" ? "نظيفة ✓" : "Clean ✓"}
                               </Badge>
                             )}
+                            {ch.kicked > 0 && (
+                              <Badge variant="destructive" className="text-[10px]">
+                                {ch.kicked}
+                              </Badge>
+                            )}
                           </div>
-                          {ch.kicked_users && ch.kicked_users.length > 0 && (
-                            <div className="divide-y divide-border/20 max-h-48 overflow-y-auto">
-                              {ch.kicked_users.map((u: any, j: number) => (
-                                <div key={j} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-                                  <div className="w-7 h-7 rounded-full bg-destructive/10 flex items-center justify-center flex-shrink-0">
-                                    <User className="w-3.5 h-3.5 text-destructive" />
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <p className="text-foreground text-sm truncate">{u.name}</p>
-                                    <p className="text-[10px] text-muted-foreground font-mono" dir="ltr">#{u.telegram_user_id}</p>
-                                  </div>
-                                  <Badge variant="destructive" className="text-[10px]">
-                                    {lang === "ar" ? "طُرد" : "Kicked"}
-                                  </Badge>
-                                </div>
-                              ))}
-                            </div>
-                          )}
                         </div>
                       ))}
                     </div>
