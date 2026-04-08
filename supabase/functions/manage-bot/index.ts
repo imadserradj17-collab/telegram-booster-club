@@ -729,7 +729,6 @@ Deno.serve(async (req) => {
 
         const sleepKA = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-        // Helper to fetch ALL rows with pagination
         async function fetchAllPagedKA(table: string, selectCols: string, filters: Record<string, any>) {
           const allRows: any[] = [];
           const PAGE = 1000;
@@ -746,68 +745,101 @@ Deno.serve(async (req) => {
           return allRows;
         }
 
-        // Collect ALL known user IDs from every source
-        const [buAll, cmAll, pcmAll, subsAll, ftAll] = await Promise.all([
-          fetchAllPagedKA("bot_users", "telegram_user_id, first_name, last_name, telegram_username", { owner_id: user.id, bot_token_id: botTokenId }),
-          fetchAllPagedKA("channel_members", "telegram_user_id, first_name, last_name, telegram_username", { owner_id: user.id, bot_token_id: botTokenId }),
-          fetchAllPagedKA("public_channel_members", "telegram_user_id, first_name, last_name, telegram_username", { owner_id: user.id, bot_token_id: botTokenId }),
-          fetchAllPagedKA("telegram_subscribers", "telegram_user_id, first_name, last_name, telegram_username", { owner_id: user.id, bot_token_id: botTokenId }),
-          fetchAllPagedKA("free_trial_users", "telegram_user_id, first_name, last_name, telegram_username", { owner_id: user.id, bot_token_id: botTokenId }),
+        const [allSubsKA, allSubscriberChannelLinksKA, publicMembersKA, trackedChannelMembersKA] = await Promise.all([
+          fetchAllPagedKA("telegram_subscribers", "id, telegram_user_id, first_name, last_name, telegram_username", { owner_id: user.id, bot_token_id: botTokenId }),
+          fetchAllPagedKA("subscriber_channels", "subscriber_id, channel_id", {}),
+          fetchAllPagedKA("public_channel_members", "channel_id, telegram_user_id, first_name, last_name, telegram_username", { owner_id: user.id, bot_token_id: botTokenId }),
+          fetchAllPagedKA("channel_members", "channel_id, telegram_user_id, first_name, last_name, telegram_username", { owner_id: user.id, bot_token_id: botTokenId }),
         ]);
 
-        // Build unique user map
-        const userInfoMapKA = new Map<number, string>();
-        for (const list of [buAll, cmAll, pcmAll, subsAll, ftAll]) {
-          for (const u of list) {
-            if (!userInfoMapKA.has(u.telegram_user_id)) {
-              userInfoMapKA.set(u.telegram_user_id, [u.first_name, u.last_name].filter(Boolean).join(" ") || u.telegram_username || String(u.telegram_user_id));
-            }
-          }
+        const subLinksBySubscriber = new Map<string, string[]>();
+        for (const link of allSubscriberChannelLinksKA) {
+          const arr = subLinksBySubscriber.get(link.subscriber_id) || [];
+          arr.push(link.channel_id);
+          subLinksBySubscriber.set(link.subscriber_id, arr);
         }
-
-        const allKnownUserIds = [...userInfoMapKA.keys()];
 
         const channelsResultsKA: any[] = [];
         const allKickedUsersKA: { telegram_user_id: number; name: string }[] = [];
 
         for (const ch of chListKA) {
-          // Get admins for this channel
           const adminIds = new Set<number>();
           try {
             const res = await tg(botToken, "getChatAdministrators", { chat_id: ch.channel_id });
             if (res.ok) for (const a of res.result) adminIds.add(a.user.id);
           } catch {}
 
-          // Try to kick ALL known users (except admins) from this channel
-          const toKick = allKnownUserIds.filter(uid => !adminIds.has(uid));
+          const memberMap = new Map<number, string>();
+
+          // 1) Members already tracked in this channel
+          for (const member of trackedChannelMembersKA) {
+            if (member.channel_id !== ch.id) continue;
+            memberMap.set(
+              member.telegram_user_id,
+              [member.first_name, member.last_name].filter(Boolean).join(" ") || member.telegram_username || String(member.telegram_user_id),
+            );
+          }
+
+          // 2) Public channel tracked members
+          for (const member of publicMembersKA) {
+            if (member.channel_id !== ch.id) continue;
+            memberMap.set(
+              member.telegram_user_id,
+              [member.first_name, member.last_name].filter(Boolean).join(" ") || member.telegram_username || String(member.telegram_user_id),
+            );
+          }
+
+          // 3) Subscribers who are assigned to this channel OR have all channels
+          for (const sub of allSubsKA) {
+            const assigned = subLinksBySubscriber.get(sub.id) || [];
+            const shouldBeInChannel = assigned.length === 0 || assigned.includes(ch.id);
+            if (!shouldBeInChannel) continue;
+            memberMap.set(
+              sub.telegram_user_id,
+              [sub.first_name, sub.last_name].filter(Boolean).join(" ") || sub.telegram_username || String(sub.telegram_user_id),
+            );
+          }
+
+          const toKick = [...memberMap.entries()]
+            .filter(([uid]) => !adminIds.has(uid))
+            .map(([telegram_user_id, name]) => ({ telegram_user_id, name }));
 
           let chKicked = 0, chFailed = 0;
           const chKickedUsers: { telegram_user_id: number; name: string }[] = [];
 
-          for (const uid of toKick) {
-            const name = userInfoMapKA.get(uid) || String(uid);
+          for (const member of toKick) {
             try {
-              const banRes = await tg(botToken, "banChatMember", { chat_id: ch.channel_id, user_id: uid });
+              const banRes = await tg(botToken, "banChatMember", { chat_id: ch.channel_id, user_id: member.telegram_user_id });
               if (banRes.ok) {
                 chKicked++;
-                chKickedUsers.push({ telegram_user_id: uid, name });
-                if (!allKickedUsersKA.some(u => u.telegram_user_id === uid)) {
-                  allKickedUsersKA.push({ telegram_user_id: uid, name });
+                chKickedUsers.push(member);
+                if (!allKickedUsersKA.some(u => u.telegram_user_id === member.telegram_user_id)) {
+                  allKickedUsersKA.push(member);
                 }
-                tg(botToken, "unbanChatMember", { chat_id: ch.channel_id, user_id: uid, only_if_banned: true }).catch(() => {});
-              } else { chFailed++; }
-            } catch { chFailed++; }
-            await sleepKA(200);
+                tg(botToken, "unbanChatMember", { chat_id: ch.channel_id, user_id: member.telegram_user_id, only_if_banned: true }).catch(() => {});
+              } else {
+                chFailed++;
+              }
+            } catch {
+              chFailed++;
+            }
+            await sleepKA(250);
           }
 
-          // Clean up channel_members records
           if (chKickedUsers.length > 0) {
             const kickedIds = chKickedUsers.map(u => u.telegram_user_id);
-            await sb.from("channel_members").delete()
-              .eq("owner_id", user.id)
-              .eq("bot_token_id", botTokenId)
-              .eq("channel_id", ch.id)
-              .in("telegram_user_id", kickedIds);
+            await Promise.all([
+              sb.from("channel_members").delete()
+                .eq("owner_id", user.id)
+                .eq("bot_token_id", botTokenId)
+                .eq("channel_id", ch.id)
+                .in("telegram_user_id", kickedIds),
+              sb.from("public_channel_members").delete()
+                .eq("owner_id", user.id)
+                .eq("bot_token_id", botTokenId)
+                .eq("channel_id", ch.id)
+                .in("telegram_user_id", kickedIds),
+            ]);
           }
 
           channelsResultsKA.push({
