@@ -715,6 +715,101 @@ Deno.serve(async (req) => {
         }), { headers: corsHeaders });
       }
 
+      // ── KICK ALL MEMBERS FROM CHANNELS (EXCEPT ADMINS) ──
+      case "kick_all_members": {
+        const { data: allChsKA } = await sb.from("telegram_channels")
+          .select("id, channel_id, channel_name")
+          .eq("owner_id", user.id)
+          .eq("bot_token_id", botTokenId);
+
+        const chListKA = (allChsKA || []).filter((c: any) => c.channel_id);
+        if (chListKA.length === 0) {
+          return new Response(JSON.stringify({ ok: true, kicked: 0, failed: 0, channels_results: [], kicked_users: [] }), { headers: corsHeaders });
+        }
+
+        const sleepKA = (ms: number) => new Promise(r => setTimeout(r, ms));
+        const channelsResultsKA: any[] = [];
+        const allKickedUsersKA: { telegram_user_id: number; name: string }[] = [];
+
+        for (const ch of chListKA) {
+          // Get admins for this channel
+          const adminIds = new Set<number>();
+          try {
+            const res = await tg(botToken, "getChatAdministrators", { chat_id: ch.channel_id });
+            if (res.ok) for (const a of res.result) adminIds.add(a.user.id);
+          } catch {}
+
+          // Get all known members of this channel from channel_members table (paginated)
+          const members: any[] = [];
+          const PAGE = 1000;
+          let from = 0;
+          while (true) {
+            const { data } = await sb.from("channel_members")
+              .select("telegram_user_id, first_name, last_name, telegram_username")
+              .eq("owner_id", user.id)
+              .eq("bot_token_id", botTokenId)
+              .eq("channel_id", ch.id)
+              .range(from, from + PAGE - 1);
+            if (!data || data.length === 0) break;
+            members.push(...data);
+            if (data.length < PAGE) break;
+            from += PAGE;
+          }
+
+          // Filter out admins
+          const toKick = members.filter(m => !adminIds.has(m.telegram_user_id));
+
+          let chKicked = 0, chFailed = 0;
+          const chKickedUsers: { telegram_user_id: number; name: string }[] = [];
+
+          for (const m of toKick) {
+            const name = [m.first_name, m.last_name].filter(Boolean).join(" ") || m.telegram_username || String(m.telegram_user_id);
+            try {
+              const banRes = await tg(botToken, "banChatMember", { chat_id: ch.channel_id, user_id: m.telegram_user_id });
+              if (banRes.ok) {
+                chKicked++;
+                chKickedUsers.push({ telegram_user_id: m.telegram_user_id, name });
+                if (!allKickedUsersKA.some(u => u.telegram_user_id === m.telegram_user_id)) {
+                  allKickedUsersKA.push({ telegram_user_id: m.telegram_user_id, name });
+                }
+                tg(botToken, "unbanChatMember", { chat_id: ch.channel_id, user_id: m.telegram_user_id, only_if_banned: true }).catch(() => {});
+              } else { chFailed++; }
+            } catch { chFailed++; }
+            await sleepKA(200);
+          }
+
+          // Delete channel_members records for kicked users
+          if (chKickedUsers.length > 0) {
+            const kickedIds = chKickedUsers.map(u => u.telegram_user_id);
+            await sb.from("channel_members").delete()
+              .eq("owner_id", user.id)
+              .eq("bot_token_id", botTokenId)
+              .eq("channel_id", ch.id)
+              .in("telegram_user_id", kickedIds);
+          }
+
+          channelsResultsKA.push({
+            channel_name: ch.channel_name,
+            channel_id: ch.channel_id,
+            checked: toKick.length,
+            kicked: chKicked,
+            failed: chFailed,
+            kicked_users: chKickedUsers,
+          });
+        }
+
+        const totalKickedKA = channelsResultsKA.reduce((s: number, c: any) => s + c.kicked, 0);
+        const totalFailedKA = channelsResultsKA.reduce((s: number, c: any) => s + c.failed, 0);
+
+        return new Response(JSON.stringify({
+          ok: true,
+          kicked: totalKickedKA,
+          failed: totalFailedKA,
+          channels_results: channelsResultsKA,
+          kicked_users: allKickedUsersKA,
+        }), { headers: corsHeaders });
+      }
+
       // ── BROADCAST TO ALL CHANNELS ──
       case "broadcast_channels": {
         const { message } = params;

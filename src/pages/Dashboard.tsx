@@ -128,6 +128,13 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     kicked_users: { telegram_user_id: number; name: string }[];
   } | null>(null);
   const [kickNonSubsActiveChannel, setKickNonSubsActiveChannel] = useState<number>(-1);
+  const [kickingAllMembers, setKickingAllMembers] = useState(false);
+  const [kickAllResult, setKickAllResult] = useState<{
+    kicked: number; failed: number;
+    channels_results: { channel_name: string; channel_id: number; checked: number; kicked: number; failed: number; kicked_users: { telegram_user_id: number; name: string }[] }[];
+    kicked_users: { telegram_user_id: number; name: string }[];
+  } | null>(null);
+  const [kickAllActiveChannel, setKickAllActiveChannel] = useState<number>(-1);
   const [freeTrialEnabled, setFreeTrialEnabled] = useState(false);
   const [freeTrialUsers, setFreeTrialUsers] = useState<FreeTrialUser[]>([]);
   const [freeTrialChannelIds, setFreeTrialChannelIds] = useState<string[]>([]);
@@ -958,6 +965,176 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   )}
                 </Button>
               </div>
+
+              {/* KICK ALL MEMBERS */}
+              <div className="glass-card p-5 md:p-6 border-destructive/30 bg-gradient-to-br from-destructive/10 to-transparent">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-destructive/20 flex items-center justify-center flex-shrink-0">
+                    <Trash2 className="w-6 h-6 text-destructive" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-base font-bold text-foreground">
+                      {lang === "ar" ? "طرد الكل من القنوات" : "Kick All From Channels"}
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {lang === "ar" ? "طرد جميع الأعضاء من كل القنوات باستثناء مشرفي القنوات" : "Kick all members from all channels except channel admins"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 mb-4">
+                  <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0" />
+                  <p className="text-xs text-destructive font-medium">
+                    {lang === "ar" ? "⚠️ تحذير: سيتم طرد الجميع بما فيهم المشتركين! هذا الإجراء لا يمكن التراجع عنه." : "⚠️ Warning: This will kick EVERYONE including subscribers! This cannot be undone."}
+                  </p>
+                </div>
+                <Button
+                  variant="destructive"
+                  className="w-full"
+                  disabled={kickingAllMembers || kickingNonSubs}
+                  onClick={async () => {
+                    const msg = lang === "ar"
+                      ? "⚠️ هل أنت متأكد؟ سيتم طرد جميع الأعضاء من كل القنوات باستثناء المشرفين فقط!"
+                      : "⚠️ Are you sure? This will kick ALL members from all channels except admins!";
+                    if (!confirm(msg)) return;
+                    setKickingAllMembers(true);
+                    setKickAllResult(null);
+                    setKickAllActiveChannel(0);
+                    const progressInterval = setInterval(() => {
+                      setKickAllActiveChannel(prev => prev < channels.length - 1 ? prev + 1 : prev);
+                    }, 3000);
+                    try {
+                      const { data, error } = await supabase.functions.invoke("manage-bot", {
+                        body: { action: "kick_all_members" },
+                      });
+                      clearInterval(progressInterval);
+                      if (error) throw error;
+                      if (data?.error) throw new Error(data.error);
+                      setKickAllResult(data);
+                      setKickAllActiveChannel(-1);
+                      await fetchData();
+                    } catch (error: any) {
+                      clearInterval(progressInterval);
+                      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+                      setKickAllActiveChannel(-1);
+                    } finally { setKickingAllMembers(false); }
+                  }}
+                >
+                  {kickingAllMembers ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      {lang === "ar" ? "جاري طرد الجميع..." : "Kicking all..."}
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      {lang === "ar" ? "طرد الكل من القنوات" : "Kick All From Channels"}
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {/* Kick All - Live scanning */}
+              {kickingAllMembers && !kickAllResult && (
+                <div className="glass-card p-5 animate-fade-in">
+                  <div className="flex items-center gap-3 mb-4">
+                    <Loader2 className="w-5 h-5 animate-spin text-destructive" />
+                    <h4 className="text-sm font-semibold text-foreground">
+                      {lang === "ar" ? "جاري طرد الجميع من القنوات..." : "Kicking all from channels..."}
+                    </h4>
+                  </div>
+                  <div className="space-y-2">
+                    {channels.map((ch, idx) => (
+                      <div key={ch.id} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all duration-500 ${
+                        idx === kickAllActiveChannel
+                          ? "border-destructive/50 bg-destructive/5 shadow-sm shadow-destructive/10"
+                          : idx < kickAllActiveChannel
+                          ? "border-green-500/30 bg-green-500/5"
+                          : "border-border/30 bg-secondary/20 opacity-40"
+                      }`}>
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${
+                          idx === kickAllActiveChannel ? "bg-destructive/15" : idx < kickAllActiveChannel ? "bg-green-500/10" : "bg-secondary/30"
+                        }`}>
+                          {idx === kickAllActiveChannel ? (
+                            <Loader2 className="w-4 h-4 animate-spin text-destructive" />
+                          ) : idx < kickAllActiveChannel ? (
+                            <Shield className="w-4 h-4 text-green-500" />
+                          ) : (
+                            <Tv className="w-4 h-4 text-muted-foreground" />
+                          )}
+                        </div>
+                        <span className={`text-sm truncate flex-1 ${idx === kickAllActiveChannel ? "text-foreground font-medium" : "text-muted-foreground"}`}>
+                          {ch.channel_type === "group" ? "👥" : "📺"} {ch.channel_name}
+                        </span>
+                        {idx === kickAllActiveChannel && (
+                          <Badge className="bg-destructive/20 text-destructive border-destructive/30 text-[10px] animate-pulse flex-shrink-0">
+                            {lang === "ar" ? "⟵ جاري الطرد" : "Kicking ⟶"}
+                          </Badge>
+                        )}
+                        {idx < kickAllActiveChannel && (
+                          <Badge className="bg-green-500/15 text-green-500 border-green-500/30 text-[10px] flex-shrink-0">✓</Badge>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Kick All - Results */}
+              {kickAllResult && (
+                <div className="space-y-4 animate-fade-in">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="glass-card text-center p-4 border-green-500/20">
+                      <div className="text-2xl font-bold text-green-500">{kickAllResult.kicked}</div>
+                      <div className="text-xs text-green-500 mt-1">{lang === "ar" ? "تم طردهم" : "Kicked"}</div>
+                    </div>
+                    <div className="glass-card text-center p-4 border-destructive/20">
+                      <div className="text-2xl font-bold text-destructive">{kickAllResult.failed}</div>
+                      <div className="text-xs text-destructive mt-1">{lang === "ar" ? "فشل" : "Failed"}</div>
+                    </div>
+                  </div>
+                  {kickAllResult.kicked > 0 && (
+                    <div className="glass-card overflow-hidden">
+                      <div className="flex items-center justify-between px-4 py-3 border-b border-border/30 bg-destructive/5">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-lg bg-destructive/15 flex items-center justify-center">
+                            <User className="w-4 h-4 text-destructive" />
+                          </div>
+                          <h4 className="text-sm font-bold text-foreground">
+                            {lang === "ar" ? "المطرودون" : "Kicked Users"}
+                          </h4>
+                        </div>
+                        <Badge variant="destructive" className="text-xs">
+                          {kickAllResult.kicked_users.length} {lang === "ar" ? "شخص" : "users"}
+                        </Badge>
+                      </div>
+                      <div className="divide-y divide-border/20 max-h-72 overflow-y-auto">
+                        {kickAllResult.kicked_users.map((u: any, j: number) => (
+                          <div key={j} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted/30 transition-colors">
+                            <div className="w-8 h-8 rounded-full bg-destructive/10 flex items-center justify-center flex-shrink-0">
+                              <User className="w-4 h-4 text-destructive" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-foreground text-sm font-medium truncate">{u.name}</p>
+                              <p className="text-[10px] text-muted-foreground font-mono" dir="ltr">ID: {u.telegram_user_id}</p>
+                            </div>
+                            <Badge variant="destructive" className="text-[10px] flex-shrink-0">
+                              {lang === "ar" ? "طُرد" : "Kicked"}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {kickAllResult.kicked === 0 && kickAllResult.failed === 0 && (
+                    <div className="glass-card p-6 text-center">
+                      <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-3">
+                        <Shield className="w-6 h-6 text-green-500" />
+                      </div>
+                      <p className="text-sm text-muted-foreground">{lang === "ar" ? "لا يوجد أعضاء لطردهم" : "No members to kick"}</p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Live scanning animation */}
               {kickingNonSubs && !kickNonSubsResult && (
