@@ -138,6 +138,9 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const [freeTrialEnabled, setFreeTrialEnabled] = useState(false);
   const [freeTrialUsers, setFreeTrialUsers] = useState<FreeTrialUser[]>([]);
   const [freeTrialChannelIds, setFreeTrialChannelIds] = useState<string[]>([]);
+  const [checkingBotAdmin, setCheckingBotAdmin] = useState(false);
+  const [botAdminCheckIdx, setBotAdminCheckIdx] = useState(-1);
+  const [botAdminResults, setBotAdminResults] = useState<{ channel_name: string; channel_id: number; channel_type: string; is_admin: boolean; bot_permissions: string[] }[] | null>(null);
 
   useEffect(() => { fetchData(); }, []);
 
