@@ -966,6 +966,72 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                 </Button>
               </div>
 
+              {/* KICK ALL MEMBERS */}
+              <div className="glass-card p-5 md:p-6 border-destructive/30 bg-gradient-to-br from-destructive/10 to-transparent">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-destructive/20 flex items-center justify-center flex-shrink-0">
+                    <Trash2 className="w-6 h-6 text-destructive" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-base font-bold text-foreground">
+                      {lang === "ar" ? "طرد الكل من القنوات" : "Kick All From Channels"}
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {lang === "ar" ? "طرد جميع الأعضاء من كل القنوات باستثناء مشرفي القنوات" : "Kick all members from all channels except channel admins"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 mb-4">
+                  <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0" />
+                  <p className="text-xs text-destructive font-medium">
+                    {lang === "ar" ? "⚠️ تحذير: سيتم طرد الجميع بما فيهم المشتركين! هذا الإجراء لا يمكن التراجع عنه." : "⚠️ Warning: This will kick EVERYONE including subscribers! This cannot be undone."}
+                  </p>
+                </div>
+                <Button
+                  variant="destructive"
+                  className="w-full"
+                  disabled={kickingAllMembers || kickingNonSubs}
+                  onClick={async () => {
+                    const msg = lang === "ar"
+                      ? "⚠️ هل أنت متأكد؟ سيتم طرد جميع الأعضاء من كل القنوات باستثناء المشرفين فقط!"
+                      : "⚠️ Are you sure? This will kick ALL members from all channels except admins!";
+                    if (!confirm(msg)) return;
+                    setKickingAllMembers(true);
+                    setKickAllResult(null);
+                    setKickAllActiveChannel(0);
+                    const progressInterval = setInterval(() => {
+                      setKickAllActiveChannel(prev => prev < channels.length - 1 ? prev + 1 : prev);
+                    }, 3000);
+                    try {
+                      const { data, error } = await supabase.functions.invoke("manage-bot", {
+                        body: { action: "kick_all_members" },
+                      });
+                      clearInterval(progressInterval);
+                      if (error) throw error;
+                      if (data?.error) throw new Error(data.error);
+                      setKickAllResult(data);
+                      setKickAllActiveChannel(-1);
+                      await fetchData();
+                    } catch (error: any) {
+                      clearInterval(progressInterval);
+                      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+                      setKickAllActiveChannel(-1);
+                    } finally { setKickingAllMembers(false); }
+                  }}
+                >
+                  {kickingAllMembers ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      {lang === "ar" ? "جاري طرد الجميع..." : "Kicking all..."}
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      {lang === "ar" ? "طرد الكل من القنوات" : "Kick All From Channels"}
+                    </>
+                  )}
+                </Button>
+
               {/* Live scanning animation */}
               {kickingNonSubs && !kickNonSubsResult && (
                 <div className="glass-card p-5 animate-fade-in">
