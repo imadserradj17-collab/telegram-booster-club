@@ -20,7 +20,7 @@ import {
   LogOut, Trash2, RefreshCw, Users, Zap, Bot, UserPlus, Clock,
   Settings, Key, Shield, MessageSquare, Save, Loader2, User, Calendar, Hash,
   LayoutDashboard, ChevronLeft, ChevronRight, Search, AlertTriangle, Menu, X,
-  BarChart3, Tv, Plus, Send, Link, Edit,
+  BarChart3, Tv, Plus, Send, Link, Edit, CheckCircle, XCircle,
 } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
@@ -138,6 +138,9 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const [freeTrialEnabled, setFreeTrialEnabled] = useState(false);
   const [freeTrialUsers, setFreeTrialUsers] = useState<FreeTrialUser[]>([]);
   const [freeTrialChannelIds, setFreeTrialChannelIds] = useState<string[]>([]);
+  const [checkingBotAdmin, setCheckingBotAdmin] = useState(false);
+  const [botAdminCheckIdx, setBotAdminCheckIdx] = useState(-1);
+  const [botAdminResults, setBotAdminResults] = useState<{ channel_name: string; channel_id: number; channel_type: string; is_admin: boolean; bot_permissions: string[] }[] | null>(null);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -909,6 +912,198 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
           {/* KICK NON-SUBSCRIBERS */}
           {activeTab === "kick_nonsubs" && (
             <div className="space-y-4 md:space-y-6 animate-fade-in">
+              {/* CHECK BOT ADMIN STATUS */}
+              <div className="glass-card p-5 md:p-6 border-primary/30 bg-gradient-to-br from-primary/5 to-transparent">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-primary/15 flex items-center justify-center flex-shrink-0">
+                    <Shield className="w-6 h-6 text-primary" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-base font-bold text-foreground">{t("dash.checkBotAdmin")}</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">{t("dash.checkBotAdminHint")}</p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  className="w-full border-primary/30 text-primary hover:bg-primary/10"
+                  disabled={checkingBotAdmin}
+                  onClick={async () => {
+                    setCheckingBotAdmin(true);
+                    setBotAdminResults(null);
+                    setBotAdminCheckIdx(0);
+                    const progressInterval = setInterval(() => {
+                      setBotAdminCheckIdx(prev => prev < channels.length - 1 ? prev + 1 : prev);
+                    }, 1500);
+                    try {
+                      const { data, error } = await supabase.functions.invoke("manage-bot", {
+                        body: { action: "check_bot_admin" },
+                      });
+                      clearInterval(progressInterval);
+                      if (error) throw error;
+                      if (data?.error) throw new Error(data.error);
+                      setBotAdminResults(data.channels);
+                      setBotAdminCheckIdx(-1);
+                    } catch (error: any) {
+                      clearInterval(progressInterval);
+                      toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+                      setBotAdminCheckIdx(-1);
+                    } finally { setCheckingBotAdmin(false); }
+                  }}
+                >
+                  {checkingBotAdmin ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" />{t("dash.checkBotAdminChecking")}</>
+                  ) : (
+                    <><Shield className="w-4 h-4" />{t("dash.checkBotAdminBtn")}</>
+                  )}
+                </Button>
+              </div>
+
+              {/* Bot Admin Check - Live scanning animation */}
+              {checkingBotAdmin && !botAdminResults && (
+                <div className="glass-card p-5 animate-fade-in">
+                  <div className="flex items-center gap-3 mb-4">
+                    <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                    <h4 className="text-sm font-semibold text-foreground">
+                      {lang === "ar" ? "جاري فحص صلاحيات البوت في القنوات..." : "Checking bot permissions in channels..."}
+                    </h4>
+                  </div>
+                  <div className="space-y-2">
+                    {channels.map((ch, idx) => (
+                      <div key={ch.id} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all duration-500 ${
+                        idx === botAdminCheckIdx
+                          ? "border-primary/50 bg-primary/5 shadow-sm shadow-primary/10"
+                          : idx < botAdminCheckIdx
+                          ? "border-green-500/30 bg-green-500/5"
+                          : "border-border/30 bg-secondary/20 opacity-40"
+                      }`}>
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${
+                          idx === botAdminCheckIdx ? "bg-primary/15" : idx < botAdminCheckIdx ? "bg-green-500/10" : "bg-secondary/30"
+                        }`}>
+                          {idx === botAdminCheckIdx ? (
+                            <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                          ) : idx < botAdminCheckIdx ? (
+                            <CheckCircle className="w-4 h-4 text-green-500" />
+                          ) : (
+                            <Tv className="w-4 h-4 text-muted-foreground" />
+                          )}
+                        </div>
+                        <span className={`text-sm truncate flex-1 ${idx === botAdminCheckIdx ? "text-foreground font-medium" : "text-muted-foreground"}`}>
+                          {ch.channel_type === "group" ? "👥" : "📺"} {ch.channel_name}
+                        </span>
+                        {idx === botAdminCheckIdx && (
+                          <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px] animate-pulse flex-shrink-0">
+                            {lang === "ar" ? "⟵ جاري الفحص" : "Checking ⟶"}
+                          </Badge>
+                        )}
+                        {idx < botAdminCheckIdx && (
+                          <Badge className="bg-green-500/15 text-green-500 border-green-500/30 text-[10px] flex-shrink-0">✓</Badge>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Bot Admin Check - Results */}
+              {botAdminResults && (
+                <div className="space-y-3 animate-fade-in">
+                  {(() => {
+                    const notAdmin = botAdminResults.filter(ch => !ch.is_admin);
+                    const isAdmin = botAdminResults.filter(ch => ch.is_admin);
+                    return (
+                      <>
+                        {/* Summary */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="glass-card text-center p-4 border-green-500/20">
+                            <div className="text-2xl font-bold text-green-500">{isAdmin.length}</div>
+                            <div className="text-xs text-green-500 mt-1">{t("dash.botIsAdmin")}</div>
+                          </div>
+                          <div className="glass-card text-center p-4 border-destructive/20">
+                            <div className="text-2xl font-bold text-destructive">{notAdmin.length}</div>
+                            <div className="text-xs text-destructive mt-1">{t("dash.botNotAdmin")}</div>
+                          </div>
+                        </div>
+
+                        {notAdmin.length === 0 ? (
+                          <div className="glass-card p-6 text-center">
+                            <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-3">
+                              <Shield className="w-6 h-6 text-green-500" />
+                            </div>
+                            <p className="text-sm text-green-500 font-medium">{t("dash.botAdminAllGood")}</p>
+                          </div>
+                        ) : (
+                          <div className="glass-card overflow-hidden border-destructive/30">
+                            <div className="flex items-center justify-between px-4 py-3 border-b border-border/30 bg-destructive/5">
+                              <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 rounded-lg bg-destructive/15 flex items-center justify-center">
+                                  <XCircle className="w-4 h-4 text-destructive" />
+                                </div>
+                                <h4 className="text-sm font-bold text-foreground">{t("dash.botNotAdminCount")}</h4>
+                              </div>
+                              <Badge variant="destructive" className="text-xs">
+                                {notAdmin.length} {lang === "ar" ? "قناة" : "channels"}
+                              </Badge>
+                            </div>
+                            <div className="divide-y divide-border/20">
+                              {notAdmin.map((ch, i) => (
+                                <div key={i} className="flex items-center gap-3 px-4 py-3 hover:bg-destructive/5 transition-colors animate-fade-in" style={{ animationDelay: `${i * 100}ms` }}>
+                                  <div className="w-10 h-10 rounded-lg bg-destructive/10 flex items-center justify-center flex-shrink-0">
+                                    <XCircle className="w-5 h-5 text-destructive" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-foreground truncate">
+                                      {ch.channel_type === "group" ? "👥" : "📺"} {ch.channel_name}
+                                    </p>
+                                    <p className="text-[10px] text-muted-foreground font-mono" dir="ltr">ID: {ch.channel_id}</p>
+                                  </div>
+                                  <Badge variant="destructive" className="text-[10px] flex-shrink-0">
+                                    {t("dash.botNotAdmin")}
+                                  </Badge>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Admin channels */}
+                        {isAdmin.length > 0 && (
+                          <div className="glass-card overflow-hidden border-green-500/20">
+                            <div className="flex items-center justify-between px-4 py-3 border-b border-border/30 bg-green-500/5">
+                              <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
+                                  <CheckCircle className="w-4 h-4 text-green-500" />
+                                </div>
+                                <h4 className="text-sm font-bold text-foreground">{t("dash.botIsAdmin")}</h4>
+                              </div>
+                              <Badge className="bg-green-500/15 text-green-500 border-green-500/30 text-xs">
+                                {isAdmin.length} {lang === "ar" ? "قناة" : "channels"}
+                              </Badge>
+                            </div>
+                            <div className="divide-y divide-border/20 max-h-48 overflow-y-auto">
+                              {isAdmin.map((ch, i) => (
+                                <div key={i} className="flex items-center gap-3 px-4 py-2.5 hover:bg-green-500/5 transition-colors">
+                                  <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center flex-shrink-0">
+                                    <CheckCircle className="w-4 h-4 text-green-500" />
+                                  </div>
+                                  <span className="text-sm text-foreground truncate flex-1">
+                                    {ch.channel_type === "group" ? "👥" : "📺"} {ch.channel_name}
+                                  </span>
+                                  <div className="flex gap-1 flex-wrap justify-end">
+                                    {ch.bot_permissions.includes("restrict_members") && (
+                                      <span className="text-[9px] bg-green-500/10 text-green-500 px-1.5 py-0.5 rounded">🔒</span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+
               <div className="glass-card p-5 md:p-6 border-destructive/30 bg-gradient-to-br from-destructive/5 to-transparent">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-12 h-12 rounded-xl bg-destructive/15 flex items-center justify-center flex-shrink-0">

@@ -1335,6 +1335,80 @@ Deno.serve(async (req) => {
         );
       }
 
+      // ── CHECK BOT ADMIN STATUS ──
+      case "check_bot_admin": {
+        const { data: chList } = await sb
+          .from("telegram_channels")
+          .select("id, channel_id, channel_name, channel_type")
+          .eq("owner_id", user.id)
+          .eq("bot_token_id", botTokenId);
+
+        if (!chList || chList.length === 0) {
+          return new Response(
+            JSON.stringify({ channels: [] }),
+            { headers: corsHeaders },
+          );
+        }
+
+        const results: { channel_name: string; channel_id: number; channel_type: string; is_admin: boolean; bot_permissions: string[] }[] = [];
+
+        for (const ch of chList) {
+          try {
+            const res = await tg(botToken, "getChatAdministrators", {
+              chat_id: ch.channel_id,
+            });
+            if (res.ok) {
+              const botMe = await tg(botToken, "getMe", {});
+              const botId = botMe.result?.id;
+              const botAdmin = res.result.find((a: any) => a.user.id === botId);
+              if (botAdmin) {
+                const perms: string[] = [];
+                if (botAdmin.can_restrict_members) perms.push("restrict_members");
+                if (botAdmin.can_delete_messages) perms.push("delete_messages");
+                if (botAdmin.can_invite_users) perms.push("invite_users");
+                if (botAdmin.can_manage_chat) perms.push("manage_chat");
+                results.push({
+                  channel_name: ch.channel_name,
+                  channel_id: ch.channel_id,
+                  channel_type: ch.channel_type,
+                  is_admin: true,
+                  bot_permissions: perms,
+                });
+              } else {
+                results.push({
+                  channel_name: ch.channel_name,
+                  channel_id: ch.channel_id,
+                  channel_type: ch.channel_type,
+                  is_admin: false,
+                  bot_permissions: [],
+                });
+              }
+            } else {
+              results.push({
+                channel_name: ch.channel_name,
+                channel_id: ch.channel_id,
+                channel_type: ch.channel_type,
+                is_admin: false,
+                bot_permissions: [],
+              });
+            }
+          } catch {
+            results.push({
+              channel_name: ch.channel_name,
+              channel_id: ch.channel_id,
+              channel_type: ch.channel_type,
+              is_admin: false,
+              bot_permissions: [],
+            });
+          }
+        }
+
+        return new Response(
+          JSON.stringify({ channels: results }),
+          { headers: corsHeaders },
+        );
+      }
+
       default:
         return new Response(JSON.stringify({ error: "Unknown action" }), {
           status: 400,
