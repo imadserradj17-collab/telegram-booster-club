@@ -477,9 +477,19 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
 
     // Check if this is the public channel (everyone can join)
     if (publicChannelId && myChannel.id === publicChannelId) {
-      // Approve + save member to public_channel_members
+      // Approve + save member in both tracking tables
       await Promise.all([
         tg(botToken, "approveChatJoinRequest", { chat_id: chatId, user_id: telegramUserId }),
+        sb.from("channel_members").upsert({
+          owner_id: ownerId,
+          bot_token_id: botTokenId,
+          channel_id: myChannel.id,
+          telegram_channel_id: chatId,
+          telegram_user_id: telegramUserId,
+          telegram_username: req.from.username || null,
+          first_name: req.from.first_name || null,
+          last_name: req.from.last_name || null,
+        }, { onConflict: "owner_id,channel_id,telegram_user_id" }),
         sb.from("public_channel_members").upsert({
           owner_id: ownerId,
           bot_token_id: botTokenId,
@@ -505,7 +515,19 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
       } else {
         // Check if this is the subscribers channel (all active subscribers can join)
         if (subscribersChannelId && myChannel.id === subscribersChannelId) {
-          await tg(botToken, "approveChatJoinRequest", { chat_id: chatId, user_id: telegramUserId });
+          await Promise.all([
+            tg(botToken, "approveChatJoinRequest", { chat_id: chatId, user_id: telegramUserId }),
+            sb.from("channel_members").upsert({
+              owner_id: ownerId,
+              bot_token_id: botTokenId,
+              channel_id: myChannel.id,
+              telegram_channel_id: chatId,
+              telegram_user_id: telegramUserId,
+              telegram_username: req.from.username || null,
+              first_name: req.from.first_name || null,
+              last_name: req.from.last_name || null,
+            }, { onConflict: "owner_id,channel_id,telegram_user_id" }),
+          ]);
           return;
         }
 
@@ -526,7 +548,7 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
           return;
         }
 
-        // Approve + notify subscriber + update info + notify admin — all in parallel
+        // Approve + notify subscriber + track channel membership + update info + notify admin
         const updateData: any = {};
         if (req.from.username) updateData.telegram_username = req.from.username;
         if (req.from.first_name) updateData.first_name = req.from.first_name;
@@ -534,6 +556,16 @@ async function handleUpdate(update: any, botToken: string, ownerId: string, botT
 
         const promises: Promise<any>[] = [
           tg(botToken, "approveChatJoinRequest", { chat_id: chatId, user_id: telegramUserId }),
+          sb.from("channel_members").upsert({
+            owner_id: ownerId,
+            bot_token_id: botTokenId,
+            channel_id: myChannel.id,
+            telegram_channel_id: chatId,
+            telegram_user_id: telegramUserId,
+            telegram_username: req.from.username || null,
+            first_name: req.from.first_name || null,
+            last_name: req.from.last_name || null,
+          }, { onConflict: "owner_id,channel_id,telegram_user_id" }),
           tg(botToken, "sendMessage", { chat_id: telegramUserId, text: `✅ تم قبولك في القناة *${req.chat.title || ""}*! مرحباً بك 🎉`, parse_mode: "Markdown" }),
         ];
 
