@@ -128,6 +128,13 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     kicked_users: { telegram_user_id: number; name: string }[];
   } | null>(null);
   const [kickNonSubsActiveChannel, setKickNonSubsActiveChannel] = useState<number>(-1);
+  const [kickingAllMembers, setKickingAllMembers] = useState(false);
+  const [kickAllResult, setKickAllResult] = useState<{
+    kicked: number; failed: number;
+    channels_results: { channel_name: string; channel_id: number; checked: number; kicked: number; failed: number; kicked_users: { telegram_user_id: number; name: string }[] }[];
+    kicked_users: { telegram_user_id: number; name: string }[];
+  } | null>(null);
+  const [kickAllActiveChannel, setKickAllActiveChannel] = useState<number>(-1);
   const [freeTrialEnabled, setFreeTrialEnabled] = useState(false);
   const [freeTrialUsers, setFreeTrialUsers] = useState<FreeTrialUser[]>([]);
   const [freeTrialChannelIds, setFreeTrialChannelIds] = useState<string[]>([]);
