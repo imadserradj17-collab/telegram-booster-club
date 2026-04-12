@@ -1040,6 +1040,7 @@ Deno.serve(async (req) => {
           });
 
           console.log(`Channel ${ch.channel_name}: members=${channelMembers.length}, toKick=${toKick.length}, kicked=${chKicked}`);
+        }
 
         const totalKicked = channelsResults.reduce(
           (s: number, c: any) => s + c.kicked,
