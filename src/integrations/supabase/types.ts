@@ -44,6 +44,8 @@ export type Database = {
       bot_tokens: {
         Row: {
           admin_telegram_id: number | null
+          auto_scan_enabled: boolean
+          auto_scan_interval: number
           created_at: string
           free_trial_channel_ids: Json | null
           free_trial_enabled: boolean
@@ -58,6 +60,8 @@ export type Database = {
         }
         Insert: {
           admin_telegram_id?: number | null
+          auto_scan_enabled?: boolean
+          auto_scan_interval?: number
           created_at?: string
           free_trial_channel_ids?: Json | null
           free_trial_enabled?: boolean
@@ -72,6 +76,8 @@ export type Database = {
         }
         Update: {
           admin_telegram_id?: number | null
+          auto_scan_enabled?: boolean
+          auto_scan_interval?: number
           created_at?: string
           free_trial_channel_ids?: Json | null
           free_trial_enabled?: boolean
