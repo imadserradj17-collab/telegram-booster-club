@@ -1966,7 +1966,110 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
             </div>
           )}
 
-          {/* ANALYTICS */}
+          {/* SCAN LOGS */}
+          {activeTab === "scan_logs" && (
+            <div className="space-y-4 md:space-y-6 animate-fade-in">
+              <div className="glass-card p-5 md:p-6 border-primary/30 bg-gradient-to-br from-primary/5 to-transparent">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-primary/15 flex items-center justify-center flex-shrink-0">
+                    <FileText className="w-6 h-6 text-primary" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-base font-bold text-foreground">{t("scanLogs.title")}</h3>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={fetchScanLogs} disabled={scanLogsLoading}>
+                    <RefreshCw className={`w-4 h-4 ${scanLogsLoading ? "animate-spin" : ""}`} />
+                  </Button>
+                </div>
+
+                {scanLogsLoading ? (
+                  <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+                ) : scanLogs.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-8">{t("scanLogs.empty")}</p>
+                ) : (
+                  <div className="space-y-3">
+                    {scanLogs.map((log) => {
+                      const details = log.details || {};
+                      const total = log.kicked_non_subscribers + log.kicked_expired;
+                      const isExpanded = expandedLogId === log.id;
+                      return (
+                        <div key={log.id} className="glass-card p-4 border-border/50">
+                          <div className="flex items-center justify-between cursor-pointer" onClick={() => setExpandedLogId(isExpanded ? null : log.id)}>
+                            <div className="flex items-center gap-3">
+                              <div className={`w-3 h-3 rounded-full ${total > 0 ? "bg-destructive" : "bg-green-500"}`} />
+                              <div>
+                                <p className="text-sm font-medium text-foreground">
+                                  {new Date(log.created_at).toLocaleDateString(lang === "ar" ? "ar-SA" : "en-US", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {details.channels_scanned ? `${t("scanLogs.channels")}: ${details.channels_scanned}` : ""}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {total === 0 ? (
+                                <Badge variant="outline" className="text-green-600 border-green-300 text-xs">{t("scanLogs.noKicks")}</Badge>
+                              ) : (
+                                <Badge variant="destructive" className="text-xs">{t("scanLogs.total")}: {total}</Badge>
+                              )}
+                              <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                            </div>
+                          </div>
+
+                          {isExpanded && (
+                            <div className="mt-3 pt-3 border-t border-border/50 space-y-2">
+                              <div className="grid grid-cols-2 gap-2 text-sm">
+                                <div className="flex items-center gap-2">
+                                  <Shield className="w-4 h-4 text-muted-foreground" />
+                                  <span className="text-muted-foreground">{t("scanLogs.nonSubs")}:</span>
+                                  <span className="font-medium text-foreground">{log.kicked_non_subscribers}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Clock className="w-4 h-4 text-muted-foreground" />
+                                  <span className="text-muted-foreground">{t("scanLogs.expired")}:</span>
+                                  <span className="font-medium text-foreground">{log.kicked_expired}</span>
+                                </div>
+                              </div>
+
+                              {details.kicked_non_subscribers_list?.length > 0 && (
+                                <div>
+                                  <p className="text-xs font-medium text-muted-foreground mb-1">{t("scanLogs.nonSubs")} ({details.kicked_non_subscribers_list.length}):</p>
+                                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                                    {details.kicked_non_subscribers_list.map((u: any, i: number) => (
+                                      <div key={i} className="text-xs text-foreground flex items-center gap-1">
+                                        <User className="w-3 h-3 text-muted-foreground" />
+                                        {u.name} <span className="text-muted-foreground">({u.telegram_user_id})</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {details.kicked_expired_list?.length > 0 && (
+                                <div>
+                                  <p className="text-xs font-medium text-muted-foreground mb-1">{t("scanLogs.expired")} ({details.kicked_expired_list.length}):</p>
+                                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                                    {details.kicked_expired_list.map((u: any, i: number) => (
+                                      <div key={i} className="text-xs text-foreground flex items-center gap-1">
+                                        <User className="w-3 h-3 text-muted-foreground" />
+                                        {u.name} <span className="text-muted-foreground">({u.telegram_user_id})</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+
           {activeTab === "analytics" && (
             <div className="space-y-4 md:space-y-6 animate-fade-in">
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
