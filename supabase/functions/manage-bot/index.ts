@@ -1086,18 +1086,29 @@ Deno.serve(async (req) => {
         );
         const totalChecked = allKnownIds.size;
 
-        // Notify admin in Telegram with kicked users list
+        // Notify admin in Telegram with kicked users per channel
         if (adminTgId && allKickedUsers.length > 0) {
-          const namesList = allKickedUsers.map((u, i) =>
-            `${i + 1}. ${u.name} (${u.telegram_user_id})`
-          ).join("\n");
-          const msg = `🔍 *تقرير طرد غير المشتركين*\n\n` +
-            `✅ تم طرد *${allKickedUsers.length}* مستخدم غير مشترك:\n\n${namesList}`;
-          // Split if too long
+          let msg = `🔍 *تقرير طرد غير المشتركين*\n\n`;
+          for (const cr of channelsResults) {
+            if (cr.kicked_users.length === 0) continue;
+            const icon = cr.channel_name.includes("👥") ? "👥" : "📺";
+            msg += `${icon} *${cr.channel_name}* — طُرد ${cr.kicked_users.length}:\n`;
+            for (const u of cr.kicked_users) {
+              msg += `  • ${u.name} (\`${u.telegram_user_id}\`)\n`;
+            }
+            msg += `\n`;
+          }
+          msg += `✅ *المجموع: ${allKickedUsers.length}* مستخدم غير مشترك`;
           if (msg.length < 4000) {
             await tg(botToken, "sendMessage", { chat_id: adminTgId, text: msg, parse_mode: "Markdown" }).catch(() => {});
           } else {
-            await tg(botToken, "sendMessage", { chat_id: adminTgId, text: `🔍 *تقرير طرد غير المشتركين*\n\nتم طرد *${allKickedUsers.length}* مستخدم غير مشترك من القنوات.`, parse_mode: "Markdown" }).catch(() => {});
+            // Send summary per channel without names
+            let shortMsg = `🔍 *تقرير طرد غير المشتركين*\n\n`;
+            for (const cr of channelsResults) {
+              if (cr.kicked > 0) shortMsg += `📺 *${cr.channel_name}*: ${cr.kicked} مطرود\n`;
+            }
+            shortMsg += `\n✅ *المجموع: ${allKickedUsers.length}* مستخدم`;
+            await tg(botToken, "sendMessage", { chat_id: adminTgId, text: shortMsg, parse_mode: "Markdown" }).catch(() => {});
           }
         }
 
