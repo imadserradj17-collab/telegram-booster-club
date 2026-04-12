@@ -124,6 +124,8 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const [unbanningAll, setUnbanningAll] = useState(false);
   const [checkingBlocked, setCheckingBlocked] = useState(false);
   const [kickingNonSubs, setKickingNonSubs] = useState(false);
+  const [kickNonSubsChannelId, setKickNonSubsChannelId] = useState<string>("all");
+  const [kickAllChannelId, setKickAllChannelId] = useState<string>("all");
   const [kickNonSubsResult, setKickNonSubsResult] = useState<{
     kicked: number; failed: number; checked: number;
     channels_results: { channel_name: string; channel_id: number; checked: number; kicked: number; failed: number; kicked_users: { telegram_user_id: number; name: string }[] }[];
