@@ -143,7 +143,18 @@ const translations: Record<string, Record<Lang, string>> = {
   "dash.andMinute": { ar: "و", en: "and" },
   "dash.minute": { ar: "دقيقة", en: "minute(s)" },
 
-  // Analytics
+  // Scan Logs
+  "scanLogs.title": { ar: "سجل الفحص التلقائي", en: "Auto-Scan Logs" },
+  "scanLogs.empty": { ar: "لا توجد سجلات فحص بعد", en: "No scan logs yet" },
+  "scanLogs.date": { ar: "التاريخ", en: "Date" },
+  "scanLogs.nonSubs": { ar: "غير مشتركين", en: "Non-subscribers" },
+  "scanLogs.expired": { ar: "منتهيين", en: "Expired" },
+  "scanLogs.total": { ar: "إجمالي المطرودين", en: "Total Kicked" },
+  "scanLogs.channels": { ar: "قنوات تم فحصها", en: "Channels Scanned" },
+  "scanLogs.details": { ar: "التفاصيل", en: "Details" },
+  "scanLogs.noKicks": { ar: "لا يوجد مطرودين ✅", en: "No kicks ✅" },
+  "scanLogs.kickedList": { ar: "قائمة المطرودين", en: "Kicked Users" },
+
   "analytics.title": { ar: "تحليلات الاشتراكات", en: "Subscription Analytics" },
   "analytics.newSubs": { ar: "اشتراكات جديدة", en: "New Subscriptions" },
   "analytics.expirations": { ar: "انتهاءات", en: "Expirations" },

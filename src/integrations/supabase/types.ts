@@ -295,6 +295,36 @@ export type Database = {
           },
         ]
       }
+      scan_logs: {
+        Row: {
+          bot_token_id: string
+          created_at: string
+          details: Json | null
+          id: string
+          kicked_expired: number
+          kicked_non_subscribers: number
+          owner_id: string
+        }
+        Insert: {
+          bot_token_id: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          kicked_expired?: number
+          kicked_non_subscribers?: number
+          owner_id: string
+        }
+        Update: {
+          bot_token_id?: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          kicked_expired?: number
+          kicked_non_subscribers?: number
+          owner_id?: string
+        }
+        Relationships: []
+      }
       subscriber_channels: {
         Row: {
           channel_id: string
