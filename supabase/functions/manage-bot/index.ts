@@ -971,109 +971,75 @@ Deno.serve(async (req) => {
           return allRows;
         }
 
-        // Collect ALL known users from all sources (paginated)
-        const [buAll, pcmAll, cmAll] = await Promise.all([
-          fetchAllPaged(
-            "bot_users",
-            "telegram_user_id, first_name, last_name, telegram_username",
-            { owner_id: user.id, bot_token_id: botTokenId },
-          ),
-          fetchAllPaged(
-            "public_channel_members",
-            "telegram_user_id, first_name, last_name, telegram_username",
-            { owner_id: user.id, bot_token_id: botTokenId },
-          ),
-          fetchAllPaged(
-            "channel_members",
-            "telegram_user_id, first_name, last_name, telegram_username",
-            { owner_id: user.id, bot_token_id: botTokenId },
-          ),
-        ]);
-
-        // Build map of all known users with their names
-        const userInfoMap = new Map<number, string>();
-        const allKnownIds = new Set<number>();
-        for (const list of [buAll, pcmAll, cmAll]) {
-          for (const u of list) {
-            allKnownIds.add(u.telegram_user_id);
-            if (!userInfoMap.has(u.telegram_user_id)) {
-              userInfoMap.set(
-                u.telegram_user_id,
-                [u.first_name, u.last_name].filter(Boolean).join(" ") ||
-                  u.telegram_username || String(u.telegram_user_id),
-              );
-            }
-          }
-        }
-
-        // Users to kick = known users NOT in active subscribers and NOT admin
-        const toKickGlobal = [...allKnownIds].filter((uid) => {
-          if (activeUserIds.has(uid)) return false;
-          if (adminTgId && uid === adminTgId) return false;
-          return true;
-        });
-
-        console.log(`kick_non_subscribers: allKnownIds=${allKnownIds.size}, activeUserIds=${activeUserIds.size}, toKickGlobal=${toKickGlobal.length}, channels=${chListNS.length}`);
-
-        // Process channel by channel
+        // Process channel by channel - check each channel's members
         const channelsResults: any[] = [];
         const allKickedUsers: { telegram_user_id: number; name: string }[] = [];
 
         for (const ch of chListNS) {
-          // Get admins for this channel
+          // Get channel admins to exclude
           const channelAdmins = new Set<number>();
           try {
-            const res = await tg(botToken, "getChatAdministrators", {
-              chat_id: ch.channel_id,
-            });
+            const res = await tg(botToken, "getChatAdministrators", { chat_id: ch.channel_id });
             if (res.ok) {
               for (const a of res.result) channelAdmins.add(a.user.id);
             }
           } catch {}
 
-          // Filter out channel admins
-          const chToKick = toKickGlobal.filter((uid) =>
-            !channelAdmins.has(uid)
-          );
+          // Get ALL members of THIS channel from channel_members table (paginated)
+          const channelMembers: any[] = [];
+          const PAGE = 1000;
+          let from = 0;
+          while (true) {
+            const { data } = await sb.from("channel_members")
+              .select("telegram_user_id, first_name, last_name, telegram_username")
+              .eq("owner_id", user.id)
+              .eq("bot_token_id", botTokenId)
+              .eq("channel_id", ch.id)
+              .range(from, from + PAGE - 1);
+            if (!data || data.length === 0) break;
+            channelMembers.push(...data);
+            if (data.length < PAGE) break;
+            from += PAGE;
+          }
+
+          // Filter: kick members NOT in active subscribers, NOT admin, NOT channel admin
+          const toKick = channelMembers.filter(m => {
+            if (activeUserIds.has(m.telegram_user_id)) return false;
+            if (adminTgId && m.telegram_user_id === adminTgId) return false;
+            if (channelAdmins.has(m.telegram_user_id)) return false;
+            return true;
+          });
 
           let chKicked = 0, chFailed = 0;
-          const chKickedUsers: { telegram_user_id: number; name: string }[] =
-            [];
+          const chKickedUsers: { telegram_user_id: number; name: string }[] = [];
 
-          for (const uid of chToKick) {
-            const name = userInfoMap.get(uid) || String(uid);
+          for (const m of toKick) {
+            const name = [m.first_name, m.last_name].filter(Boolean).join(" ") || m.telegram_username || String(m.telegram_user_id);
             try {
-              const banRes = await tg(botToken, "banChatMember", {
-                chat_id: ch.channel_id,
-                user_id: uid,
-              });
-              console.log(`Ban uid=${uid} in ch=${ch.channel_id}: ${JSON.stringify(banRes)}`);
+              const banRes = await tg(botToken, "banChatMember", { chat_id: ch.channel_id, user_id: m.telegram_user_id });
+              console.log(`Ban uid=${m.telegram_user_id} in ch=${ch.channel_id}: ok=${banRes.ok}`);
               if (banRes.ok) {
                 chKicked++;
-                chKickedUsers.push({ telegram_user_id: uid, name });
-                if (!allKickedUsers.some((u) => u.telegram_user_id === uid)) {
-                  allKickedUsers.push({ telegram_user_id: uid, name });
+                chKickedUsers.push({ telegram_user_id: m.telegram_user_id, name });
+                if (!allKickedUsers.some(u => u.telegram_user_id === m.telegram_user_id)) {
+                  allKickedUsers.push({ telegram_user_id: m.telegram_user_id, name });
                 }
-                tg(botToken, "unbanChatMember", {
-                  chat_id: ch.channel_id,
-                  user_id: uid,
-                  only_if_banned: true,
-                }).catch(() => {});
+                tg(botToken, "unbanChatMember", { chat_id: ch.channel_id, user_id: m.telegram_user_id, only_if_banned: true }).catch(() => {});
               } else chFailed++;
-            } catch {
-              chFailed++;
-            }
+            } catch { chFailed++; }
             await sleep(200);
           }
 
           channelsResults.push({
             channel_name: ch.channel_name,
             channel_id: ch.channel_id,
-            checked: chToKick.length,
+            checked: channelMembers.length,
             kicked: chKicked,
             failed: chFailed,
             kicked_users: chKickedUsers,
           });
+
+          console.log(`Channel ${ch.channel_name}: members=${channelMembers.length}, toKick=${toKick.length}, kicked=${chKicked}`);
         }
 
         const totalKicked = channelsResults.reduce(
@@ -1084,7 +1050,7 @@ Deno.serve(async (req) => {
           (s: number, c: any) => s + c.failed,
           0,
         );
-        const totalChecked = allKnownIds.size;
+        const totalChecked = channelsResults.reduce((s: number, c: any) => s + c.checked, 0);
 
         // Notify admin in Telegram with kicked users per channel
         if (adminTgId && allKickedUsers.length > 0) {
