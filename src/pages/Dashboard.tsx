@@ -59,6 +59,8 @@ interface BotSettings {
   subscribers_channel_id: string | null;
   free_trial_enabled: boolean;
   mandatory_channel_id: string | null;
+  auto_scan_enabled: boolean;
+  auto_scan_interval: number;
 }
 
 interface FreeTrialUser {
@@ -144,6 +146,8 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const [scanLogs, setScanLogs] = useState<any[]>([]);
   const [scanLogsLoading, setScanLogsLoading] = useState(false);
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
+  const [autoScanEnabled, setAutoScanEnabled] = useState(false);
+  const [autoScanInterval, setAutoScanInterval] = useState(60);
 
   useEffect(() => { fetchData(); }, []);
   useEffect(() => { if (activeTab === "scan_logs") fetchScanLogs(); }, [activeTab]);
@@ -173,6 +177,8 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
       setFreeTrialEnabled((settingsRes.data as any).free_trial_enabled ?? false);
       setMandatoryChannelId((settingsRes.data as any).mandatory_channel_id || null);
       setFreeTrialChannelIds((settingsRes.data as any).free_trial_channel_ids || []);
+      setAutoScanEnabled((settingsRes.data as any).auto_scan_enabled ?? false);
+      setAutoScanInterval((settingsRes.data as any).auto_scan_interval ?? 60);
     }
 
     // Fetch channels
@@ -235,7 +241,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     if (!botSettings) return;
     setSavingSettings(true);
     try {
-      const updates: any = { non_subscriber_message: nonSubMessage.trim(), public_channel_id: publicChannelId || null, subscribers_channel_id: subscribersChannelId || null, free_trial_enabled: freeTrialEnabled, mandatory_channel_id: mandatoryChannelId || null, free_trial_channel_ids: freeTrialChannelIds };
+      const updates: any = { non_subscriber_message: nonSubMessage.trim(), public_channel_id: publicChannelId || null, subscribers_channel_id: subscribersChannelId || null, free_trial_enabled: freeTrialEnabled, mandatory_channel_id: mandatoryChannelId || null, free_trial_channel_ids: freeTrialChannelIds, auto_scan_enabled: autoScanEnabled, auto_scan_interval: autoScanInterval };
       updates.admin_telegram_id = adminId.trim() ? parseInt(adminId.trim()) : null;
       const { error } = await supabase.from("bot_tokens").update(updates).eq("id", botSettings.id);
       if (error) throw error;
