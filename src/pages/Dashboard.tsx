@@ -2295,6 +2295,38 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                     </div>
                   </div>
                 )}
+                </div>
+                <div className="glass-card p-4 md:p-6 space-y-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <RefreshCw className="w-5 h-5 text-primary" />
+                    <h3 className="font-semibold text-foreground">{t("scanLogs.autoScan")}</h3>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{t("scanLogs.autoScanHint")}</p>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-foreground/80">{t("scanLogs.autoScan")}</Label>
+                    <Switch checked={autoScanEnabled} onCheckedChange={setAutoScanEnabled} />
+                  </div>
+                  {autoScanEnabled && (
+                    <div className="space-y-2">
+                      <Label className="text-foreground/80">{t("scanLogs.interval")}</Label>
+                      <Select value={String(autoScanInterval)} onValueChange={(v) => setAutoScanInterval(parseInt(v))}>
+                        <SelectTrigger className="bg-secondary/50 border-border/50">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="15">15 {t("dash.minute")}</SelectItem>
+                          <SelectItem value="30">30 {t("dash.minute")}</SelectItem>
+                          <SelectItem value="60">60 {t("dash.minute")}</SelectItem>
+                          <SelectItem value="120">120 {t("dash.minute")}</SelectItem>
+                          <SelectItem value="360">360 {t("dash.minute")}</SelectItem>
+                          <SelectItem value="720">720 {t("dash.minute")}</SelectItem>
+                          <SelectItem value="1440">1440 {t("dash.minute")}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">{t("scanLogs.intervalHint")}</p>
+                    </div>
+                  )}
+                </div>
                 <Button onClick={handleSaveSettings} disabled={savingSettings} className="w-full gradient-telegram text-primary-foreground hover:opacity-90">
                   {savingSettings ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : <Save className="w-4 h-4 ml-2" />}
                   {t("dash.saveSettings")}
