@@ -1060,6 +1060,21 @@ Deno.serve(async (req) => {
         );
         const totalChecked = allKnownIds.size;
 
+        // Notify admin in Telegram with kicked users list
+        if (adminTgId && allKickedUsers.length > 0) {
+          const namesList = allKickedUsers.map((u, i) =>
+            `${i + 1}. ${u.name} (${u.telegram_user_id})`
+          ).join("\n");
+          const msg = `🔍 *تقرير طرد غير المشتركين*\n\n` +
+            `✅ تم طرد *${allKickedUsers.length}* مستخدم غير مشترك:\n\n${namesList}`;
+          // Split if too long
+          if (msg.length < 4000) {
+            await tg(botToken, "sendMessage", { chat_id: adminTgId, text: msg, parse_mode: "Markdown" }).catch(() => {});
+          } else {
+            await tg(botToken, "sendMessage", { chat_id: adminTgId, text: `🔍 *تقرير طرد غير المشتركين*\n\nتم طرد *${allKickedUsers.length}* مستخدم غير مشترك من القنوات.`, parse_mode: "Markdown" }).catch(() => {});
+          }
+        }
+
         return new Response(
           JSON.stringify({
             ok: true,
