@@ -352,7 +352,7 @@ Deno.serve(async (req) => {
         }
 
         const { data: sub } = await sb.from("telegram_subscribers").select(
-          "id, telegram_user_id, bot_token_id",
+          "id, telegram_user_id, telegram_username, first_name, bot_token_id",
         ).eq("id", subscriber_id).eq("owner_id", user.id).single();
         if (!sub) {
           return new Response(
@@ -363,54 +363,56 @@ Deno.serve(async (req) => {
 
         // Always kick from ALL owner channels/groups for this bot
         const { data: allChannels } = await sb.from("telegram_channels")
-          .select("channel_id")
+          .select("channel_id, channel_name")
           .eq("owner_id", user.id)
           .eq("bot_token_id", sub.bot_token_id || botData.id);
 
-        const kickSet = new Set<number>();
-        for (const ch of (allChannels || [])) {
-          if (ch.channel_id) kickSet.add(ch.channel_id);
-        }
+        const channelsList = (allChannels || []).filter((c: any) => c.channel_id);
 
         let kicked = 0, failedKick = 0;
-        console.log(
-          `Kicking user ${sub.telegram_user_id} from ${kickSet.size} channels: ${
-            [...kickSet].join(", ")
-          }`,
-        );
-        for (const chId of kickSet) {
+        const channelResults: { channel_id: number; channel_name: string; success: boolean }[] = [];
+
+        for (const ch of channelsList) {
           try {
-            console.log(
-              `Banning user ${sub.telegram_user_id} from channel ${chId}...`,
-            );
             const banRes = await tg(botToken, "banChatMember", {
-              chat_id: chId,
+              chat_id: ch.channel_id,
               user_id: sub.telegram_user_id,
             });
-            console.log(
-              `Ban result for channel ${chId}:`,
-              JSON.stringify(banRes),
-            );
             if (banRes.ok) {
               kicked++;
-              const unbanRes = await tg(botToken, "unbanChatMember", {
-                chat_id: chId,
+              // Wait before unban like original code
+              await new Promise(r => setTimeout(r, 100));
+              await tg(botToken, "unbanChatMember", {
+                chat_id: ch.channel_id,
                 user_id: sub.telegram_user_id,
                 only_if_banned: true,
               });
-              console.log(
-                `Unban result for channel ${chId}:`,
-                JSON.stringify(unbanRes),
-              );
-            } else failedKick++;
+              channelResults.push({ channel_id: ch.channel_id, channel_name: ch.channel_name, success: true });
+            } else {
+              failedKick++;
+              channelResults.push({ channel_id: ch.channel_id, channel_name: ch.channel_name, success: false });
+            }
           } catch (e: any) {
-            console.error(`Kick error for channel ${chId}:`, e.message);
             failedKick++;
+            channelResults.push({ channel_id: ch.channel_id, channel_name: ch.channel_name, success: false });
           }
         }
 
+        // Send notification to the kicked user
+        try {
+          await tg(botToken, "sendMessage", {
+            chat_id: sub.telegram_user_id,
+            text: `⚠️ تم إلغاء اشتراكك وإزالتك من جميع القنوات.\n\n🆔 رقم حسابك: <code>${sub.telegram_user_id}</code>\n📞 للتجديد تواصل مع المسؤول`,
+            parse_mode: "HTML",
+          });
+        } catch {}
+
+        // Delete subscriber record and their channel assignments
+        await sb.from("subscriber_channels").delete().eq("subscriber_id", sub.id);
+        await sb.from("telegram_subscribers").delete().eq("id", sub.id).eq("owner_id", user.id);
+
         return new Response(
-          JSON.stringify({ ok: true, kicked, failed: failedKick }),
+          JSON.stringify({ ok: true, kicked, failed: failedKick, channel_results: channelResults }),
           { headers: corsHeaders },
         );
       }
