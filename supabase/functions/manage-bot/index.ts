@@ -1044,6 +1044,7 @@ Deno.serve(async (req) => {
                 chat_id: ch.channel_id,
                 user_id: uid,
               });
+              console.log(`Ban uid=${uid} in ch=${ch.channel_id}: ${JSON.stringify(banRes)}`);
               if (banRes.ok) {
                 chKicked++;
                 chKickedUsers.push({ telegram_user_id: uid, name });
