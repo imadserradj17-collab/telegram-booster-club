@@ -1215,6 +1215,25 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                     </p>
                   </div>
                 </div>
+                {/* Channel selector */}
+                <div className="mb-4">
+                  <Label className="text-xs text-muted-foreground mb-1.5 block">
+                    {lang === "ar" ? "اختر القناة" : "Select Channel"}
+                  </Label>
+                  <Select value={kickAllChannelId} onValueChange={setKickAllChannelId}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{lang === "ar" ? "🌐 كل القنوات" : "🌐 All Channels"}</SelectItem>
+                      {channels.map(ch => (
+                        <SelectItem key={ch.id} value={ch.id}>
+                          {ch.channel_type === "group" ? "👥" : "📺"} {ch.channel_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 mb-4">
                   <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0" />
                   <p className="text-xs text-destructive font-medium">
@@ -1237,9 +1256,9 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                       setKickAllActiveChannel(prev => prev < channels.length - 1 ? prev + 1 : prev);
                     }, 3000);
                     try {
-                      const { data, error } = await supabase.functions.invoke("manage-bot", {
-                        body: { action: "kick_all_members" },
-                      });
+                      const body: any = { action: "kick_all_members" };
+                      if (kickAllChannelId !== "all") body.target_channel_id = kickAllChannelId;
+                      const { data, error } = await supabase.functions.invoke("manage-bot", { body });
                       clearInterval(progressInterval);
                       if (error) throw error;
                       if (data?.error) throw new Error(data.error);
