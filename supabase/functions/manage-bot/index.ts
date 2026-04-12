@@ -1010,6 +1010,8 @@ Deno.serve(async (req) => {
           return true;
         });
 
+        console.log(`kick_non_subscribers: allKnownIds=${allKnownIds.size}, activeUserIds=${activeUserIds.size}, toKickGlobal=${toKickGlobal.length}, channels=${chListNS.length}`);
+
         // Process channel by channel
         const channelsResults: any[] = [];
         const allKickedUsers: { telegram_user_id: number; name: string }[] = [];
