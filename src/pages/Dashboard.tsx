@@ -141,6 +141,9 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const [checkingBotAdmin, setCheckingBotAdmin] = useState(false);
   const [botAdminCheckIdx, setBotAdminCheckIdx] = useState(-1);
   const [botAdminResults, setBotAdminResults] = useState<{ channel_name: string; channel_id: number; channel_type: string; is_admin: boolean; bot_permissions: string[] }[] | null>(null);
+  const [scanLogs, setScanLogs] = useState<any[]>([]);
+  const [scanLogsLoading, setScanLogsLoading] = useState(false);
+  const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
 
   useEffect(() => { fetchData(); }, []);
 
