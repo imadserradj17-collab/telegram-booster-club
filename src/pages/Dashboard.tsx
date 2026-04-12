@@ -1134,6 +1134,25 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                     <p className="text-xs text-muted-foreground mt-0.5">{t("dash.kickNonSubscribersHint")}</p>
                   </div>
                 </div>
+                {/* Channel selector */}
+                <div className="mb-4">
+                  <Label className="text-xs text-muted-foreground mb-1.5 block">
+                    {lang === "ar" ? "اختر القناة" : "Select Channel"}
+                  </Label>
+                  <Select value={kickNonSubsChannelId} onValueChange={setKickNonSubsChannelId}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{lang === "ar" ? "🌐 كل القنوات" : "🌐 All Channels"}</SelectItem>
+                      {channels.map(ch => (
+                        <SelectItem key={ch.id} value={ch.id}>
+                          {ch.channel_type === "group" ? "👥" : "📺"} {ch.channel_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/5 border border-destructive/10 mb-4">
                   <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0" />
                   <p className="text-xs text-destructive">{t("dash.kickNonSubscribersWarn")}</p>
@@ -1151,9 +1170,9 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                       setKickNonSubsActiveChannel(prev => prev < channels.length - 1 ? prev + 1 : prev);
                     }, 3000);
                     try {
-                      const { data, error } = await supabase.functions.invoke("manage-bot", {
-                        body: { action: "kick_non_subscribers" },
-                      });
+                      const body: any = { action: "kick_non_subscribers" };
+                      if (kickNonSubsChannelId !== "all") body.target_channel_id = kickNonSubsChannelId;
+                      const { data, error } = await supabase.functions.invoke("manage-bot", { body });
                       clearInterval(progressInterval);
                       if (error) throw error;
                       if (data?.error) throw new Error(data.error);
