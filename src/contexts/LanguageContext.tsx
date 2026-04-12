@@ -154,6 +154,10 @@ const translations: Record<string, Record<Lang, string>> = {
   "scanLogs.details": { ar: "التفاصيل", en: "Details" },
   "scanLogs.noKicks": { ar: "لا يوجد مطرودين ✅", en: "No kicks ✅" },
   "scanLogs.kickedList": { ar: "قائمة المطرودين", en: "Kicked Users" },
+  "scanLogs.autoScan": { ar: "الفحص التلقائي", en: "Auto Scan" },
+  "scanLogs.autoScanHint": { ar: "فحص دوري تلقائي لاكتشاف وطرد غير المشتركين والمنتهيين", en: "Automatic periodic scan to detect and kick non-subscribers and expired users" },
+  "scanLogs.interval": { ar: "الفترة الزمنية (بالدقائق)", en: "Interval (minutes)" },
+  "scanLogs.intervalHint": { ar: "الفترة بين كل عملية فحص تلقائي", en: "Time between each auto-scan" },
 
   "analytics.title": { ar: "تحليلات الاشتراكات", en: "Subscription Analytics" },
   "analytics.newSubs": { ar: "اشتراكات جديدة", en: "New Subscriptions" },

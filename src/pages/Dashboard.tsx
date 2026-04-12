@@ -59,6 +59,8 @@ interface BotSettings {
   subscribers_channel_id: string | null;
   free_trial_enabled: boolean;
   mandatory_channel_id: string | null;
+  auto_scan_enabled: boolean;
+  auto_scan_interval: number;
 }
 
 interface FreeTrialUser {
@@ -144,6 +146,8 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const [scanLogs, setScanLogs] = useState<any[]>([]);
   const [scanLogsLoading, setScanLogsLoading] = useState(false);
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
+  const [autoScanEnabled, setAutoScanEnabled] = useState(false);
+  const [autoScanInterval, setAutoScanInterval] = useState(60);
 
   useEffect(() => { fetchData(); }, []);
   useEffect(() => { if (activeTab === "scan_logs") fetchScanLogs(); }, [activeTab]);
@@ -173,6 +177,8 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
       setFreeTrialEnabled((settingsRes.data as any).free_trial_enabled ?? false);
       setMandatoryChannelId((settingsRes.data as any).mandatory_channel_id || null);
       setFreeTrialChannelIds((settingsRes.data as any).free_trial_channel_ids || []);
+      setAutoScanEnabled((settingsRes.data as any).auto_scan_enabled ?? false);
+      setAutoScanInterval((settingsRes.data as any).auto_scan_interval ?? 60);
     }
 
     // Fetch channels
@@ -235,7 +241,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     if (!botSettings) return;
     setSavingSettings(true);
     try {
-      const updates: any = { non_subscriber_message: nonSubMessage.trim(), public_channel_id: publicChannelId || null, subscribers_channel_id: subscribersChannelId || null, free_trial_enabled: freeTrialEnabled, mandatory_channel_id: mandatoryChannelId || null, free_trial_channel_ids: freeTrialChannelIds };
+      const updates: any = { non_subscriber_message: nonSubMessage.trim(), public_channel_id: publicChannelId || null, subscribers_channel_id: subscribersChannelId || null, free_trial_enabled: freeTrialEnabled, mandatory_channel_id: mandatoryChannelId || null, free_trial_channel_ids: freeTrialChannelIds, auto_scan_enabled: autoScanEnabled, auto_scan_interval: autoScanInterval };
       updates.admin_telegram_id = adminId.trim() ? parseInt(adminId.trim()) : null;
       const { error } = await supabase.from("bot_tokens").update(updates).eq("id", botSettings.id);
       if (error) throw error;
@@ -2289,6 +2295,38 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                     </div>
                   </div>
                 )}
+                </div>
+                <div className="glass-card p-4 md:p-6 space-y-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <RefreshCw className="w-5 h-5 text-primary" />
+                    <h3 className="font-semibold text-foreground">{t("scanLogs.autoScan")}</h3>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{t("scanLogs.autoScanHint")}</p>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-foreground/80">{t("scanLogs.autoScan")}</Label>
+                    <Switch checked={autoScanEnabled} onCheckedChange={setAutoScanEnabled} />
+                  </div>
+                  {autoScanEnabled && (
+                    <div className="space-y-2">
+                      <Label className="text-foreground/80">{t("scanLogs.interval")}</Label>
+                      <Select value={String(autoScanInterval)} onValueChange={(v) => setAutoScanInterval(parseInt(v))}>
+                        <SelectTrigger className="bg-secondary/50 border-border/50">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="15">15 {t("dash.minute")}</SelectItem>
+                          <SelectItem value="30">30 {t("dash.minute")}</SelectItem>
+                          <SelectItem value="60">60 {t("dash.minute")}</SelectItem>
+                          <SelectItem value="120">120 {t("dash.minute")}</SelectItem>
+                          <SelectItem value="360">360 {t("dash.minute")}</SelectItem>
+                          <SelectItem value="720">720 {t("dash.minute")}</SelectItem>
+                          <SelectItem value="1440">1440 {t("dash.minute")}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">{t("scanLogs.intervalHint")}</p>
+                    </div>
+                  )}
+                </div>
                 <Button onClick={handleSaveSettings} disabled={savingSettings} className="w-full gradient-telegram text-primary-foreground hover:opacity-90">
                   {savingSettings ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : <Save className="w-4 h-4 ml-2" />}
                   {t("dash.saveSettings")}

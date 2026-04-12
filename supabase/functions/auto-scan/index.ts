@@ -16,7 +16,7 @@ async function tg(token: string, method: string, body?: any) {
 Deno.serve(async (_req) => {
   try {
     // Get all bot tokens
-    const { data: bots } = await sb.from("bot_tokens").select("id, token, user_id, admin_telegram_id");
+    const { data: bots } = await sb.from("bot_tokens").select("id, token, user_id, admin_telegram_id, auto_scan_enabled, auto_scan_interval");
     if (!bots || bots.length === 0) {
       return new Response(JSON.stringify({ ok: true, message: "No bots" }));
     }
@@ -24,6 +24,9 @@ Deno.serve(async (_req) => {
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
     for (const bot of bots) {
+      // Skip bots with auto-scan disabled
+      if (!bot.auto_scan_enabled) continue;
+
       const botToken = bot.token;
       const botTokenId = bot.id;
       const ownerId = bot.user_id;
