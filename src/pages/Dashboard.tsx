@@ -71,7 +71,7 @@ interface FreeTrialUser {
   expires_at: string;
 }
 
-type TabKey = "overview" | "subscribers" | "expired" | "channels" | "broadcast" | "analytics" | "settings" | "free_trial" | "kick_nonsubs";
+type TabKey = "overview" | "subscribers" | "expired" | "channels" | "broadcast" | "analytics" | "settings" | "free_trial" | "kick_nonsubs" | "scan_logs";
 
 interface DashboardProps {
   onShowAdmin?: () => void;
