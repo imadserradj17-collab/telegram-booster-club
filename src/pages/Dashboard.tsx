@@ -146,6 +146,14 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
 
   useEffect(() => { fetchData(); }, []);
+  useEffect(() => { if (activeTab === "scan_logs") fetchScanLogs(); }, [activeTab]);
+
+  const fetchScanLogs = async () => {
+    setScanLogsLoading(true);
+    const { data } = await supabase.from("scan_logs").select("*").order("created_at", { ascending: false }).limit(50);
+    setScanLogs(data || []);
+    setScanLogsLoading(false);
+  };
 
   const switchTab = (key: TabKey) => { setActiveTab(key); setSidebarOpen(false); };
 
