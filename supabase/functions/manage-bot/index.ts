@@ -1057,7 +1057,7 @@ Deno.serve(async (req) => {
           (s: number, c: any) => s + c.failed,
           0,
         );
-        const totalChecked = allKnownIds.size;
+        const totalChecked = channelsResults.reduce((s: number, c: any) => s + c.checked, 0);
 
         // Notify admin in Telegram with kicked users per channel
         if (adminTgId && allKickedUsers.length > 0) {
