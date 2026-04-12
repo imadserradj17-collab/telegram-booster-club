@@ -157,6 +157,19 @@ Deno.serve(async (_req) => {
         }
       }
 
+      // Save scan log to database
+      await sb.from("scan_logs").insert({
+        owner_id: ownerId,
+        bot_token_id: botTokenId,
+        kicked_non_subscribers: kickedUsers.length,
+        kicked_expired: kickedExpired.length,
+        details: {
+          kicked_non_subscribers_list: kickedUsers,
+          kicked_expired_list: kickedExpired,
+          channels_scanned: channels.length,
+        },
+      });
+
       console.log(`Bot ${botTokenId}: kicked ${kickedUsers.length} non-subs, ${kickedExpired.length} expired`);
     }
 
