@@ -403,6 +403,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     { key: "free_trial", icon: Zap, label: t("dash.freeTrial"), badge: freeTrialUsers.length },
     { key: "broadcast", icon: Send, label: t("broadcast.title") },
     { key: "kick_nonsubs", icon: Shield, label: t("dash.kickNonSubscribers") },
+    { key: "scan_logs", icon: FileText, label: t("scanLogs.title") },
     { key: "analytics", icon: BarChart3, label: t("dash.analytics") },
     { key: "settings", icon: Settings, label: t("dash.settings") },
   ];
