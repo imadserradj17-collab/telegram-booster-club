@@ -2331,7 +2331,6 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   {savingSettings ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : <Save className="w-4 h-4 ml-2" />}
                   {t("dash.saveSettings")}
                 </Button>
-              </div>
             </div>
           )}
         </div>
