@@ -1010,6 +1010,8 @@ Deno.serve(async (req) => {
           return true;
         });
 
+        console.log(`kick_non_subscribers: allKnownIds=${allKnownIds.size}, activeUserIds=${activeUserIds.size}, toKickGlobal=${toKickGlobal.length}, channels=${chListNS.length}`);
+
         // Process channel by channel
         const channelsResults: any[] = [];
         const allKickedUsers: { telegram_user_id: number; name: string }[] = [];
@@ -1042,6 +1044,7 @@ Deno.serve(async (req) => {
                 chat_id: ch.channel_id,
                 user_id: uid,
               });
+              console.log(`Ban uid=${uid} in ch=${ch.channel_id}: ${JSON.stringify(banRes)}`);
               if (banRes.ok) {
                 chKicked++;
                 chKickedUsers.push({ telegram_user_id: uid, name });
