@@ -457,7 +457,7 @@ Deno.serve(async (req) => {
           let from = 0;
           while (true) {
             const { data } = await sb.from("telegram_subscribers")
-              .select("id, telegram_user_id, expires_at")
+              .select("id, telegram_user_id, first_name, last_name, telegram_username, expires_at")
               .eq("owner_id", user.id)
               .eq("bot_token_id", botTokenId)
               .eq("is_permanent", false)
@@ -507,8 +507,10 @@ Deno.serve(async (req) => {
         }
 
         let kicked = 0, failedKick = 0;
+        const expiredKickedNames: string[] = [];
         const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
         for (const sub of expired) {
+          let userKicked = false;
           for (const chId of chIds) {
             try {
               const banRes = await tg(botToken, "banChatMember", {
@@ -517,6 +519,7 @@ Deno.serve(async (req) => {
               });
               if (banRes.ok) {
                 kicked++;
+                userKicked = true;
                 await tg(botToken, "unbanChatMember", {
                   chat_id: chId,
                   user_id: sub.telegram_user_id,
@@ -530,7 +533,24 @@ Deno.serve(async (req) => {
             }
             await sleep(300);
           }
+          if (userKicked) {
+            const name = [sub.first_name, sub.last_name].filter(Boolean).join(" ") || sub.telegram_username || String(sub.telegram_user_id);
+            expiredKickedNames.push(`${name} (${sub.telegram_user_id})`);
+          }
           await sleep(500);
+        }
+
+        // Notify admin about expired kicked users
+        const adminTgIdExp = botData.admin_telegram_id;
+        if (adminTgIdExp && expiredKickedNames.length > 0) {
+          const namesList = expiredKickedNames.map((n, i) => `${i + 1}. ${n}`).join("\n");
+          const msg = `⏰ *تقرير انتهاء الاشتراكات*\n\n` +
+            `تم طرد *${expiredKickedNames.length}* مشترك منتهي:\n\n${namesList}`;
+          if (msg.length < 4000) {
+            await tg(botToken, "sendMessage", { chat_id: adminTgIdExp, text: msg, parse_mode: "Markdown" }).catch(() => {});
+          } else {
+            await tg(botToken, "sendMessage", { chat_id: adminTgIdExp, text: `⏰ *تقرير انتهاء الاشتراكات*\n\nتم طرد *${expiredKickedNames.length}* مشترك منتهي من القنوات.`, parse_mode: "Markdown" }).catch(() => {});
+          }
         }
 
         return new Response(
@@ -1059,6 +1079,21 @@ Deno.serve(async (req) => {
           0,
         );
         const totalChecked = allKnownIds.size;
+
+        // Notify admin in Telegram with kicked users list
+        if (adminTgId && allKickedUsers.length > 0) {
+          const namesList = allKickedUsers.map((u, i) =>
+            `${i + 1}. ${u.name} (${u.telegram_user_id})`
+          ).join("\n");
+          const msg = `🔍 *تقرير طرد غير المشتركين*\n\n` +
+            `✅ تم طرد *${allKickedUsers.length}* مستخدم غير مشترك:\n\n${namesList}`;
+          // Split if too long
+          if (msg.length < 4000) {
+            await tg(botToken, "sendMessage", { chat_id: adminTgId, text: msg, parse_mode: "Markdown" }).catch(() => {});
+          } else {
+            await tg(botToken, "sendMessage", { chat_id: adminTgId, text: `🔍 *تقرير طرد غير المشتركين*\n\nتم طرد *${allKickedUsers.length}* مستخدم غير مشترك من القنوات.`, parse_mode: "Markdown" }).catch(() => {});
+          }
+        }
 
         return new Response(
           JSON.stringify({
