@@ -892,12 +892,15 @@ Deno.serve(async (req) => {
         );
       }
 
-      // ── KICK NON-SUBSCRIBERS FROM ALL CHANNELS ──
+      // ── KICK NON-SUBSCRIBERS FROM CHANNELS ──
       case "kick_non_subscribers": {
-        const { data: allChsNS } = await sb.from("telegram_channels")
+        const { target_channel_id } = params;
+        let qNS = sb.from("telegram_channels")
           .select("id, channel_id, channel_name")
           .eq("owner_id", user.id)
           .eq("bot_token_id", botTokenId);
+        if (target_channel_id) qNS = qNS.eq("id", target_channel_id);
+        const { data: allChsNS } = await qNS;
 
         const chListNS = (allChsNS || []).filter((c: any) => c.channel_id);
         if (chListNS.length === 0) {
