@@ -1116,10 +1116,13 @@ Deno.serve(async (req) => {
 
       // ── KICK ALL MEMBERS FROM CHANNELS (EXCEPT ADMINS) ──
       case "kick_all_members": {
-        const { data: allChsKA } = await sb.from("telegram_channels")
+        const { target_channel_id: targetChKA } = params;
+        let qKA = sb.from("telegram_channels")
           .select("id, channel_id, channel_name")
           .eq("owner_id", user.id)
           .eq("bot_token_id", botTokenId);
+        if (targetChKA) qKA = qKA.eq("id", targetChKA);
+        const { data: allChsKA } = await qKA;
 
         const chListKA = (allChsKA || []).filter((c: any) => c.channel_id);
         if (chListKA.length === 0) {
