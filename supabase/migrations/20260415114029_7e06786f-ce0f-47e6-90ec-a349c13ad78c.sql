@@ -1,0 +1,1 @@
+ALTER TABLE public.bot_tokens ADD COLUMN free_trial_days integer NOT NULL DEFAULT 3;
