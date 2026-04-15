@@ -16,7 +16,7 @@ async function getBotSettingsByToken(token: string) {
   const { data } = await sb
     .from("bot_tokens")
     .select(
-      "id, user_id, admin_telegram_id, non_subscriber_message, public_channel_id, subscribers_channel_id, free_trial_enabled, mandatory_channel_id, free_trial_channel_ids",
+      "id, user_id, admin_telegram_id, non_subscriber_message, public_channel_id, subscribers_channel_id, free_trial_enabled, free_trial_days, mandatory_channel_id, free_trial_channel_ids",
     )
     .eq("token", token)
     .maybeSingle();
@@ -453,6 +453,7 @@ async function handleUpdate(
   publicChannelId: string | null = null,
   subscribersChannelId: string | null = null,
   freeTrialEnabled: boolean = false,
+  freeTrialDays: number = 3,
   mandatoryChannelId: string | null = null,
   freeTrialChannelIds: string[] = [],
 ) {
@@ -1075,7 +1076,7 @@ async function handleUpdate(
               ).maybeSingle();
             if (!existingTrial) {
               buttons.push([{
-                text: "🎁 تجربة مجانية (3 أيام)",
+                text: `🎁 تجربة مجانية (${freeTrialDays} ${freeTrialDays === 1 ? 'يوم' : 'أيام'})`,
                 callback_data: "activate_free_trial",
               }]);
             }
@@ -1916,7 +1917,7 @@ async function handleUpdate(
         return;
       }
 
-      const expiresAt = new Date(Date.now() + 3 * 86400000).toISOString();
+      const expiresAt = new Date(Date.now() + freeTrialDays * 86400000).toISOString();
 
       // Save trial user
       await sb.from("free_trial_users").insert({
@@ -2632,6 +2633,7 @@ Deno.serve(async (req) => {
         settings.public_channel_id,
         settings.subscribers_channel_id,
         settings.free_trial_enabled ?? false,
+        settings.free_trial_days ?? 3,
         settings.mandatory_channel_id ?? null,
         settings.free_trial_channel_ids ?? [],
       );

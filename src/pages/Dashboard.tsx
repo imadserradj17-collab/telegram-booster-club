@@ -58,6 +58,7 @@ interface BotSettings {
   public_channel_id: string | null;
   subscribers_channel_id: string | null;
   free_trial_enabled: boolean;
+  free_trial_days: number;
   mandatory_channel_id: string | null;
   auto_scan_enabled: boolean;
   auto_scan_interval: number;
@@ -140,6 +141,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   } | null>(null);
   const [kickAllActiveChannel, setKickAllActiveChannel] = useState<number>(-1);
   const [freeTrialEnabled, setFreeTrialEnabled] = useState(false);
+  const [freeTrialDays, setFreeTrialDays] = useState(3);
   const [freeTrialUsers, setFreeTrialUsers] = useState<FreeTrialUser[]>([]);
   const [freeTrialChannelIds, setFreeTrialChannelIds] = useState<string[]>([]);
   const [checkingBotAdmin, setCheckingBotAdmin] = useState(false);
@@ -177,6 +179,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
       setPublicChannelId((settingsRes.data as any).public_channel_id || null);
       setSubscribersChannelId((settingsRes.data as any).subscribers_channel_id || null);
       setFreeTrialEnabled((settingsRes.data as any).free_trial_enabled ?? false);
+      setFreeTrialDays((settingsRes.data as any).free_trial_days ?? 3);
       setMandatoryChannelId((settingsRes.data as any).mandatory_channel_id || null);
       setFreeTrialChannelIds((settingsRes.data as any).free_trial_channel_ids || []);
       setAutoScanEnabled((settingsRes.data as any).auto_scan_enabled ?? false);
@@ -243,7 +246,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     if (!botSettings) return;
     setSavingSettings(true);
     try {
-      const updates: any = { non_subscriber_message: nonSubMessage.trim(), public_channel_id: publicChannelId || null, subscribers_channel_id: subscribersChannelId || null, free_trial_enabled: freeTrialEnabled, mandatory_channel_id: mandatoryChannelId || null, free_trial_channel_ids: freeTrialChannelIds, auto_scan_enabled: autoScanEnabled, auto_scan_interval: autoScanInterval };
+      const updates: any = { non_subscriber_message: nonSubMessage.trim(), public_channel_id: publicChannelId || null, subscribers_channel_id: subscribersChannelId || null, free_trial_enabled: freeTrialEnabled, free_trial_days: freeTrialDays, mandatory_channel_id: mandatoryChannelId || null, free_trial_channel_ids: freeTrialChannelIds, auto_scan_enabled: autoScanEnabled, auto_scan_interval: autoScanInterval };
       updates.admin_telegram_id = adminId.trim() ? parseInt(adminId.trim()) : null;
       const { error } = await supabase.from("bot_tokens").update(updates).eq("id", botSettings.id);
       if (error) throw error;
@@ -1781,7 +1784,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                       <Zap className="w-5 h-5 text-primary" />
                     </div>
                     <div>
-                      <h3 className="text-sm font-semibold text-foreground">{t("dash.freeTrialEnabled")}</h3>
+                    <h3 className="text-sm font-semibold text-foreground">{t("dash.freeTrialEnabled")}</h3>
                       <p className="text-xs text-muted-foreground mt-0.5">{t("dash.freeTrialHint")}</p>
                     </div>
                   </div>
@@ -1798,6 +1801,41 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                     }
                   }} />
                 </div>
+
+                {/* Free Trial Days Setting */}
+                {freeTrialEnabled && (
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <Calendar className="w-5 h-5 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-sm font-semibold text-foreground">{lang === "ar" ? "مدة التجربة المجانية (بالأيام)" : "Free trial duration (days)"}</h3>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Input
+                          type="number"
+                          min={1}
+                          max={365}
+                          value={freeTrialDays}
+                          onChange={(e) => setFreeTrialDays(Math.max(1, Math.min(365, parseInt(e.target.value) || 1)))}
+                          className="w-20 h-8 text-sm"
+                        />
+                        <span className="text-xs text-muted-foreground">{lang === "ar" ? "يوم" : "days"}</span>
+                        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={async () => {
+                          if (!botSettings) return;
+                          const { error } = await supabase.from("bot_tokens").update({ free_trial_days: freeTrialDays } as any).eq("id", botSettings.id);
+                          if (error) {
+                            toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+                          } else {
+                            toast({ title: lang === "ar" ? `تم تحديث مدة التجربة إلى ${freeTrialDays} يوم ✅` : `Trial duration updated to ${freeTrialDays} days ✅` });
+                          }
+                        }}>
+                          <Save className="w-3 h-3 mr-1" />
+                          {t("common.save")}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Active Trial Users */}

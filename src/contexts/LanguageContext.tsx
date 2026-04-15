@@ -264,8 +264,8 @@ const translations: Record<string, Record<Lang, string>> = {
 
   // Free Trial
   "dash.freeTrial": { ar: "العرض المجاني", en: "Free Trial" },
-  "dash.freeTrialEnabled": { ar: "تفعيل التجربة المجانية (3 أيام)", en: "Enable free trial (3 days)" },
-  "dash.freeTrialHint": { ar: "عند التفعيل، يظهر زر في البوت لغير المشتركين لتجربة مجانية لمدة 3 أيام (مرة واحدة فقط)", en: "When enabled, non-subscribers see a button in the bot for a 3-day free trial (one-time only)" },
+  "dash.freeTrialEnabled": { ar: "تفعيل التجربة المجانية", en: "Enable free trial" },
+  "dash.freeTrialHint": { ar: "عند التفعيل، يظهر زر في البوت لغير المشتركين لتجربة مجانية (مرة واحدة فقط)", en: "When enabled, non-subscribers see a button in the bot for a free trial (one-time only)" },
   "dash.freeTrialUsers": { ar: "مستخدمو التجربة المجانية", en: "Free Trial Users" },
   "dash.freeTrialCount": { ar: "عدد المستفيدين", en: "Trial users" },
   "dash.noTrialUsers": { ar: "لا يوجد مستفيدون من التجربة المجانية", en: "No free trial users" },
