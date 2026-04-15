@@ -1871,7 +1871,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   <Button variant="ghost" size="icon"
                     className="text-muted-foreground hover:text-destructive h-8 w-8 flex-shrink-0"
                     onClick={async () => {
-                      if (!confirm(lang === "ar" ? "هل تريد حذف هذا السجل؟ (سيتمكن من التجربة المجانية مرة أخرى)" : "Delete this record? (User will be able to use free trial again)")) return;
+                      
                       try {
                         const { error } = await supabase.from("free_trial_users").delete().eq("id", u.id);
                         if (error) throw error;
