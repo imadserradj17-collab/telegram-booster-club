@@ -48,6 +48,7 @@ export type Database = {
           auto_scan_interval: number
           created_at: string
           free_trial_channel_ids: Json | null
+          free_trial_days: number
           free_trial_enabled: boolean
           id: string
           mandatory_channel_id: string | null
@@ -64,6 +65,7 @@ export type Database = {
           auto_scan_interval?: number
           created_at?: string
           free_trial_channel_ids?: Json | null
+          free_trial_days?: number
           free_trial_enabled?: boolean
           id?: string
           mandatory_channel_id?: string | null
@@ -80,6 +82,7 @@ export type Database = {
           auto_scan_interval?: number
           created_at?: string
           free_trial_channel_ids?: Json | null
+          free_trial_days?: number
           free_trial_enabled?: boolean
           id?: string
           mandatory_channel_id?: string | null
