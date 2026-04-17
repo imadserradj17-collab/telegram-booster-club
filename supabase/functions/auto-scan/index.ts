@@ -77,8 +77,8 @@ Deno.serve(async (_req) => {
         
         if (isActive) {
           const assignedChannels = subChannelMap.get(s.id);
-          if (!assignedChannels || assignedChannels.size === 0) {
-            // No specific assignment = access to ALL channels
+          // Full-access tier: no assignments OR 10+ channels assigned = access to ALL channels (incl. new ones)
+          if (!assignedChannels || assignedChannels.size === 0 || assignedChannels.size >= 10) {
             for (const ch of channels) {
               perChannelActiveUsers.get(ch.id)!.add(s.telegram_user_id);
             }

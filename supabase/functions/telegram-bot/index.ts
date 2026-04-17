@@ -764,8 +764,8 @@ async function handleUpdate(
         let hasAccess = assignedChannelIds.length === 0 ||
           assignedChannelIds.includes(myChannel.id);
 
-        // If subscriber has 5+ channels assigned, auto-assign any new channel
-        if (!hasAccess && assignedChannelIds.length >= 5) {
+        // If subscriber has 10+ channels assigned, treat as full access (auto-assign any new channel)
+        if (!hasAccess && assignedChannelIds.length >= 10) {
           await sb.from("subscriber_channels").insert({
             subscriber_id: sub.id,
             channel_id: myChannel.id,
@@ -1641,10 +1641,11 @@ async function handleUpdate(
             const autoAssignRows: any[] = [];
             for (const sub of allSubs) {
               const subChannels = channelMap[sub.id] || [];
-              if (
-                subChannels.length >= otherChannelIds.length &&
-                otherChannelIds.every((id: string) => subChannels.includes(id))
-              ) {
+              // Auto-assign if: subscriber owns ALL existing channels, OR has 10+ channels (full-access tier)
+              const hasAllChannels = subChannels.length >= otherChannelIds.length &&
+                otherChannelIds.every((id: string) => subChannels.includes(id));
+              const hasFullAccessTier = subChannels.length >= 10;
+              if (hasAllChannels || hasFullAccessTier) {
                 autoAssignRows.push({
                   subscriber_id: sub.id,
                   channel_id: newChannelId,
