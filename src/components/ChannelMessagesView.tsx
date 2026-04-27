@@ -84,6 +84,57 @@ export default function ChannelMessagesView({ channels }: { channels: Channel[] 
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
   }, [filterChannelId, loadMessages]);
 
+  // ─── REALTIME: subscribe to new channel_messages ───
+  useEffect(() => {
+    const channel = supabase
+      .channel("channel_messages_live")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "channel_messages" },
+        (payload) => {
+          const newMsg = payload.new as ChannelMessage;
+          // Filter by selected channel if not "all"
+          if (filterChannelId !== "__all__" && newMsg.channel_id !== filterChannelId) return;
+          // Filter by search if active
+          if (search.trim()) {
+            const q = search.toLowerCase();
+            const text = (newMsg.message_text || "").toLowerCase();
+            const cap = (newMsg.media_caption || "").toLowerCase();
+            if (!text.includes(q) && !cap.includes(q)) return;
+          }
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === newMsg.id)) return prev;
+            return [newMsg, ...prev];
+          });
+          setTotalCount((c) => c + 1);
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "channel_messages" },
+        (payload) => {
+          const upd = payload.new as ChannelMessage;
+          setMessages((prev) =>
+            prev.map((m) => (m.id === upd.id ? { ...m, ...upd } : m)),
+          );
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "channel_messages" },
+        (payload) => {
+          const del = payload.old as { id: string };
+          setMessages((prev) => prev.filter((m) => m.id !== del.id));
+          setTotalCount((c) => Math.max(0, c - 1));
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [filterChannelId, search]);
+
   // Load media thumbnails for visible messages
   useEffect(() => {
     if (!messages.length) return;
