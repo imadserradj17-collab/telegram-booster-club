@@ -162,6 +162,15 @@ export default function ChannelMessagesView({ channels }: { channels: Channel[] 
             return [newMsg, ...prev];
           });
           setTotalCount((c) => c + 1);
+          // Auto-scroll to bottom if user is near the bottom (within 200px)
+          requestAnimationFrame(() => {
+            const el = scrollRef.current;
+            if (!el) return;
+            const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+            if (distanceFromBottom < 200) {
+              el.scrollTop = el.scrollHeight;
+            }
+          });
         },
       )
       .on(
