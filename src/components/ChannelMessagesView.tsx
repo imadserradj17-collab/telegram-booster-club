@@ -233,8 +233,15 @@ export default function ChannelMessagesView({ channels }: { channels: Channel[] 
             <Tv className="h-5 w-5" />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-foreground text-sm">
+            <h3 className="font-semibold text-foreground text-sm flex items-center gap-2">
               {lang === "ar" ? "📥 سجل الرسائل" : "📥 Messages feed"}
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-success">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
+                </span>
+                LIVE
+              </span>
             </h3>
             <p className="text-xs text-muted-foreground">
               {totalCount} {lang === "ar" ? "رسالة" : "messages"}
