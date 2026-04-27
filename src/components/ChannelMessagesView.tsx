@@ -6,6 +6,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import {
   Tv, Search, Image as ImageIcon, Video, FileText,
   Music, Mic, Film, Sticker, Loader2, Download, Play, RefreshCw,
+  X, Pause,
 } from "lucide-react";
 
 interface Channel {
