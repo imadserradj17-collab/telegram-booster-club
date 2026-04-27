@@ -407,6 +407,18 @@ export default function ChannelMessagesView({ channels }: { channels: Channel[] 
           <Button
             variant="outline"
             size="sm"
+            onClick={handleDeleteOld}
+            disabled={deletingOld}
+            title={lang === "ar" ? "حذف الرسائل الأقدم من 48 ساعة" : "Delete messages older than 48h"}
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
+          >
+            {deletingOld
+              ? <Loader2 className="h-4 w-4 animate-spin" />
+              : <><Trash2 className="h-4 w-4" /><span className="hidden sm:inline ms-1 text-xs">{lang === "ar" ? "حذف +48س" : "Delete >48h"}</span></>}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => loadMessages(0, false)}
             disabled={loading}
           >
