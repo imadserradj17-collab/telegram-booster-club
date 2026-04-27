@@ -458,20 +458,52 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   }, [subscribers, lang]);
 
   // ─── Subscriber Channel Badges ───
+  // Rule: a subscriber assigned to more than 5 channels is treated as having access to ALL channels.
+  const FULL_ACCESS_THRESHOLD = 5;
   const SubChannelBadges = ({ subId }: { subId: string }) => {
     const chans = subscriberChannels[subId];
-    if (!chans || chans.length === 0) return <span className="text-xs text-muted-foreground">—</span>;
-    if (chans.length === channels.length && channels.length > 0) {
-      return <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px] hover:bg-primary/20">{t("subs.allAssigned")}</Badge>;
+    const count = chans?.length ?? 0;
+    const totalChannels = channels.length;
+    const hasAll =
+      (count === totalChannels && totalChannels > 0) ||
+      count > FULL_ACCESS_THRESHOLD;
+
+    if (count === 0) {
+      return (
+        <span className="text-[10px] text-muted-foreground inline-flex items-center gap-1">
+          <Tv className="w-3 h-3" /> 0 / {totalChannels}
+        </span>
+      );
     }
+
     return (
-      <div className="flex flex-wrap gap-1">
-        {chans.map(ch => (
-          <Badge key={ch.id} variant="outline" className="text-[10px] border-border/50">{ch.channel_name}</Badge>
-        ))}
+      <div className="flex flex-wrap items-center gap-1">
+        <Badge
+          variant="outline"
+          className="text-[10px] border-primary/40 bg-primary/5 text-primary inline-flex items-center gap-1"
+          title={lang === "ar" ? "عدد القنوات المشترك بها" : "Subscribed channels"}
+        >
+          <Tv className="w-3 h-3" /> {count} / {totalChannels}
+        </Badge>
+        {hasAll ? (
+          <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px] hover:bg-primary/20">
+            {t("subs.allAssigned")}
+          </Badge>
+        ) : (
+          chans!.map((ch) => (
+            <Badge
+              key={ch.id}
+              variant="outline"
+              className="text-[10px] border-border/50"
+            >
+              {ch.channel_name}
+            </Badge>
+          ))
+        )}
       </div>
     );
   };
+
 
   // ─── Mobile Card ───
   const SubCard = ({ sub }: { sub: TelegramSubscriber }) => {
