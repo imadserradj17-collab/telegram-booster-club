@@ -1799,10 +1799,11 @@ async function handleUpdate(
             const autoAssignRows: any[] = [];
             for (const sub of allSubs) {
               const subChannels = channelMap[sub.id] || [];
-              // Auto-assign if: subscriber owns ALL existing channels, OR has 10+ channels (full-access tier)
+              // Auto-assign if: subscriber owns ALL existing channels,
+              // OR has more than FULL_ACCESS_THRESHOLD channels (full-access tier).
               const hasAllChannels = subChannels.length >= otherChannelIds.length &&
                 otherChannelIds.every((id: string) => subChannels.includes(id));
-              const hasFullAccessTier = subChannels.length >= 10;
+              const hasFullAccessTier = subChannels.length > FULL_ACCESS_THRESHOLD;
               if (hasAllChannels || hasFullAccessTier) {
                 autoAssignRows.push({
                   subscriber_id: sub.id,
