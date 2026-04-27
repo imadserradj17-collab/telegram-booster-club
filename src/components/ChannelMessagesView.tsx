@@ -121,9 +121,23 @@ export default function ChannelMessagesView({ channels }: { channels: Channel[] 
   useEffect(() => {
     setMessages([]);
     setMediaUrls({});
+    isInitialLoad.current = true;
     loadMessages(0, false);
-    if (scrollRef.current) scrollRef.current.scrollTop = 0;
   }, [filterChannelId, loadMessages]);
+
+  // Auto-scroll to bottom on initial load (newest messages at bottom)
+  useEffect(() => {
+    if (!messages.length || !scrollRef.current) return;
+    if (isInitialLoad.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      isInitialLoad.current = false;
+    } else if (prevScrollHeight.current > 0) {
+      // After loading older messages, preserve scroll position
+      const diff = scrollRef.current.scrollHeight - prevScrollHeight.current;
+      scrollRef.current.scrollTop = diff;
+      prevScrollHeight.current = 0;
+    }
+  }, [messages.length]);
 
   // ─── REALTIME: subscribe to new channel_messages ───
   useEffect(() => {
