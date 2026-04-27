@@ -872,6 +872,127 @@ async function handleUpdate(
     return;
   }
 
+  // ─── CHANNEL POSTS (archive messages from monitored channels) ───
+  if (update.channel_post || update.edited_channel_post) {
+    const post = update.channel_post || update.edited_channel_post;
+    try {
+      const tgChannelId = post.chat.id;
+      // Find matching channel record for this bot
+      const { data: chRow } = await sb.from("telegram_channels")
+        .select("id")
+        .eq("bot_token_id", botTokenId)
+        .eq("channel_id", tgChannelId)
+        .maybeSingle();
+
+      if (chRow) {
+        // Detect media type
+        let mediaType: string | null = null;
+        let fileId: string | null = null;
+        let fileUniqueId: string | null = null;
+        let thumbnail: string | null = null;
+        let mimeType: string | null = null;
+        let fileSize: number | null = null;
+        let duration: number | null = null;
+        let width: number | null = null;
+        let height: number | null = null;
+
+        if (post.photo && post.photo.length) {
+          mediaType = "photo";
+          const largest = post.photo[post.photo.length - 1];
+          fileId = largest.file_id;
+          fileUniqueId = largest.file_unique_id;
+          width = largest.width;
+          height = largest.height;
+          fileSize = largest.file_size || null;
+          thumbnail = post.photo[0]?.file_id || null;
+        } else if (post.video) {
+          mediaType = "video";
+          fileId = post.video.file_id;
+          fileUniqueId = post.video.file_unique_id;
+          mimeType = post.video.mime_type || null;
+          fileSize = post.video.file_size || null;
+          duration = post.video.duration || null;
+          width = post.video.width || null;
+          height = post.video.height || null;
+          thumbnail = post.video.thumbnail?.file_id || null;
+        } else if (post.document) {
+          mediaType = "document";
+          fileId = post.document.file_id;
+          fileUniqueId = post.document.file_unique_id;
+          mimeType = post.document.mime_type || null;
+          fileSize = post.document.file_size || null;
+          thumbnail = post.document.thumbnail?.file_id || null;
+        } else if (post.audio) {
+          mediaType = "audio";
+          fileId = post.audio.file_id;
+          fileUniqueId = post.audio.file_unique_id;
+          mimeType = post.audio.mime_type || null;
+          fileSize = post.audio.file_size || null;
+          duration = post.audio.duration || null;
+        } else if (post.voice) {
+          mediaType = "voice";
+          fileId = post.voice.file_id;
+          fileUniqueId = post.voice.file_unique_id;
+          mimeType = post.voice.mime_type || null;
+          fileSize = post.voice.file_size || null;
+          duration = post.voice.duration || null;
+        } else if (post.video_note) {
+          mediaType = "video_note";
+          fileId = post.video_note.file_id;
+          fileUniqueId = post.video_note.file_unique_id;
+          duration = post.video_note.duration || null;
+        } else if (post.animation) {
+          mediaType = "animation";
+          fileId = post.animation.file_id;
+          fileUniqueId = post.animation.file_unique_id;
+          mimeType = post.animation.mime_type || null;
+          fileSize = post.animation.file_size || null;
+          width = post.animation.width || null;
+          height = post.animation.height || null;
+          thumbnail = post.animation.thumbnail?.file_id || null;
+        } else if (post.sticker) {
+          mediaType = "sticker";
+          fileId = post.sticker.file_id;
+          fileUniqueId = post.sticker.file_unique_id;
+          width = post.sticker.width || null;
+          height = post.sticker.height || null;
+          thumbnail = post.sticker.thumbnail?.file_id || null;
+        }
+
+        const senderName = post.author_signature ||
+          post.sender_chat?.title ||
+          post.chat.title ||
+          null;
+
+        await sb.from("channel_messages").upsert({
+          bot_token_id: botTokenId,
+          owner_id: ownerId,
+          channel_id: chRow.id,
+          telegram_channel_id: tgChannelId,
+          telegram_message_id: post.message_id,
+          message_text: post.text || null,
+          media_type: mediaType,
+          media_file_id: fileId,
+          media_file_unique_id: fileUniqueId,
+          media_thumbnail: thumbnail,
+          media_caption: post.caption || null,
+          media_mime_type: mimeType,
+          media_file_size: fileSize,
+          media_duration: duration,
+          media_width: width,
+          media_height: height,
+          sender_name: senderName,
+          sender_username: post.sender_chat?.username || null,
+          message_date: new Date((post.date || 0) * 1000).toISOString(),
+          raw_data: post,
+        }, { onConflict: "channel_id,telegram_message_id" });
+      }
+    } catch (e) {
+      console.error("channel_post archive error:", e);
+    }
+    return;
+  }
+
   // ─── MESSAGES ───
   if (update.message) {
     const msg = update.message;
