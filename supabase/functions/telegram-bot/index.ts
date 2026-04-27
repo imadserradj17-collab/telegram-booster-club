@@ -800,8 +800,9 @@ async function handleUpdate(
         let hasAccess = assignedChannelIds.length === 0 ||
           assignedChannelIds.includes(myChannel.id);
 
-        // If subscriber has 10+ channels assigned, treat as full access (auto-assign any new channel)
-        if (!hasAccess && assignedChannelIds.length >= 10) {
+        // If subscriber has more than FULL_ACCESS_THRESHOLD channels assigned,
+        // treat as full access (auto-assign any new channel).
+        if (!hasAccess && assignedChannelIds.length > FULL_ACCESS_THRESHOLD) {
           await sb.from("subscriber_channels").insert({
             subscriber_id: sub.id,
             channel_id: myChannel.id,
