@@ -20,8 +20,9 @@ import {
   LogOut, Trash2, RefreshCw, Users, Zap, Bot, UserPlus, Clock,
   Settings, Key, Shield, MessageSquare, Save, Loader2, User, Calendar, Hash,
   LayoutDashboard, ChevronLeft, ChevronRight, Search, AlertTriangle, Menu, X,
-  BarChart3, Tv, Plus, Send, Link, Edit, CheckCircle, XCircle, FileText,
+  BarChart3, Tv, Plus, Send, Link, Edit, CheckCircle, XCircle, FileText, MessageCircle,
 } from "lucide-react";
+import ChannelMessagesView from "@/components/ChannelMessagesView";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useLanguage } from "@/contexts/LanguageContext";
