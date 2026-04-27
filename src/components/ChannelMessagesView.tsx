@@ -81,12 +81,15 @@ export default function ChannelMessagesView({ channels }: { channels: Channel[] 
   const loadMessages = useCallback(
     async (channelId: string, offset = 0, append = false) => {
       setLoading(true);
-      const { data } = await supabase
+      let query = supabase
         .from("channel_messages")
         .select("*")
-        .eq("channel_id", channelId)
         .order("message_date", { ascending: false })
         .range(offset, offset + PAGE_SIZE - 1);
+      if (channelId !== "__all__") {
+        query = query.eq("channel_id", channelId);
+      }
+      const { data } = await query;
       const rows = (data as ChannelMessage[]) || [];
       setHasMore(rows.length === PAGE_SIZE);
       setMessages((prev) => (append ? [...prev, ...rows] : rows));
