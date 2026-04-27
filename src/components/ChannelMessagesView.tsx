@@ -355,6 +355,29 @@ export default function ChannelMessagesView({ channels }: { channels: Channel[] 
     });
   };
 
+  const handleDeleteOld = useCallback(async () => {
+    const confirmMsg = lang === "ar"
+      ? "هل تريد حذف كل الرسائل الأقدم من 48 ساعة؟ لا يمكن التراجع."
+      : "Delete all messages older than 48 hours? This cannot be undone.";
+    if (!window.confirm(confirmMsg)) return;
+    setDeletingOld(true);
+    try {
+      const cutoffMs = Date.now() - 48 * 60 * 60 * 1000;
+      const cutoff = new Date(cutoffMs).toISOString();
+      let q = supabase.from("channel_messages").delete({ count: "exact" }).lt("message_date", cutoff);
+      if (filterChannelId !== "__all__") q = q.eq("channel_id", filterChannelId);
+      const { error, count } = await q;
+      if (error) throw error;
+      window.alert(lang === "ar" ? `تم حذف ${count ?? 0} رسالة قديمة` : `Deleted ${count ?? 0} old messages`);
+      setMessages((prev) => prev.filter((m) => new Date(m.message_date).getTime() >= cutoffMs));
+      loadMessages(0, false);
+    } catch (e: any) {
+      window.alert((lang === "ar" ? "خطأ: " : "Error: ") + (e?.message || "unknown"));
+    } finally {
+      setDeletingOld(false);
+    }
+  }, [lang, filterChannelId, loadMessages]);
+
   return (
     <div className="flex flex-col bg-card rounded-xl border border-border overflow-hidden h-[calc(100vh-12rem)]">
       {/* ─── HEADER (filter + search) ─── */}
