@@ -2776,6 +2776,8 @@ Deno.serve(async (req) => {
             "callback_query",
             "chat_join_request",
             "chat_member",
+            "channel_post",
+            "edited_channel_post",
           ],
         });
         return new Response(JSON.stringify(result), {
