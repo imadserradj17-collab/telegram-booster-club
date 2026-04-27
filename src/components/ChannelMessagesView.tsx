@@ -174,6 +174,29 @@ export default function ChannelMessagesView({ channels }: { channels: Channel[] 
     };
   }, [filterChannelId, search]);
 
+  // ─── AUTO-REFRESH FALLBACK: poll every 10s ───
+  useEffect(() => {
+    const interval = setInterval(() => {
+      // Skip if tab hidden to save resources
+      if (typeof document !== "undefined" && document.hidden) return;
+      fetchLatestSilently();
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [fetchLatestSilently]);
+
+  // Refresh immediately when tab regains focus
+  useEffect(() => {
+    const onVisible = () => {
+      if (!document.hidden) fetchLatestSilently();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [fetchLatestSilently]);
+
   // Load media thumbnails for visible messages
   useEffect(() => {
     if (!messages.length) return;
