@@ -518,21 +518,6 @@ export default function ChannelMessagesView({ channels }: { channels: Channel[] 
                 </div>
               );
             })}
-
-            {hasMore && (
-              <div className="text-center pt-2 pb-4">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => loadMessages(messages.length, true)}
-                  disabled={loading}
-                >
-                  {loading
-                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                    : (lang === "ar" ? "تحميل المزيد" : "Load more")}
-                </Button>
-              </div>
-            )}
           </>
         )}
       </div>
