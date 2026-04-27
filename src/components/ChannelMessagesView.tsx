@@ -386,9 +386,29 @@ export default function ChannelMessagesView({ channels }: { channels: Channel[] 
           </div>
         ) : (
           <>
-            {messages.map((m, idx) => {
+            {/* Load older button at TOP (chronological order: oldest top, newest bottom) */}
+            {hasMore && (
+              <div className="text-center pt-2 pb-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (scrollRef.current) {
+                      prevScrollHeight.current = scrollRef.current.scrollHeight;
+                    }
+                    loadMessages(messages.length, true);
+                  }}
+                  disabled={loading}
+                >
+                  {loading
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : (lang === "ar" ? "⬆️ تحميل الأقدم" : "⬆️ Load older")}
+                </Button>
+              </div>
+            )}
+            {[...messages].reverse().map((m, idx, arr) => {
               const ch = channelMap[m.channel_id];
-              const prev = messages[idx - 1];
+              const prev = arr[idx - 1];
               const showDayDivider =
                 !prev || formatDayLabel(prev.message_date) !== formatDayLabel(m.message_date);
 
