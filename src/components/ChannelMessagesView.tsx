@@ -481,62 +481,154 @@ export default function ChannelMessagesView({ channels }: { channels: Channel[] 
                       </span>
                     </header>
 
-                    {/* Media */}
-                    {m.media_type && ["photo", "video", "animation", "sticker"].includes(m.media_type) && (
+                    {/* PHOTO / STICKER → click to open lightbox */}
+                    {m.media_type && ["photo", "sticker"].includes(m.media_type) && (
                       <div className="relative bg-secondary/20 flex items-center justify-center">
                         {mediaUrls[m.id] ? (
-                          m.media_type === "video" || m.media_type === "animation" ? (
-                            <div className="relative w-full">
-                              <img
-                                src={mediaUrls[m.id]}
-                                alt=""
-                                className="w-full max-h-[420px] object-cover cursor-pointer"
-                                onClick={() => downloadFullMedia(m)}
-                              />
-                              <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                                <div className="bg-black/60 rounded-full p-3">
-                                  <Play className="h-6 w-6 text-white" fill="white" />
-                                </div>
-                              </div>
-                            </div>
-                          ) : (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const full = await loadFullMedia(m);
+                              if (full) setLightbox({ url: full, type: "image" });
+                            }}
+                            className="block w-full group relative"
+                          >
                             <img
                               src={mediaUrls[m.id]}
-                              alt=""
-                              className="w-full max-h-[420px] object-contain cursor-pointer"
-                              onClick={() => downloadFullMedia(m)}
+                              alt={m.media_caption || ""}
+                              loading="lazy"
+                              className={`w-full ${m.media_type === "sticker" ? "max-h-[280px] object-contain p-4" : "max-h-[480px] object-contain"} transition-transform group-hover:scale-[1.01]`}
                             />
-                          )
+                            {loadingFull[m.id] && (
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                                <Loader2 className="h-8 w-8 animate-spin text-white" />
+                              </div>
+                            )}
+                          </button>
                         ) : (
-                          <div className="w-full h-40 flex items-center justify-center">
+                          <div className="w-full h-48 flex items-center justify-center">
                             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                           </div>
                         )}
                       </div>
                     )}
 
-                    {m.media_type && ["document", "audio", "voice", "video_note"].includes(m.media_type) && (
-                      <div
-                        className="flex items-center gap-3 p-3 cursor-pointer hover:bg-secondary/30"
-                        onClick={() => downloadFullMedia(m)}
+                    {/* VIDEO / GIF → inline HTML5 player */}
+                    {m.media_type && ["video", "animation", "video_note"].includes(m.media_type) && (
+                      <div className="relative bg-black flex items-center justify-center">
+                        {fullMediaUrls[m.id] ? (
+                          <video
+                            src={fullMediaUrls[m.id]}
+                            poster={mediaUrls[m.id]}
+                            controls
+                            controlsList="nodownload"
+                            playsInline
+                            preload="metadata"
+                            loop={m.media_type === "animation"}
+                            autoPlay={m.media_type === "animation"}
+                            muted={m.media_type === "animation"}
+                            className={`w-full ${m.media_type === "video_note" ? "max-h-[320px] rounded-full object-cover aspect-square mx-auto" : "max-h-[480px]"}`}
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => loadFullMedia(m)}
+                            disabled={loadingFull[m.id]}
+                            className="relative w-full block group"
+                          >
+                            {mediaUrls[m.id] ? (
+                              <img
+                                src={mediaUrls[m.id]}
+                                alt=""
+                                className="w-full max-h-[480px] object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-56 bg-secondary/30" />
+                            )}
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/40 group-hover:bg-black/30 transition">
+                              {loadingFull[m.id] ? (
+                                <Loader2 className="h-12 w-12 text-white animate-spin" />
+                              ) : (
+                                <div className="bg-black/70 backdrop-blur-sm rounded-full p-4 group-hover:scale-110 transition-transform">
+                                  <Play className="h-7 w-7 text-white" fill="white" />
+                                </div>
+                              )}
+                            </div>
+                            {m.media_duration && (
+                              <span className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-0.5 rounded">
+                                {formatDuration(m.media_duration)}
+                              </span>
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* VOICE / AUDIO → inline player */}
+                    {m.media_type && ["voice", "audio"].includes(m.media_type) && (
+                      <div className="p-3 bg-gradient-to-br from-primary/5 to-primary/10 border-y border-border">
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary flex-shrink-0">
+                            {m.media_type === "voice" ? <Mic className="h-5 w-5" /> : <Music className="h-5 w-5" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium text-foreground">
+                              {m.media_type === "voice"
+                                ? (lang === "ar" ? "رسالة صوتية" : "Voice message")
+                                : (lang === "ar" ? "ملف صوتي" : "Audio")}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground">
+                              {[formatDuration(m.media_duration), formatSize(m.media_file_size)]
+                                .filter(Boolean).join(" • ")}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => downloadFile(m)}
+                            className="text-muted-foreground hover:text-foreground p-1.5 rounded-full hover:bg-secondary/50 transition"
+                            title={lang === "ar" ? "تنزيل" : "Download"}
+                          >
+                            <Download className="h-4 w-4" />
+                          </button>
+                        </div>
+                        {fullMediaUrls[m.id] ? (
+                          <audio
+                            src={fullMediaUrls[m.id]}
+                            controls
+                            controlsList="nodownload"
+                            preload="metadata"
+                            className="w-full h-10"
+                          />
+                        ) : (
+                          <div className="flex items-center justify-center h-10 bg-secondary/30 rounded">
+                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* DOCUMENT → download card */}
+                    {m.media_type === "document" && (
+                      <button
+                        type="button"
+                        className="flex items-center gap-3 p-3 cursor-pointer hover:bg-secondary/30 w-full text-left"
+                        onClick={() => downloadFile(m)}
+                        disabled={loadingFull[m.id]}
                       >
-                        <div className="h-11 w-11 rounded-full bg-primary/15 flex items-center justify-center text-primary flex-shrink-0">
-                          {mediaIcon(m.media_type)}
+                        <div className="h-11 w-11 rounded-lg bg-primary/15 flex items-center justify-center text-primary flex-shrink-0">
+                          {loadingFull[m.id] ? <Loader2 className="h-5 w-5 animate-spin" /> : <FileText className="h-5 w-5" />}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-medium text-foreground truncate">
-                            {m.media_type === "voice" ? (lang === "ar" ? "رسالة صوتية" : "Voice message")
-                              : m.media_type === "audio" ? (lang === "ar" ? "ملف صوتي" : "Audio")
-                              : m.media_type === "video_note" ? (lang === "ar" ? "فيديو دائري" : "Video note")
-                              : (lang === "ar" ? "ملف" : "Document")}
+                            {lang === "ar" ? "ملف" : "Document"}
                           </div>
-                          <div className="text-xs text-muted-foreground">
-                            {[formatSize(m.media_file_size), formatDuration(m.media_duration), m.media_mime_type]
+                          <div className="text-xs text-muted-foreground truncate">
+                            {[formatSize(m.media_file_size), m.media_mime_type]
                               .filter(Boolean).join(" • ")}
                           </div>
                         </div>
                         <Download className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                      </div>
+                      </button>
                     )}
 
                     {/* Text */}
