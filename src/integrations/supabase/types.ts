@@ -200,6 +200,89 @@ export type Database = {
           },
         ]
       }
+      channel_messages: {
+        Row: {
+          bot_token_id: string
+          channel_id: string
+          created_at: string
+          id: string
+          media_caption: string | null
+          media_duration: number | null
+          media_file_id: string | null
+          media_file_size: number | null
+          media_file_unique_id: string | null
+          media_height: number | null
+          media_mime_type: string | null
+          media_thumbnail: string | null
+          media_type: string | null
+          media_width: number | null
+          message_date: string
+          message_text: string | null
+          owner_id: string
+          raw_data: Json | null
+          sender_name: string | null
+          sender_username: string | null
+          telegram_channel_id: number
+          telegram_message_id: number
+        }
+        Insert: {
+          bot_token_id: string
+          channel_id: string
+          created_at?: string
+          id?: string
+          media_caption?: string | null
+          media_duration?: number | null
+          media_file_id?: string | null
+          media_file_size?: number | null
+          media_file_unique_id?: string | null
+          media_height?: number | null
+          media_mime_type?: string | null
+          media_thumbnail?: string | null
+          media_type?: string | null
+          media_width?: number | null
+          message_date?: string
+          message_text?: string | null
+          owner_id: string
+          raw_data?: Json | null
+          sender_name?: string | null
+          sender_username?: string | null
+          telegram_channel_id: number
+          telegram_message_id: number
+        }
+        Update: {
+          bot_token_id?: string
+          channel_id?: string
+          created_at?: string
+          id?: string
+          media_caption?: string | null
+          media_duration?: number | null
+          media_file_id?: string | null
+          media_file_size?: number | null
+          media_file_unique_id?: string | null
+          media_height?: number | null
+          media_mime_type?: string | null
+          media_thumbnail?: string | null
+          media_type?: string | null
+          media_width?: number | null
+          message_date?: string
+          message_text?: string | null
+          owner_id?: string
+          raw_data?: Json | null
+          sender_name?: string | null
+          sender_username?: string | null
+          telegram_channel_id?: number
+          telegram_message_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "channel_messages_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_channels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       free_trial_users: {
         Row: {
           activated_at: string

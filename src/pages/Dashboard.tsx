@@ -20,8 +20,9 @@ import {
   LogOut, Trash2, RefreshCw, Users, Zap, Bot, UserPlus, Clock,
   Settings, Key, Shield, MessageSquare, Save, Loader2, User, Calendar, Hash,
   LayoutDashboard, ChevronLeft, ChevronRight, Search, AlertTriangle, Menu, X,
-  BarChart3, Tv, Plus, Send, Link, Edit, CheckCircle, XCircle, FileText,
+  BarChart3, Tv, Plus, Send, Link, Edit, CheckCircle, XCircle, FileText, MessageCircle,
 } from "lucide-react";
+import ChannelMessagesView from "@/components/ChannelMessagesView";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -74,7 +75,7 @@ interface FreeTrialUser {
   expires_at: string;
 }
 
-type TabKey = "overview" | "subscribers" | "expired" | "channels" | "broadcast" | "analytics" | "settings" | "free_trial" | "kick_nonsubs" | "scan_logs";
+type TabKey = "overview" | "subscribers" | "expired" | "channels" | "messages" | "broadcast" | "analytics" | "settings" | "free_trial" | "kick_nonsubs" | "scan_logs";
 
 interface DashboardProps {
   onShowAdmin?: () => void;
@@ -411,6 +412,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     { key: "subscribers", icon: Users, label: t("dash.subscribers"), badge: activeSubs.length },
     { key: "expired", icon: Clock, label: t("dash.expired"), badge: expiredSubs.length },
     { key: "channels", icon: Tv, label: t("channels.title"), badge: channels.length },
+    { key: "messages", icon: MessageCircle, label: lang === "ar" ? "الرسائل" : "Messages" },
     { key: "free_trial", icon: Zap, label: t("dash.freeTrial"), badge: freeTrialUsers.length },
     { key: "broadcast", icon: Send, label: t("broadcast.title") },
     { key: "kick_nonsubs", icon: Shield, label: t("dash.kickNonSubscribers") },
@@ -1687,6 +1689,21 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   </div>
                 </>
               )}
+            </div>
+          )}
+
+          {/* CHANNEL MESSAGES */}
+          {activeTab === "messages" && (
+            <div className="animate-fade-in">
+              <div className="mb-4">
+                <h2 className="text-xl md:text-2xl font-bold text-foreground">
+                  {lang === "ar" ? "رسائل القنوات" : "Channel Messages"}
+                </h2>
+                <p className="text-xs md:text-sm text-muted-foreground mt-1">
+                  {lang === "ar" ? "أرشيف الرسائل التي تُنشر في قنواتك المرتبطة بالبوت" : "Archive of messages posted in your bot-linked channels"}
+                </p>
+              </div>
+              <ChannelMessagesView channels={channels} />
             </div>
           )}
 
