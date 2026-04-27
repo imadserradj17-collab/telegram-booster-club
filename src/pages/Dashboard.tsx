@@ -1692,6 +1692,21 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
             </div>
           )}
 
+          {/* CHANNEL MESSAGES */}
+          {activeTab === "messages" && (
+            <div className="animate-fade-in">
+              <div className="mb-4">
+                <h2 className="text-xl md:text-2xl font-bold text-foreground">
+                  {lang === "ar" ? "رسائل القنوات" : "Channel Messages"}
+                </h2>
+                <p className="text-xs md:text-sm text-muted-foreground mt-1">
+                  {lang === "ar" ? "أرشيف الرسائل التي تُنشر في قنواتك المرتبطة بالبوت" : "Archive of messages posted in your bot-linked channels"}
+                </p>
+              </div>
+              <ChannelMessagesView channels={channels} />
+            </div>
+          )}
+
           {/* BROADCAST */}
           {activeTab === "broadcast" && (
             <div className="space-y-4 md:space-y-6 max-w-xl animate-fade-in">
