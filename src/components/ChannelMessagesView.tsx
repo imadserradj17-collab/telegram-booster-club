@@ -366,7 +366,9 @@ export default function ChannelMessagesView({ channels }: { channels: Channel[] 
               <div className="flex-1 min-w-0">
                 <h3 className="font-semibold text-foreground truncate text-sm">{selectedChannel.channel_name}</h3>
                 <p className="text-xs text-muted-foreground">
-                  {counts[selectedChannel.id] || messages.length} {lang === "ar" ? "رسالة" : "messages"}
+                  {selectedChannel.id === "__all__"
+                    ? Object.values(counts).reduce((s, n) => s + n, 0)
+                    : (counts[selectedChannel.id] || messages.length)} {lang === "ar" ? "رسالة" : "messages"}
                 </p>
               </div>
               <Button
