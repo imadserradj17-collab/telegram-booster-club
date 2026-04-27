@@ -253,22 +253,51 @@ export default function ChannelMessagesView({ channels }: { channels: Channel[] 
     });
   }, [messages, mediaUrls]);
 
-  const downloadFullMedia = async (m: ChannelMessage) => {
-    if (!m.media_file_id) return;
+  // Fetch full-quality media (for inline playback / lightbox view)
+  const loadFullMedia = useCallback(async (m: ChannelMessage): Promise<string | null> => {
+    if (!m.media_file_id) return null;
+    if (fullMediaUrls[m.id]) return fullMediaUrls[m.id];
+    setLoadingFull((prev) => ({ ...prev, [m.id]: true }));
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      if (!session) return null;
       const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-channel-file?file_id=${encodeURIComponent(m.media_file_id)}&message_id=${m.id}`;
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
-      if (!res.ok) return;
+      if (!res.ok) return null;
       const blob = await res.blob();
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `${m.media_type || "file"}_${m.telegram_message_id}`;
-      a.click();
-    } catch { /* ignore */ }
+      const objUrl = URL.createObjectURL(blob);
+      setFullMediaUrls((prev) => ({ ...prev, [m.id]: objUrl }));
+      return objUrl;
+    } catch { return null; }
+    finally {
+      setLoadingFull((prev) => ({ ...prev, [m.id]: false }));
+    }
+  }, [fullMediaUrls]);
+
+  // Auto-load full media for voice/audio so inline player works immediately
+  useEffect(() => {
+    messages.forEach((m) => {
+      if (
+        m.media_file_id &&
+        !fullMediaUrls[m.id] &&
+        !loadingFull[m.id] &&
+        ["voice", "audio"].includes(m.media_type || "")
+      ) {
+        loadFullMedia(m);
+      }
+    });
+  }, [messages, fullMediaUrls, loadingFull, loadFullMedia]);
+
+  const downloadFile = async (m: ChannelMessage) => {
+    const url = await loadFullMedia(m);
+    if (!url) return;
+    const ext = (m.media_mime_type || "").split("/")[1] || "bin";
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${m.media_type || "file"}_${m.telegram_message_id}.${ext}`;
+    a.click();
   };
 
   const formatSize = (b?: number | null) => {
