@@ -203,13 +203,13 @@ export default function ChannelMessagesView({ channels }: { channels: Channel[] 
     };
   }, [filterChannelId, search]);
 
-  // ─── AUTO-REFRESH FALLBACK: poll every 10s ───
+  // ─── AUTO-REFRESH: poll every 500ms ───
   useEffect(() => {
     const interval = setInterval(() => {
       // Skip if tab hidden to save resources
       if (typeof document !== "undefined" && document.hidden) return;
       fetchLatestSilently();
-    }, 10000);
+    }, 500);
     return () => clearInterval(interval);
   }, [fetchLatestSilently]);
 
