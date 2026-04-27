@@ -412,6 +412,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     { key: "subscribers", icon: Users, label: t("dash.subscribers"), badge: activeSubs.length },
     { key: "expired", icon: Clock, label: t("dash.expired"), badge: expiredSubs.length },
     { key: "channels", icon: Tv, label: t("channels.title"), badge: channels.length },
+    { key: "messages", icon: MessageCircle, label: lang === "ar" ? "الرسائل" : "Messages" },
     { key: "free_trial", icon: Zap, label: t("dash.freeTrial"), badge: freeTrialUsers.length },
     { key: "broadcast", icon: Send, label: t("broadcast.title") },
     { key: "kick_nonsubs", icon: Shield, label: t("dash.kickNonSubscribers") },
