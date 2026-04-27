@@ -76,6 +76,45 @@ export default function ChannelMessagesView({ channels }: { channels: Channel[] 
     [filterChannelId, search],
   );
 
+  // Silent fetch of latest messages (used by auto-refresh fallback)
+  const fetchLatestSilently = useCallback(async () => {
+    let query = supabase
+      .from("channel_messages")
+      .select("*", { count: "exact" })
+      .order("message_date", { ascending: false })
+      .limit(PAGE_SIZE);
+    if (filterChannelId !== "__all__") {
+      query = query.eq("channel_id", filterChannelId);
+    }
+    if (search.trim()) {
+      query = query.or(
+        `message_text.ilike.%${search}%,media_caption.ilike.%${search}%`,
+      );
+    }
+    const { data, count } = await query;
+    const rows = (data as ChannelMessage[]) || [];
+    if (typeof count === "number") setTotalCount(count);
+    setMessages((prev) => {
+      // Merge: keep older loaded ones, prepend any new ones
+      const existingIds = new Set(prev.map((m) => m.id));
+      const fresh = rows.filter((r) => !existingIds.has(r.id));
+      if (fresh.length === 0) {
+        // Update existing rows in place (in case of edits)
+        return prev.map((p) => rows.find((r) => r.id === p.id) || p);
+      }
+      // Merge fresh rows + previous, then re-sort by date desc, dedupe
+      const merged = [...fresh, ...prev];
+      const seen = new Set<string>();
+      return merged
+        .filter((m) => {
+          if (seen.has(m.id)) return false;
+          seen.add(m.id);
+          return true;
+        })
+        .sort((a, b) => b.message_date.localeCompare(a.message_date));
+    });
+  }, [filterChannelId, search]);
+
   // Reload on filter/search change
   useEffect(() => {
     setMessages([]);
