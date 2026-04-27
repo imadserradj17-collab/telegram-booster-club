@@ -463,7 +463,9 @@ export default function ChannelMessagesView({ channels }: { channels: Channel[] 
 
                         <div className="flex items-center justify-between gap-2 px-3 py-1.5 bg-secondary/20">
                           <span className="text-xs text-muted-foreground truncate">
-                            {m.sender_name || selectedChannel.channel_name}
+                            {selectedChannel.id === "__all__"
+                              ? (channels.find((c) => c.id === m.channel_id)?.channel_name || m.sender_name || "—")
+                              : (m.sender_name || selectedChannel.channel_name)}
                           </span>
                           <span className="text-xs text-muted-foreground">
                             {new Date(m.message_date).toLocaleString(lang === "ar" ? "ar-EG" : "en-US", {
