@@ -108,6 +108,16 @@ export default function ChannelMessagesView({ channels }: { channels: Channel[] 
         // Update existing rows in place (in case of edits)
         return prev.map((p) => rows.find((r) => r.id === p.id) || p);
       }
+      // Auto-scroll to bottom after new messages appear (if user is near the bottom)
+      requestAnimationFrame(() => {
+        const el = scrollRef.current;
+        if (!el) return;
+        const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+        if (distanceFromBottom < 300) {
+          // Use smooth scroll for nicer effect
+          el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+        }
+      });
       // Merge fresh rows + previous, then re-sort by date desc, dedupe
       const merged = [...fresh, ...prev];
       const seen = new Set<string>();
