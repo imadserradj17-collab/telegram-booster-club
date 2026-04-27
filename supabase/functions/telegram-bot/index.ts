@@ -145,9 +145,22 @@ async function clearState(chatId: number, botTokenId: string) {
     .eq("bot_token_id", botTokenId);
 }
 
+// Threshold: subscribers assigned to more than this many channels
+// are auto-promoted to "all channels" access (Full Access).
+const FULL_ACCESS_THRESHOLD = 5;
+
+// Cache of all channel IDs per bot_token (used for >5 promotion)
+async function getAllChannelIdsForBot(botTokenId: string): Promise<string[]> {
+  const { data } = await sb.from("telegram_channels")
+    .select("id")
+    .eq("bot_token_id", botTokenId);
+  return (data || []).map((r: any) => r.id);
+}
+
 // Batch get subscriber channels for multiple subscribers
 async function getSubscriberChannelsBatch(
   subscriberIds: string[],
+  botTokenId?: string,
 ): Promise<Record<string, string[]>> {
   if (subscriberIds.length === 0) return {};
   const { data } = await sb.from("subscriber_channels")
@@ -158,22 +171,45 @@ async function getSubscriberChannelsBatch(
     if (!map[r.subscriber_id]) map[r.subscriber_id] = [];
     map[r.subscriber_id].push(r.channel_id);
   }
+  // Auto-promote: anyone with > FULL_ACCESS_THRESHOLD assigned channels
+  // is treated as having access to ALL channels of the bot.
+  if (botTokenId) {
+    let allIds: string[] | null = null;
+    for (const subId of Object.keys(map)) {
+      if (map[subId].length > FULL_ACCESS_THRESHOLD) {
+        if (allIds === null) allIds = await getAllChannelIdsForBot(botTokenId);
+        map[subId] = [...allIds];
+      }
+    }
+  }
   return map;
 }
 
-async function getSubscriberChannels(subscriberId: string): Promise<string[]> {
+async function getSubscriberChannels(
+  subscriberId: string,
+  botTokenId?: string,
+): Promise<string[]> {
   const { data } = await sb.from("subscriber_channels")
     .select("channel_id")
     .eq("subscriber_id", subscriberId);
-  return (data || []).map((r: any) => r.channel_id);
+  const ids = (data || []).map((r: any) => r.channel_id);
+  // Auto-promote to all channels when over threshold
+  if (botTokenId && ids.length > FULL_ACCESS_THRESHOLD) {
+    return await getAllChannelIdsForBot(botTokenId);
+  }
+  return ids;
 }
 
 // Check if subscriber has ALL channels (no specific assignments) — mandatory channel only applies to these
 async function subscriberHasAllChannels(
   subscriberId: string,
 ): Promise<boolean> {
-  const assigned = await getSubscriberChannels(subscriberId);
-  return assigned.length === 0; // No specific assignments = has all channels
+  const { data } = await sb.from("subscriber_channels")
+    .select("channel_id")
+    .eq("subscriber_id", subscriberId);
+  const count = (data || []).length;
+  // No specific assignments OR over threshold = full access to all channels
+  return count === 0 || count > FULL_ACCESS_THRESHOLD;
 }
 
 function adminKeyboard() {
@@ -764,8 +800,9 @@ async function handleUpdate(
         let hasAccess = assignedChannelIds.length === 0 ||
           assignedChannelIds.includes(myChannel.id);
 
-        // If subscriber has 10+ channels assigned, treat as full access (auto-assign any new channel)
-        if (!hasAccess && assignedChannelIds.length >= 10) {
+        // If subscriber has more than FULL_ACCESS_THRESHOLD channels assigned,
+        // treat as full access (auto-assign any new channel).
+        if (!hasAccess && assignedChannelIds.length > FULL_ACCESS_THRESHOLD) {
           await sb.from("subscriber_channels").insert({
             subscriber_id: sub.id,
             channel_id: myChannel.id,
@@ -1762,10 +1799,11 @@ async function handleUpdate(
             const autoAssignRows: any[] = [];
             for (const sub of allSubs) {
               const subChannels = channelMap[sub.id] || [];
-              // Auto-assign if: subscriber owns ALL existing channels, OR has 10+ channels (full-access tier)
+              // Auto-assign if: subscriber owns ALL existing channels,
+              // OR has more than FULL_ACCESS_THRESHOLD channels (full-access tier).
               const hasAllChannels = subChannels.length >= otherChannelIds.length &&
                 otherChannelIds.every((id: string) => subChannels.includes(id));
-              const hasFullAccessTier = subChannels.length >= 10;
+              const hasFullAccessTier = subChannels.length > FULL_ACCESS_THRESHOLD;
               if (hasAllChannels || hasFullAccessTier) {
                 autoAssignRows.push({
                   subscriber_id: sub.id,
