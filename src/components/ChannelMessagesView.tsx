@@ -81,12 +81,15 @@ export default function ChannelMessagesView({ channels }: { channels: Channel[] 
   const loadMessages = useCallback(
     async (channelId: string, offset = 0, append = false) => {
       setLoading(true);
-      const { data } = await supabase
+      let query = supabase
         .from("channel_messages")
         .select("*")
-        .eq("channel_id", channelId)
         .order("message_date", { ascending: false })
         .range(offset, offset + PAGE_SIZE - 1);
+      if (channelId !== "__all__") {
+        query = query.eq("channel_id", channelId);
+      }
+      const { data } = await query;
       const rows = (data as ChannelMessage[]) || [];
       setHasMore(rows.length === PAGE_SIZE);
       setMessages((prev) => (append ? [...prev, ...rows] : rows));
@@ -236,6 +239,49 @@ export default function ChannelMessagesView({ channels }: { channels: Channel[] 
         </div>
 
         <div className="flex-1 overflow-y-auto">
+          {/* ALL CHANNELS option */}
+          {channels.length > 0 && (() => {
+            const totalCount = Object.values(counts).reduce((s, n) => s + n, 0);
+            const latestAll = Object.values(lastMessages).sort((a, b) =>
+              b.message_date.localeCompare(a.message_date)
+            )[0];
+            const isActive = selectedChannel?.id === "__all__";
+            return (
+              <button
+                onClick={() => openChannel({ id: "__all__", channel_name: lang === "ar" ? "كل القنوات" : "All channels", channel_type: "all" })}
+                className={`w-full flex items-center gap-3 px-3 py-3 transition-colors text-left border-b border-border ${
+                  isActive ? "bg-primary/15" : "hover:bg-secondary/40 bg-secondary/10"
+                }`}
+              >
+                <div className="h-12 w-12 rounded-full bg-gradient-to-br from-success to-primary flex items-center justify-center flex-shrink-0 text-primary-foreground">
+                  <Tv className="h-6 w-6" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="font-semibold text-foreground truncate text-sm">
+                      {lang === "ar" ? "📥 كل القنوات" : "📥 All channels"}
+                    </span>
+                    {latestAll && (
+                      <span className="text-[10px] text-muted-foreground flex-shrink-0">
+                        {formatTime(latestAll.message_date)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between gap-2 mt-0.5">
+                    <span className="text-xs text-muted-foreground truncate">
+                      {lang === "ar" ? `رسائل من ${channels.length} قناة` : `Messages from ${channels.length} channels`}
+                    </span>
+                    {totalCount > 0 && (
+                      <span className="bg-primary text-primary-foreground text-[10px] font-medium rounded-full px-1.5 min-w-[18px] h-[18px] flex items-center justify-center flex-shrink-0">
+                        {totalCount}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </button>
+            );
+          })()}
+
           {filteredChannels.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground text-sm px-4">
               {lang === "ar" ? "لا توجد قنوات" : "No channels"}
@@ -320,7 +366,9 @@ export default function ChannelMessagesView({ channels }: { channels: Channel[] 
               <div className="flex-1 min-w-0">
                 <h3 className="font-semibold text-foreground truncate text-sm">{selectedChannel.channel_name}</h3>
                 <p className="text-xs text-muted-foreground">
-                  {counts[selectedChannel.id] || messages.length} {lang === "ar" ? "رسالة" : "messages"}
+                  {selectedChannel.id === "__all__"
+                    ? Object.values(counts).reduce((s, n) => s + n, 0)
+                    : (counts[selectedChannel.id] || messages.length)} {lang === "ar" ? "رسالة" : "messages"}
                 </p>
               </div>
               <Button
@@ -415,7 +463,9 @@ export default function ChannelMessagesView({ channels }: { channels: Channel[] 
 
                         <div className="flex items-center justify-between gap-2 px-3 py-1.5 bg-secondary/20">
                           <span className="text-xs text-muted-foreground truncate">
-                            {m.sender_name || selectedChannel.channel_name}
+                            {selectedChannel.id === "__all__"
+                              ? (channels.find((c) => c.id === m.channel_id)?.channel_name || m.sender_name || "—")
+                              : (m.sender_name || selectedChannel.channel_name)}
                           </span>
                           <span className="text-xs text-muted-foreground">
                             {new Date(m.message_date).toLocaleString(lang === "ar" ? "ar-EG" : "en-US", {
