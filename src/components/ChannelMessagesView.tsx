@@ -44,6 +44,8 @@ export default function ChannelMessagesView({ channels }: { channels: Channel[] 
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
   const [totalCount, setTotalCount] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const isInitialLoad = useRef(true);
+  const prevScrollHeight = useRef(0);
 
   const channelMap = channels.reduce((acc, c) => {
     acc[c.id] = c;
