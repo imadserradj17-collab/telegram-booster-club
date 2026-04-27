@@ -43,6 +43,9 @@ export default function ChannelMessagesView({ channels }: { channels: Channel[] 
   const [search, setSearch] = useState("");
   const [filterChannelId, setFilterChannelId] = useState<string>("__all__");
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
+  const [fullMediaUrls, setFullMediaUrls] = useState<Record<string, string>>({});
+  const [loadingFull, setLoadingFull] = useState<Record<string, boolean>>({});
+  const [lightbox, setLightbox] = useState<{ url: string; type: string } | null>(null);
   const [totalCount, setTotalCount] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const isInitialLoad = useRef(true);
