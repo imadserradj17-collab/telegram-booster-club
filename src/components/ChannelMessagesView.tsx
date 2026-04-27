@@ -50,6 +50,7 @@ export default function ChannelMessagesView({ channels }: { channels: Channel[] 
   const scrollRef = useRef<HTMLDivElement>(null);
   const isInitialLoad = useRef(true);
   const prevScrollHeight = useRef(0);
+  const [deletingOld, setDeletingOld] = useState(false);
 
   const channelMap = channels.reduce((acc, c) => {
     acc[c.id] = c;
