@@ -1,5 +1,4 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { adminKb, fmtDate, type Lang, langPickerKb, normalizeLang, t } from "./i18n.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,37 +11,6 @@ const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 // Single cached client instance
 const sb = createClient(supabaseUrl, supabaseServiceKey);
-
-// ─── LANGUAGE HELPERS ───
-async function getUserLang(
-  botTokenId: string,
-  telegramUserId: number,
-): Promise<Lang> {
-  const { data } = await sb.from("bot_users")
-    .select("language")
-    .eq("bot_token_id", botTokenId)
-    .eq("telegram_user_id", telegramUserId)
-    .maybeSingle();
-  return normalizeLang(data?.language);
-}
-
-async function setUserLang(
-  botTokenId: string,
-  ownerId: string,
-  telegramUserId: number,
-  lang: Lang,
-  info?: { fn?: string | null; ln?: string | null; un?: string | null },
-) {
-  await sb.from("bot_users").upsert({
-    bot_token_id: botTokenId,
-    owner_id: ownerId,
-    telegram_user_id: telegramUserId,
-    language: lang,
-    first_name: info?.fn ?? null,
-    last_name: info?.ln ?? null,
-    telegram_username: info?.un ?? null,
-  }, { onConflict: "owner_id,telegram_user_id" });
-}
 
 async function getBotSettingsByToken(token: string) {
   const { data } = await sb
@@ -244,7 +212,7 @@ async function subscriberHasAllChannels(
   return count === 0 || count > FULL_ACCESS_THRESHOLD;
 }
 
-function adminKb(lang) {
+function adminKeyboard() {
   return {
     inline_keyboard: [
       [
@@ -413,8 +381,8 @@ async function finalizeSubscriber(
   if (error) {
     await tg(botToken, "sendMessage", {
       chat_id: chatId,
-      text: t("error", lang, { msg: error.message }),
-      reply_markup: adminKb(lang),
+      text: "❌ خطأ: " + error.message,
+      reply_markup: adminKeyboard(),
     });
     return;
   }
@@ -460,7 +428,7 @@ async function finalizeSubscriber(
     try {
       const sendResult = await tg(botToken, "sendMessage", {
         chat_id: telegramUserId,
-        text: t("subActivated", lang),
+        text: "🎉 *تم تفعيل اشتراكك!*\n\nاضغط على الأزرار للانضمام:",
         parse_mode: "Markdown",
         reply_markup: { inline_keyboard: buttons },
       });
@@ -480,9 +448,10 @@ async function finalizeSubscriber(
     : "";
   await tg(botToken, "sendMessage", {
     chat_id: chatId,
-    text: t("subAddedAdmin", lang, { id: telegramUserId, info: subInfo, n: selectedChannelIds.length, notif: notifStatus }),
+    text:
+      `✅ *تمت إضافة المشترك بنجاح!*\n\n🆔 المعرف: \`${telegramUserId}\`\n${subInfo}\n📺 القنوات: *${selectedChannelIds.length}*${notifStatus}`,
     parse_mode: "Markdown",
-    reply_markup: adminKb(lang),
+    reply_markup: adminKeyboard(),
   });
 }
 
@@ -713,7 +682,8 @@ async function handleUpdate(
           try {
             const sendRes = await tg(botToken, "sendMessage", {
               chat_id: userId,
-              text: t("kickedFromAll", userLang),
+              text:
+                "🚫 *تم طردك من جميع القنوات والمجموعات!*\n\n❌ لقد غادرت القناة/المجموعة الإجبارية.\n\n⚠️ لن تتمكن من الوصول إلى أي قناة حتى تنضم مرة أخرى.\n\n👇 اضغط على الزر أدناه للانضمام ثم أرسل /start لاستعادة الوصول:",
               parse_mode: "Markdown",
               ...(buttons.length > 0
                 ? { reply_markup: { inline_keyboard: buttons } }
@@ -800,7 +770,7 @@ async function handleUpdate(
           }),
           tg(botToken, "sendMessage", {
             chat_id: telegramUserId,
-            text: t("expiredSubMsg", userLang),
+            text: "⏰ *انتهى اشتراكك!*\n\nتواصل مع المسؤول لتجديد الاشتراك.",
             parse_mode: "Markdown",
           }),
         ]);
@@ -848,7 +818,8 @@ async function handleUpdate(
             }),
             tg(botToken, "sendMessage", {
               chat_id: telegramUserId,
-              text: t("noPermission", userLang),
+              text:
+                "⛔ *ليس لديك صلاحية لهذه القناة.*\n\nاشتراكك لا يشمل هذه القناة. تواصل مع المسؤول.",
               parse_mode: "Markdown",
             }),
           ]);
@@ -878,7 +849,9 @@ async function handleUpdate(
           }, { onConflict: "owner_id,channel_id,telegram_user_id" }),
           tg(botToken, "sendMessage", {
             chat_id: telegramUserId,
-            text: t("joinAccepted", userLang, { title: req.chat.title || "" }),
+            text: `✅ تم قبولك في القناة *${
+              req.chat.title || ""
+            }*! مرحباً بك 🎉`,
             parse_mode: "Markdown",
           }),
         ];
@@ -899,7 +872,10 @@ async function handleUpdate(
         if (adminTelegramId) {
           promises.push(tg(botToken, "sendMessage", {
             chat_id: adminTelegramId,
-            text: t("joinReqAccepted", adminLang, { name: firstName, id: telegramUserId, chTitle: req.chat.title || chatId }),
+            text:
+              `📥 *طلب انضمام مقبول*\n\n👤 ${firstName} (\`${telegramUserId}\`)\n📺 ${
+                req.chat.title || chatId
+              }`,
             parse_mode: "Markdown",
           }));
         }
@@ -921,7 +897,10 @@ async function handleUpdate(
       if (adminTelegramId) {
         promises.push(tg(botToken, "sendMessage", {
           chat_id: adminTelegramId,
-          text: t("joinReqDeclined", adminLang, { name: firstName, id: telegramUserId, chTitle: req.chat.title || chatId }),
+          text:
+            `🚫 *طلب انضمام مرفوض*\n\n👤 ${firstName} (\`${telegramUserId}\`) — غير مشترك\n📺 ${
+              req.chat.title || chatId
+            }`,
           parse_mode: "Markdown",
         }));
       }
@@ -1110,11 +1089,12 @@ async function handleUpdate(
 
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
-          text: t("adminWelcome", lang, { name: firstName, active, total, channels: (
+          text:
+            `🤖 *لوحة تحكم بوت الاشتراكات*\n\nمرحباً بك يا *${firstName}*! 👋\n\n📊 نظرة سريعة:\n├ 👥 المشتركين: *${active}* نشط من أصل *${total}*\n└ 📺 القنوات: *${
               channelsRes.data?.length || 0
             }*\n\nاختر أحد الخيارات:`,
           parse_mode: "Markdown",
-          reply_markup: adminKb(lang),
+          reply_markup: adminKeyboard(),
         });
       } else {
         // ─── NON-ADMIN /start FLOW ───
@@ -1147,7 +1127,8 @@ async function handleUpdate(
               }
               await tg(botToken, "sendMessage", {
                 chat_id: chatId,
-                text: t("mandatoryMust", lang, { name: firstName }),
+                text:
+                  `⚠️ مرحباً *${firstName}*!\n\n🔒 يجب عليك الانضمام إلى القناة الإجبارية أولاً قبل الوصول إلى القنوات.\n\nانضم ثم اضغط /start مرة أخرى.`,
                 parse_mode: "Markdown",
                 ...(buttons.length > 0
                   ? { reply_markup: { inline_keyboard: buttons } }
@@ -1200,7 +1181,8 @@ async function handleUpdate(
 
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
-            text: t("userActive", lang, { name: firstName, status: subStatus }),
+            text:
+              `مرحباً *${firstName}*! 👋\n\n✅ أنت مشترك\n${subStatus}\n\n📺 اضغط على القنوات للانضمام:`,
             parse_mode: "Markdown",
             reply_markup: { inline_keyboard: buttons },
           });
@@ -1223,7 +1205,9 @@ async function handleUpdate(
           }
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
-            text: t("userExpired", lang, { name: firstName, date: fmtDate(sub.expires_at!, lang) }),
+            text: `⏰ مرحباً *${firstName}*\n\nللأسف اشتراكك *منتهي* منذ ${
+              formatDate(sub.expires_at!)
+            }.\n\nتواصل مع المسؤول لتجديد اشتراكك.`,
             parse_mode: "Markdown",
             ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
           });
@@ -1271,7 +1255,9 @@ async function handleUpdate(
     if (text === "/id" || text === "/myid") {
       await tg(botToken, "sendMessage", {
         chat_id: chatId,
-        text: t("myIdMsg", lang, { id: fromId, name: firstName, uname: msg.from.username ? `\n📛 @${msg.from.username}` : "" }),
+        text: `🆔 معرفك: \`${fromId}\`\n👤 الاسم: ${firstName}${
+          msg.from.username ? `\n📛 المعرف: @${msg.from.username}` : ""
+        }`,
         parse_mode: "Markdown",
       });
       return;
@@ -1282,8 +1268,8 @@ async function handleUpdate(
       if (isAdmin) {
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
-          text: t("cancelled", lang),
-          reply_markup: adminKb(lang),
+          text: "❌ تم الإلغاء.",
+          reply_markup: adminKeyboard(),
         });
       }
       return;
@@ -1321,7 +1307,8 @@ async function handleUpdate(
           }
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
-            text: t("mandatoryMustShort", lang),
+            text:
+              `⚠️ يجب عليك الانضمام إلى القناة الإجبارية أولاً.\n\nانضم ثم اضغط /start مرة أخرى.`,
             parse_mode: "Markdown",
             ...(buttons.length > 0
               ? { reply_markup: { inline_keyboard: buttons } }
@@ -1341,7 +1328,7 @@ async function handleUpdate(
             : `❌ *منتهي* منذ ${formatDate(subCheck.expires_at!)}`;
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
-            text: t("myStatus", lang, { status }),
+            text: `📋 *حالة اشتراكك:*\n\n${status}`,
             parse_mode: "Markdown",
           });
         } else {
@@ -1388,7 +1375,8 @@ async function handleUpdate(
             } else if (msg.forward_origin.type === "hidden_user") {
               await tg(botToken, "sendMessage", {
                 chat_id: chatId,
-                text: t("hiddenUser", lang),
+                text:
+                "❌ هذا المستخدم أخفى معلوماته.\n\n💡 اطلب منه إرسال /id للبوت، أو أرسل الـ ID الرقمي مباشرة.",
                 parse_mode: "Markdown",
               });
               return;
@@ -1396,7 +1384,8 @@ async function handleUpdate(
           } else if (msg.forward_sender_name) {
             await tg(botToken, "sendMessage", {
               chat_id: chatId,
-              text: t("hiddenUser", lang),
+              text:
+                "❌ هذا المستخدم أخفى معلوماته.\n\n💡 اطلب منه إرسال /id للبوت، أو أرسل الـ ID الرقمي مباشرة.",
               parse_mode: "Markdown",
             });
             return;
@@ -1408,14 +1397,15 @@ async function handleUpdate(
             } else if (input.length > 0) {
               await tg(botToken, "sendMessage", {
                 chat_id: chatId,
-                text: t("cantResolveUsername", lang, { u: input }),
+                text:
+                  `⚠️ لا يمكن تحويل *@${input}* إلى ID مباشرة.\n\n💡 اطلب منه إرسال /id للبوت ثم أرسل لي الرقم.`,
                 parse_mode: "Markdown",
               });
               return;
             } else {
               await tg(botToken, "sendMessage", {
                 chat_id: chatId,
-                text: t("invalidInput", lang),
+                text: "❌ مدخل غير صالح. أرسل الـ ID أو حوّل رسالة.",
               });
               return;
             }
@@ -1484,7 +1474,8 @@ async function handleUpdate(
           if (!isPermanent && (isNaN(days!) || days! <= 0)) {
             await tg(botToken, "sendMessage", {
               chat_id: chatId,
-              text: t("enterValidDays", lang),
+              text:
+                "❌ أدخل رقماً صحيحاً (مثال: 30) أو اكتب *دائم*\n\n_أرسل /cancel للإلغاء_",
               parse_mode: "Markdown",
             });
             return;
@@ -1561,7 +1552,8 @@ async function handleUpdate(
 
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
-            text: t("pickChannels", lang),
+            text:
+              "📺 *اختر القنوات للمشترك:*\n\nاضغط على القناة لتحديدها/إلغاء تحديدها، ثم اضغط تأكيد.",
             parse_mode: "Markdown",
             reply_markup: { inline_keyboard: channelButtons },
           });
@@ -1580,7 +1572,7 @@ async function handleUpdate(
           if (isNaN(days) || days <= 0 || days > 9999) {
             await tg(botToken, "sendMessage", {
               chat_id: chatId,
-              text: t("customDaysRange", lang),
+              text: "❌ أدخل رقماً صحيحاً بين 1 و 9999\n\n_أرسل /cancel للإلغاء_",
               parse_mode: "Markdown",
             });
             return;
@@ -1657,7 +1649,8 @@ async function handleUpdate(
 
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
-            text: t("pickChannels", lang),
+            text:
+              "📺 *اختر القنوات للمشترك:*\n\nاضغط على القناة لتحديدها/إلغاء تحديدها، ثم اضغط تأكيد.",
             parse_mode: "Markdown",
             reply_markup: { inline_keyboard: channelBtns },
           });
@@ -1737,9 +1730,10 @@ async function handleUpdate(
             ) {
               await tg(botToken, "sendMessage", {
                 chat_id: chatId,
-                text: t("botNotAdmin", lang, { name: channelName }),
+                text:
+                  `⚠️ البوت *ليس مسؤولاً* في *${channelName}*\n\nأضف البوت كمسؤول أولاً.`,
                 parse_mode: "Markdown",
-                reply_markup: adminKb(lang),
+                reply_markup: adminKeyboard(),
               });
               return;
             }
@@ -1753,9 +1747,10 @@ async function handleUpdate(
           if (!linkRes.ok) {
             await tg(botToken, "sendMessage", {
               chat_id: chatId,
-              text: t("inviteFailed", lang),
+              text:
+                `❌ فشل إنشاء رابط الدعوة\n\n💡 تأكد أن البوت لديه صلاحية *دعوة أعضاء*.`,
               parse_mode: "Markdown",
-              reply_markup: adminKb(lang),
+              reply_markup: adminKeyboard(),
             });
             return;
           }
@@ -1776,8 +1771,8 @@ async function handleUpdate(
           if (error) {
             await tg(botToken, "sendMessage", {
               chat_id: chatId,
-              text: t("error", lang, { msg: error.message }),
-              reply_markup: adminKb(lang),
+              text: "❌ خطأ: " + error.message,
+              reply_markup: adminKeyboard(),
             });
             return;
           }
@@ -1821,7 +1816,8 @@ async function handleUpdate(
               await sb.from("subscriber_channels").insert(autoAssignRows);
               tgFire(botToken, "sendMessage", {
                 chat_id: chatId,
-                text: t("autoAssignedNotice", lang, { n: autoAssignRows.length }),
+                text:
+                  `📌 تم إضافة القناة الجديدة تلقائياً لـ *${autoAssignRows.length}* مشترك يملكون جميع القنوات.`,
                 parse_mode: "Markdown",
               });
             }
@@ -1838,9 +1834,13 @@ async function handleUpdate(
           });
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
-            text: t("channelAdded", lang, { icon: typeEmoji, name: channelName, type: t(channelType === "group" ? "typeGroup" : "typeChannel", lang), id: channelId, members: membersRes.ok ? membersRes.result : "—", link: linkRes.result.invite_link }),
+            text: `✅ *تمت الإضافة بنجاح!*\n\n${typeEmoji} *${channelName}* (${
+              channelType === "group" ? "مجموعة" : "قناة"
+            })\n🆔 \`${channelId}\`\n👥 الأعضاء: ${
+              membersRes.ok ? membersRes.result : "—"
+            }\n🔗 [رابط الدعوة](${linkRes.result.invite_link})`,
             parse_mode: "Markdown",
-            reply_markup: adminKb(lang),
+            reply_markup: adminKeyboard(),
           });
           return;
         }
@@ -1865,9 +1865,10 @@ async function handleUpdate(
 
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
-            text: t("broadcastDone", lang, { sent, failed, total: activeSubs.length }),
+            text:
+              `📢 *تم الإرسال!*\n\n✅ نجح: *${sent}*\n❌ فشل: *${failed}*\n📊 الإجمالي: ${activeSubs.length}`,
             parse_mode: "Markdown",
-            reply_markup: adminKb(lang),
+            reply_markup: adminKeyboard(),
           });
           return;
         }
@@ -1916,7 +1917,11 @@ async function handleUpdate(
               : `❌ منتهي منذ ${formatDate(sub.expires_at)}`;
             await tg(botToken, "sendMessage", {
               chat_id: chatId,
-              text: t("searchResult", lang, { id: sub.telegram_user_id, uname: sub.telegram_username ? `📛 @${sub.telegram_username}\n` : "", status, ch: channelInfo, created: fmtDate(sub.created_at, lang) }),
+              text: `🔍 *نتيجة البحث:*\n\n🆔 \`${sub.telegram_user_id}\`\n${
+                sub.telegram_username ? `📛 @${sub.telegram_username}\n` : ""
+              }📋 ${status}${channelInfo}\n📅 أضيف: ${
+                formatDate(sub.created_at)
+              }`,
               parse_mode: "Markdown",
               reply_markup: {
                 inline_keyboard: [[{
@@ -1928,8 +1933,8 @@ async function handleUpdate(
           } else {
             await tg(botToken, "sendMessage", {
               chat_id: chatId,
-              text: t("searchNoResult", lang),
-              reply_markup: adminKb(lang),
+              text: "❌ لم يتم العثور على مشترك.",
+              reply_markup: adminKeyboard(),
             });
           }
           return;
@@ -1941,8 +1946,8 @@ async function handleUpdate(
           if (isNaN(parsed)) {
             await tg(botToken, "sendMessage", {
               chat_id: chatId,
-              text: t("sendIdOnly", lang),
-              reply_markup: adminKb(lang),
+              text: "❌ أرسل رقم ID فقط.",
+              reply_markup: adminKeyboard(),
             });
             return;
           }
@@ -1956,8 +1961,8 @@ async function handleUpdate(
           if (!sub) {
             await tg(botToken, "sendMessage", {
               chat_id: chatId,
-              text: t("subNotFound", lang),
-              reply_markup: adminKb(lang),
+              text: "❌ المشترك غير موجود.",
+              reply_markup: adminKeyboard(),
             });
             return;
           }
@@ -1977,13 +1982,14 @@ async function handleUpdate(
           await Promise.all([
             tg(botToken, "sendMessage", {
               chat_id: chatId,
-              text: t("subDeleted", lang, { id: parsed, n: kicked }),
+              text:
+                `✅ *تم حذف المشترك* \`${parsed}\`\n🚫 طُرد من *${kicked}* قناة`,
               parse_mode: "Markdown",
-              reply_markup: adminKb(lang),
+              reply_markup: adminKeyboard(),
             }),
             tg(botToken, "sendMessage", {
               chat_id: parsed,
-              text: t("subscriptionCancelled", await getUserLang(botTokenId, parsed)),
+              text: "⚠️ تم إلغاء اشتراكك وإزالتك من القنوات.",
             }),
           ]);
           return;
@@ -1992,7 +1998,7 @@ async function handleUpdate(
         case "await_sub_channels": {
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
-            text: t("pickHelp", lang),
+            text: "💡 اضغط على الأزرار لاختيار القنوات ثم اضغط *تأكيد الاختيار*.",
             parse_mode: "Markdown",
           });
           return;
@@ -2032,11 +2038,15 @@ async function handleUpdate(
         const status = sub.is_permanent
           ? "♾ *دائم*"
           : sub.expires_at && new Date(sub.expires_at) > new Date()
-          ? t("myStatusActive", lang, { date: fmtDate(sub.expires_at, lang), n: daysRemaining(sub.expires_at) })
+          ? `✅ *نشط*\n📅 ينتهي: ${formatDate(sub.expires_at)}\n⏳ متبقي: *${
+            daysRemaining(sub.expires_at)
+          }* يوم`
           : `❌ *منتهي* منذ ${formatDate(sub.expires_at!)}`;
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
-          text: t("mySubDetail", lang, { status, ch: channelInfo, date: fmtDate(sub.created_at, lang) }),
+          text: `📋 *اشتراكك:*\n\n${status}${channelInfo}\n📅 تاريخ الاشتراك: ${
+            formatDate(sub.created_at)
+          }`,
           parse_mode: "Markdown",
         });
       }
@@ -2049,7 +2059,7 @@ async function handleUpdate(
       if (!freeTrialEnabled) {
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
-          text: t("trialUnavailable", lang),
+          text: "❌ التجربة المجانية غير متاحة حالياً.",
         });
         return;
       }
@@ -2061,7 +2071,8 @@ async function handleUpdate(
       if (existingTrial) {
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
-          text: t("trialUsed", lang),
+          text:
+            "⚠️ لقد استخدمت التجربة المجانية مسبقاً. لا يمكن الاستفادة أكثر من مرة.",
         });
         return;
       }
@@ -2319,7 +2330,7 @@ async function handleUpdate(
       if (!selectedChannels || selectedChannels.length === 0) {
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
-          text: t("needOneChannel", lang),
+          text: "⚠️ يجب اختيار قناة واحدة على الأقل!",
         });
         return;
       }
@@ -2346,7 +2357,8 @@ async function handleUpdate(
         await setState(chatId, botToken, "await_sub_id");
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
-          text: t("addSubPrompt", lang),
+          text:
+            "👤 *إضافة مشترك*\n\nأرسل معرف المستخدم بإحدى الطرق:\n\n1️⃣ الـ Telegram ID (رقم)\n2️⃣ حوّل (Forward) رسالة منه\n\n💡 يمكنه معرفة ID بإرسال /id للبوت\n\n_أرسل /cancel للإلغاء_",
           parse_mode: "Markdown",
         });
         break;
@@ -2362,8 +2374,8 @@ async function handleUpdate(
         if (!subs || subs.length === 0) {
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
-            text: t("noSubs", lang),
-            reply_markup: adminKb(lang),
+            text: "📋 لا يوجد مشتركون حالياً.",
+            reply_markup: adminKeyboard(),
           });
         } else {
           // Batch fetch all channel assignments (fixes N+1)
@@ -2387,7 +2399,7 @@ async function handleUpdate(
             chat_id: chatId,
             text: msgText,
             parse_mode: "Markdown",
-            reply_markup: adminKb(lang),
+            reply_markup: adminKeyboard(),
           });
         }
         break;
@@ -2401,8 +2413,8 @@ async function handleUpdate(
         if (!channels || channels.length === 0) {
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
-            text: t("noChannels", lang),
-            reply_markup: adminKb(lang),
+            text: "📺 لا توجد قنوات أو مجموعات.",
+            reply_markup: adminKeyboard(),
           });
         } else {
           let msgText = `📺 *القنوات والمجموعات (${channels.length}):*\n\n`;
@@ -2434,7 +2446,8 @@ async function handleUpdate(
         await setState(chatId, botToken, "await_channel");
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
-          text: t("addChannelPrompt", lang),
+          text:
+            "📺 *إضافة قناة أو مجموعة*\n\nأرسل بإحدى الطرق:\n\n1️⃣ معرف القناة/المجموعة (رقم سالب)\n2️⃣ @username\n3️⃣ حوّل رسالة من القناة/المجموعة\n\n⚠️ البوت يجب أن يكون مسؤولاً!\n\n_أرسل /cancel للإلغاء_",
           parse_mode: "Markdown",
         });
         break;
@@ -2451,7 +2464,8 @@ async function handleUpdate(
         await setState(chatId, botToken, "await_broadcast");
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
-          text: t("broadcastPrompt", lang, { n: active }),
+          text:
+            `📢 *رسالة جماعية*\n\nسيتم إرسالها لـ *${active}* مشترك نشط.\n\nأرسل الرسالة الآن (نص، صورة، فيديو...):\n\n_أرسل /cancel للإلغاء_`,
           parse_mode: "Markdown",
         });
         break;
@@ -2461,7 +2475,8 @@ async function handleUpdate(
         await setState(chatId, botToken, "await_search");
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
-          text: t("searchPrompt", lang),
+          text:
+            "🔍 *بحث عن مشترك*\n\nأرسل الـ ID أو @username:\n\n_أرسل /cancel للإلغاء_",
           parse_mode: "Markdown",
         });
         break;
@@ -2471,7 +2486,8 @@ async function handleUpdate(
         await setState(chatId, botToken, "await_delete_sub");
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
-          text: t("deletePrompt", lang),
+          text:
+            "🗑 *حذف مشترك*\n\nأرسل الـ ID الرقمي للمشترك:\n\n⚠️ سيتم طرده من القنوات نهائياً.\n\n_أرسل /cancel للإلغاء_",
           parse_mode: "Markdown",
         });
         break;
@@ -2503,9 +2519,14 @@ async function handleUpdate(
 
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
-          text: t("stats", lang, { total, active, perm: permanent, expired: total - active, soon: expiringSoon, ch: channelsRes.data?.length || 0 }),
+          text:
+            `📊 *الإحصائيات:*\n\n👥 *المشتركين:*\n├ إجمالي: *${total}*\n├ ✅ نشطون: *${active}*\n├ ♾ دائمون: *${permanent}*\n├ ❌ منتهيون: *${
+              total - active
+            }*\n└ ⚠️ ينتهي خلال 3 أيام: *${expiringSoon}*\n\n📺 *القنوات:* ${
+              channelsRes.data?.length || 0
+            }`,
           parse_mode: "Markdown",
-          reply_markup: adminKb(lang),
+          reply_markup: adminKeyboard(),
         });
         break;
       }
@@ -2514,8 +2535,8 @@ async function handleUpdate(
         await clearState(chatId, botToken);
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
-          text: t("cancelled", lang),
-          reply_markup: adminKb(lang),
+          text: "❌ تم الإلغاء.",
+          reply_markup: adminKeyboard(),
         });
         break;
       }
@@ -2524,9 +2545,9 @@ async function handleUpdate(
         await clearState(chatId, botToken);
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
-          text: t("controlPanel", lang),
+          text: "🤖 *لوحة التحكم*",
           parse_mode: "Markdown",
-          reply_markup: adminKb(lang),
+          reply_markup: adminKeyboard(),
         });
         break;
       }
@@ -2537,8 +2558,8 @@ async function handleUpdate(
           if (!currentSt || currentSt.state !== "await_sub_days") {
             await tg(botToken, "sendMessage", {
               chat_id: chatId,
-              text: t("sessionExpired", lang),
-              reply_markup: adminKb(lang),
+              text: "⚠️ انتهت صلاحية العملية. أعد المحاولة.",
+              reply_markup: adminKeyboard(),
             });
             break;
           }
@@ -2556,7 +2577,8 @@ async function handleUpdate(
           });
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
-            text: t("enterCustomDays", lang),
+            text:
+              "✏️ *أدخل عدد الأيام يدوياً:*\n\nأرسل رقماً بين 1 و 9999\n\n_أرسل /cancel للإلغاء_",
             parse_mode: "Markdown",
           });
           break;
@@ -2567,8 +2589,8 @@ async function handleUpdate(
           if (!currentSt || currentSt.state !== "await_sub_days") {
             await tg(botToken, "sendMessage", {
               chat_id: chatId,
-              text: t("sessionExpired", lang),
-              reply_markup: adminKb(lang),
+              text: "⚠️ انتهت صلاحية العملية. أعد المحاولة.",
+              reply_markup: adminKeyboard(),
             });
             break;
           }
@@ -2652,7 +2674,8 @@ async function handleUpdate(
 
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
-            text: t("pickChannels", lang),
+            text:
+              "📺 *اختر القنوات للمشترك:*\n\nاضغط على القناة لتحديدها/إلغاء تحديدها، ثم اضغط تأكيد.",
             parse_mode: "Markdown",
             reply_markup: { inline_keyboard: channelButtons },
           });
@@ -2675,9 +2698,9 @@ async function handleUpdate(
           }
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
-            text: t("channelDeleted", lang, { name: ch?.channel_name || channelId }),
+            text: `✅ تم حذف *${ch?.channel_name || channelId}*`,
             parse_mode: "Markdown",
-            reply_markup: adminKb(lang),
+            reply_markup: adminKeyboard(),
           });
         }
         if (data.startsWith("del_sub_")) {
@@ -2706,13 +2729,13 @@ async function handleUpdate(
           await Promise.all([
             tg(botToken, "sendMessage", {
               chat_id: chatId,
-              text: t("subDeletedShort", lang, { id: userId, n: kicked }),
+              text: `✅ *تم حذف* \`${userId}\` — طُرد من *${kicked}* قناة`,
               parse_mode: "Markdown",
-              reply_markup: adminKb(lang),
+              reply_markup: adminKeyboard(),
             }),
             tg(botToken, "sendMessage", {
               chat_id: userId,
-              text: t("subscriptionCancelled", await getUserLang(botTokenId, parsed)),
+              text: "⚠️ تم إلغاء اشتراكك وإزالتك من القنوات.",
             }),
           ]);
         }
