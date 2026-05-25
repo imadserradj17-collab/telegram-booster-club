@@ -41,7 +41,7 @@ async function setUserLang(
     first_name: info?.fn ?? null,
     last_name: info?.ln ?? null,
     telegram_username: info?.un ?? null,
-  }, { onConflict: "bot_token_id,telegram_user_id" });
+  }, { onConflict: "owner_id,telegram_user_id" });
 }
 
 async function getBotSettingsByToken(token: string) {
