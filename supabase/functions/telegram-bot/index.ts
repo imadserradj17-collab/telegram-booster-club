@@ -1120,6 +1120,8 @@ async function handleUpdate(
         });
       } else {
         // ─── NON-ADMIN /start FLOW ───
+        const lang = await getUserLang(ownerId, fromId);
+
         const { data: sub } = await sb.from("telegram_subscribers").select("*")
           .eq("owner_id", ownerId).eq("bot_token_id", botTokenId).eq(
             "telegram_user_id",
@@ -1149,8 +1151,7 @@ async function handleUpdate(
               }
               await tg(botToken, "sendMessage", {
                 chat_id: chatId,
-                text:
-                  `⚠️ مرحباً *${firstName}*!\n\n🔒 يجب عليك الانضمام إلى القناة الإجبارية أولاً قبل الوصول إلى القنوات.\n\nانضم ثم اضغط /start مرة أخرى.`,
+                text: t(lang, "mandatory_required", { name: firstName }),
                 parse_mode: "Markdown",
                 ...(buttons.length > 0
                   ? { reply_markup: { inline_keyboard: buttons } }
@@ -1176,10 +1177,11 @@ async function handleUpdate(
           }
 
           const subStatus = sub.is_permanent
-            ? "♾ *دائم*"
-            : `📅 متبقي *${daysRemaining(sub.expires_at!)}* يوم (حتى ${
-              formatDate(sub.expires_at!)
-            })`;
+            ? t(lang, "status_permanent")
+            : t(lang, "status_remaining", {
+              days: daysRemaining(sub.expires_at!),
+              date: formatDate(sub.expires_at!),
+            });
           const buttons = channels.filter((ch: any) => ch.invite_link).map((
             ch: any,
           ) => [{ text: `📺 ${ch.channel_name}`, url: ch.invite_link }]);
@@ -1197,14 +1199,16 @@ async function handleUpdate(
             }
           }
           buttons.push([{
-            text: "ℹ️ حالة اشتراكي",
+            text: t(lang, "btn_my_sub"),
             callback_data: "my_subscription",
           }]);
 
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
-            text:
-              `مرحباً *${firstName}*! 👋\n\n✅ أنت مشترك\n${subStatus}\n\n📺 اضغط على القنوات للانضمام:`,
+            text: t(lang, "sub_active_header", {
+              name: firstName,
+              status: subStatus,
+            }),
             parse_mode: "Markdown",
             reply_markup: { inline_keyboard: buttons },
           });
@@ -1227,14 +1231,28 @@ async function handleUpdate(
           }
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
-            text: `⏰ مرحباً *${firstName}*\n\nللأسف اشتراكك *منتهي* منذ ${
-              formatDate(sub.expires_at!)
-            }.\n\nتواصل مع المسؤول لتجديد اشتراكك.`,
+            text: t(lang, "sub_expired", {
+              name: firstName,
+              date: formatDate(sub.expires_at!),
+            }),
             parse_mode: "Markdown",
             ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
           });
         } else {
           // ── NOT A SUBSCRIBER ──
+          // First-time user with no language preference → show picker
+          const { data: existingUser } = await sb.from("bot_users").select(
+            "language",
+          ).eq("owner_id", ownerId).eq("telegram_user_id", fromId).maybeSingle();
+          if (!existingUser?.language) {
+            await tg(botToken, "sendMessage", {
+              chat_id: chatId,
+              text: t("ar", "pick_lang"),
+              reply_markup: langPickerKeyboard(),
+            });
+            return;
+          }
+
           const buttons: any[][] = [];
           if (publicChannelId) {
             const { data: pubCh } = await sb.from("telegram_channels").select(
@@ -1256,7 +1274,7 @@ async function handleUpdate(
               ).maybeSingle();
             if (!existingTrial) {
               buttons.push([{
-                text: `🎁 تجربة مجانية (${freeTrialDays} ${freeTrialDays === 1 ? 'يوم' : 'أيام'})`,
+                text: t(lang, "btn_free_trial", { days: freeTrialDays }),
                 callback_data: "activate_free_trial",
               }]);
             }
@@ -1273,6 +1291,7 @@ async function handleUpdate(
       }
       return;
     }
+
 
     if (text === "/lang" || text === "/language" || text === "/اللغة") {
       await tg(botToken, "sendMessage", {
