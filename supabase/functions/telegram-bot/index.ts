@@ -1,4 +1,26 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { t, langPickerKeyboard, type Lang } from "./i18n.ts";
+
+async function getUserLang(
+  ownerId: string,
+  telegramUserId: number,
+): Promise<Lang> {
+  const { data } = await sb.from("bot_users").select("language").eq(
+    "owner_id",
+    ownerId,
+  ).eq("telegram_user_id", telegramUserId).maybeSingle();
+  return (data?.language === "en" ? "en" : "ar") as Lang;
+}
+
+async function setUserLang(
+  ownerId: string,
+  telegramUserId: number,
+  lang: Lang,
+) {
+  await sb.from("bot_users").update({ language: lang }).eq("owner_id", ownerId)
+    .eq("telegram_user_id", telegramUserId);
+}
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
