@@ -1274,18 +1274,30 @@ async function handleUpdate(
       return;
     }
 
-    if (text === "/id" || text === "/myid") {
+    if (text === "/lang" || text === "/language" || text === "/اللغة") {
       await tg(botToken, "sendMessage", {
         chat_id: chatId,
-        text: `🆔 معرفك: \`${fromId}\`\n👤 الاسم: ${firstName}${
-          msg.from.username ? `\n📛 المعرف: @${msg.from.username}` : ""
-        }`,
+        text: t("ar", "pick_lang"),
+        reply_markup: langPickerKeyboard(),
+      });
+      return;
+    }
+
+    if (text === "/id" || text === "/myid") {
+      const lang = await getUserLang(ownerId, fromId);
+      await tg(botToken, "sendMessage", {
+        chat_id: chatId,
+        text: t(lang, "id_info", {
+          id: fromId,
+          name: firstName,
+          username: msg.from.username || null,
+        }),
         parse_mode: "Markdown",
       });
       return;
     }
 
-    if (text === "/cancel" || text === "إلغاء") {
+    if (text === "/cancel" || text === "إلغاء" || text === "cancel") {
       await clearState(chatId, botToken);
       if (isAdmin) {
         await tg(botToken, "sendMessage", {
@@ -1293,9 +1305,16 @@ async function handleUpdate(
           text: "❌ تم الإلغاء.",
           reply_markup: adminKeyboard(),
         });
+      } else {
+        const lang = await getUserLang(ownerId, fromId);
+        await tg(botToken, "sendMessage", {
+          chat_id: chatId,
+          text: t(lang, "cancelled"),
+        });
       }
       return;
     }
+
 
     if (!isAdmin) {
       // Check subscription + mandatory channel for non-admin interactions
