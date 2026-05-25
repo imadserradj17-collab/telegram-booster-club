@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { adminKb, fmtDate, type Lang, langPickerKb, normalizeLang, t } from "./i18n.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,6 +12,37 @@ const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 // Single cached client instance
 const sb = createClient(supabaseUrl, supabaseServiceKey);
+
+// ─── LANGUAGE HELPERS ───
+async function getUserLang(
+  botTokenId: string,
+  telegramUserId: number,
+): Promise<Lang> {
+  const { data } = await sb.from("bot_users")
+    .select("language")
+    .eq("bot_token_id", botTokenId)
+    .eq("telegram_user_id", telegramUserId)
+    .maybeSingle();
+  return normalizeLang(data?.language);
+}
+
+async function setUserLang(
+  botTokenId: string,
+  ownerId: string,
+  telegramUserId: number,
+  lang: Lang,
+  info?: { fn?: string | null; ln?: string | null; un?: string | null },
+) {
+  await sb.from("bot_users").upsert({
+    bot_token_id: botTokenId,
+    owner_id: ownerId,
+    telegram_user_id: telegramUserId,
+    language: lang,
+    first_name: info?.fn ?? null,
+    last_name: info?.ln ?? null,
+    telegram_username: info?.un ?? null,
+  }, { onConflict: "bot_token_id,telegram_user_id" });
+}
 
 async function getBotSettingsByToken(token: string) {
   const { data } = await sb
