@@ -2076,7 +2076,30 @@ async function handleUpdate(
     const cbFromId = cb.from.id;
     const data = cb.data;
 
+    if (data === "set_lang_ar" || data === "set_lang_en") {
+      const newLang: Lang = data === "set_lang_en" ? "en" : "ar";
+      await sb.from("bot_users").upsert(
+        {
+          bot_token_id: botTokenId,
+          owner_id: ownerId,
+          telegram_user_id: cbFromId,
+          telegram_username: cb.from.username || null,
+          first_name: cb.from.first_name || null,
+          last_name: cb.from.last_name || null,
+          language: newLang,
+        },
+        { onConflict: "owner_id,telegram_user_id" },
+      );
+      await tg(botToken, "answerCallbackQuery", { callback_query_id: cb.id });
+      await tg(botToken, "sendMessage", {
+        chat_id: chatId,
+        text: t(newLang, "lang_saved"),
+      });
+      return;
+    }
+
     if (data === "my_subscription") {
+      const lang = await getUserLang(ownerId, cbFromId);
       const { data: sub } = await sb.from("telegram_subscribers").select("*")
         .eq("owner_id", ownerId).eq("bot_token_id", botTokenId).eq(
           "telegram_user_id",
@@ -2090,23 +2113,30 @@ async function handleUpdate(
           const { data: chNames } = await sb.from("telegram_channels").select(
             "channel_name",
           ).in("id", assignedChannelIds);
-          channelInfo = `\n📺 القنوات: ${
-            (chNames || []).map((c: any) => c.channel_name).join("، ")
-          }`;
+          channelInfo = t(lang, "my_sub_channels", {
+            list: (chNames || []).map((c: any) => c.channel_name).join(
+              lang === "ar" ? "، " : ", ",
+            ),
+          });
         }
 
         const status = sub.is_permanent
-          ? "♾ *دائم*"
+          ? t(lang, "status_permanent")
           : sub.expires_at && new Date(sub.expires_at) > new Date()
-          ? `✅ *نشط*\n📅 ينتهي: ${formatDate(sub.expires_at)}\n⏳ متبقي: *${
-            daysRemaining(sub.expires_at)
-          }* يوم`
-          : `❌ *منتهي* منذ ${formatDate(sub.expires_at!)}`;
+          ? t(lang, "my_sub_status_active", {
+            date: formatDate(sub.expires_at),
+            days: daysRemaining(sub.expires_at),
+          })
+          : t(lang, "my_sub_status_expired", {
+            date: formatDate(sub.expires_at!),
+          });
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
-          text: `📋 *اشتراكك:*\n\n${status}${channelInfo}\n📅 تاريخ الاشتراك: ${
-            formatDate(sub.created_at)
-          }`,
+          text: t(lang, "my_sub_card", {
+            status,
+            channels: channelInfo,
+            date: formatDate(sub.created_at),
+          }),
           parse_mode: "Markdown",
         });
       }
@@ -2114,12 +2144,13 @@ async function handleUpdate(
     }
 
     if (data === "activate_free_trial") {
+      const lang = await getUserLang(ownerId, cbFromId);
       await tg(botToken, "answerCallbackQuery", { callback_query_id: cb.id });
 
       if (!freeTrialEnabled) {
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
-          text: "❌ التجربة المجانية غير متاحة حالياً.",
+          text: t(lang, "trial_unavailable"),
         });
         return;
       }
@@ -2131,11 +2162,11 @@ async function handleUpdate(
       if (existingTrial) {
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
-          text:
-            "⚠️ لقد استخدمت التجربة المجانية مسبقاً. لا يمكن الاستفادة أكثر من مرة.",
+          text: t(lang, "trial_already_used"),
         });
         return;
       }
+
 
       const expiresAt = new Date(Date.now() + freeTrialDays * 86400000).toISOString();
 
