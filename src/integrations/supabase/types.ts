@@ -123,6 +123,7 @@ export type Database = {
           created_at: string
           first_name: string | null
           id: string
+          language: string
           last_name: string | null
           owner_id: string
           photo_url: string | null
@@ -134,6 +135,7 @@ export type Database = {
           created_at?: string
           first_name?: string | null
           id?: string
+          language?: string
           last_name?: string | null
           owner_id: string
           photo_url?: string | null
@@ -145,6 +147,7 @@ export type Database = {
           created_at?: string
           first_name?: string | null
           id?: string
+          language?: string
           last_name?: string | null
           owner_id?: string
           photo_url?: string | null
