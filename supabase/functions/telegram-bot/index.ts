@@ -848,8 +848,7 @@ async function handleUpdate(
             }),
             tg(botToken, "sendMessage", {
               chat_id: telegramUserId,
-              text:
-                "⛔ *ليس لديك صلاحية لهذه القناة.*\n\nاشتراكك لا يشمل هذه القناة. تواصل مع المسؤول.",
+              text: t("noPermission", userLang),
               parse_mode: "Markdown",
             }),
           ]);
