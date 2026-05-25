@@ -1376,7 +1376,7 @@ async function handleUpdate(
               await tg(botToken, "sendMessage", {
                 chat_id: chatId,
                 text:
-                  "❌ هذا المستخدم أخفى معلوماته.\n\n💡 اطلب منه إرسال /id للبوت، أو أرسل الـ ID الرقمي مباشرة.",
+                "❌ هذا المستخدم أخفى معلوماته.\n\n💡 اطلب منه إرسال /id للبوت، أو أرسل الـ ID الرقمي مباشرة.",
                 parse_mode: "Markdown",
               });
               return;
