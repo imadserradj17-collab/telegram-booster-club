@@ -532,7 +532,7 @@ async function handleUpdate(
   subscribersChannelId: string | null = null,
   freeTrialEnabled: boolean = false,
   freeTrialDays: number = 3,
-  mandatoryChannelId: string | null = null,
+  mandatoryChatId: number | null = null,
   freeTrialChannelIds: string[] = [],
 ) {
   console.log("handleUpdate called, keys:", Object.keys(update).join(","));
