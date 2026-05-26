@@ -1145,10 +1145,10 @@ async function handleUpdate(
         if (isActiveSub) {
           // ── ACTIVE SUBSCRIBER ──
           // 1. Mandatory channel check first
-          if (mandatoryChannelId && await subscriberHasAllChannels(sub.id)) {
+          if (mandatoryChatId && await subscriberHasAllChannels(sub.id)) {
             const { isMember, channelInfo } = await checkMandatoryChannel(
               botToken,
-              mandatoryChannelId,
+              mandatoryChatId,
               fromId,
             );
             if (!isMember && channelInfo) {
@@ -1359,12 +1359,12 @@ async function handleUpdate(
           (subCheck.expires_at && new Date(subCheck.expires_at) > new Date()));
 
       if (
-        isActiveSub && mandatoryChannelId && subCheck &&
+        isActiveSub && mandatoryChatId && subCheck &&
         await subscriberHasAllChannels(subCheck.id)
       ) {
         const { isMember, channelInfo } = await checkMandatoryChannel(
           botToken,
-          mandatoryChannelId,
+          mandatoryChatId,
           fromId,
         );
         if (!isMember && channelInfo) {
@@ -2243,10 +2243,10 @@ async function handleUpdate(
       }
 
       // Check mandatory channel before showing channel links
-      if (mandatoryChannelId) {
+      if (mandatoryChatId) {
         const { isMember, channelInfo } = await checkMandatoryChannel(
           botToken,
-          mandatoryChannelId,
+          mandatoryChatId,
           cbFromId,
         );
         if (!isMember && channelInfo) {
