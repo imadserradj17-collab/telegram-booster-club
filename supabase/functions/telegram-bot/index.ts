@@ -2896,7 +2896,7 @@ Deno.serve(async (req) => {
         settings.subscribers_channel_id,
         settings.free_trial_enabled ?? false,
         settings.free_trial_days ?? 3,
-        settings.mandatory_channel_id ?? null,
+        settings.mandatory_chat_id ? Number(settings.mandatory_chat_id) : null,
         settings.free_trial_channel_ids ?? [],
       );
       return new Response("ok", { headers: corsHeaders });
