@@ -546,7 +546,7 @@ async function handleUpdate(
     const userId = cm.new_chat_member?.user?.id;
 
     console.log(
-      `chat_member update: chatId=${chatId}, userId=${userId}, old=${oldStatus}, new=${newStatus}, mandatoryChannelId=${mandatoryChannelId}`,
+      `chat_member update: chatId=${chatId}, userId=${userId}, old=${oldStatus}, new=${newStatus}, mandatoryChatId=${mandatoryChatId}`,
     );
 
     // Track when someone joins ANY channel
