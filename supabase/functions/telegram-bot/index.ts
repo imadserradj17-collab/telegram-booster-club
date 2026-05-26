@@ -38,7 +38,7 @@ async function getBotSettingsByToken(token: string) {
   const { data } = await sb
     .from("bot_tokens")
     .select(
-      "id, user_id, admin_telegram_id, non_subscriber_message, public_channel_id, subscribers_channel_id, free_trial_enabled, free_trial_days, mandatory_channel_id, free_trial_channel_ids",
+      "id, user_id, admin_telegram_id, non_subscriber_message, public_channel_id, subscribers_channel_id, free_trial_enabled, free_trial_days, mandatory_channel_id, mandatory_chat_id, free_trial_channel_ids",
     )
     .eq("token", token)
     .maybeSingle();
