@@ -249,7 +249,14 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     if (!botSettings) return;
     setSavingSettings(true);
     try {
-      const updates: any = { non_subscriber_message: nonSubMessage.trim(), public_channel_id: publicChannelId || null, subscribers_channel_id: subscribersChannelId || null, free_trial_enabled: freeTrialEnabled, free_trial_days: freeTrialDays, mandatory_channel_id: mandatoryChannelId || null, free_trial_channel_ids: freeTrialChannelIds, auto_scan_enabled: autoScanEnabled, auto_scan_interval: autoScanInterval };
+      const trimmedChatId = mandatoryChatId.trim();
+      const parsedChatId = trimmedChatId ? Number(trimmedChatId) : null;
+      if (trimmedChatId && (!Number.isFinite(parsedChatId) || !/^-?\d+$/.test(trimmedChatId))) {
+        toast({ title: t("common.error"), description: "Mandatory chat ID must be a number (e.g. -1001234567890)", variant: "destructive" });
+        setSavingSettings(false);
+        return;
+      }
+      const updates: any = { non_subscriber_message: nonSubMessage.trim(), public_channel_id: publicChannelId || null, subscribers_channel_id: subscribersChannelId || null, free_trial_enabled: freeTrialEnabled, free_trial_days: freeTrialDays, mandatory_channel_id: null, mandatory_chat_id: parsedChatId, free_trial_channel_ids: freeTrialChannelIds, auto_scan_enabled: autoScanEnabled, auto_scan_interval: autoScanInterval };
       updates.admin_telegram_id = adminId.trim() ? parseInt(adminId.trim()) : null;
       const { error } = await supabase.from("bot_tokens").update(updates).eq("id", botSettings.id);
       if (error) throw error;
