@@ -183,6 +183,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
       setFreeTrialEnabled((settingsRes.data as any).free_trial_enabled ?? false);
       setFreeTrialDays((settingsRes.data as any).free_trial_days ?? 3);
       setMandatoryChannelId((settingsRes.data as any).mandatory_channel_id || null);
+      setMandatoryChatId((settingsRes.data as any).mandatory_chat_id ? String((settingsRes.data as any).mandatory_chat_id) : "");
       setFreeTrialChannelIds((settingsRes.data as any).free_trial_channel_ids || []);
       setAutoScanEnabled((settingsRes.data as any).auto_scan_enabled ?? false);
       setAutoScanInterval((settingsRes.data as any).auto_scan_interval ?? 60);
