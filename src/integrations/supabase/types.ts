@@ -52,6 +52,7 @@ export type Database = {
           free_trial_enabled: boolean
           id: string
           mandatory_channel_id: string | null
+          mandatory_chat_id: number | null
           non_subscriber_message: string
           public_channel_id: string | null
           subscribers_channel_id: string | null
@@ -69,6 +70,7 @@ export type Database = {
           free_trial_enabled?: boolean
           id?: string
           mandatory_channel_id?: string | null
+          mandatory_chat_id?: number | null
           non_subscriber_message?: string
           public_channel_id?: string | null
           subscribers_channel_id?: string | null
@@ -86,6 +88,7 @@ export type Database = {
           free_trial_enabled?: boolean
           id?: string
           mandatory_channel_id?: string | null
+          mandatory_chat_id?: number | null
           non_subscriber_message?: string
           public_channel_id?: string | null
           subscribers_channel_id?: string | null

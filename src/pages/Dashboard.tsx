@@ -98,6 +98,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const [publicChannelId, setPublicChannelId] = useState<string | null>(null);
   const [subscribersChannelId, setSubscribersChannelId] = useState<string | null>(null);
   const [mandatoryChannelId, setMandatoryChannelId] = useState<string | null>(null);
+  const [mandatoryChatId, setMandatoryChatId] = useState<string>("");
 
   // Add subscriber dialog
   const [showAddSub, setShowAddSub] = useState(false);
@@ -182,6 +183,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
       setFreeTrialEnabled((settingsRes.data as any).free_trial_enabled ?? false);
       setFreeTrialDays((settingsRes.data as any).free_trial_days ?? 3);
       setMandatoryChannelId((settingsRes.data as any).mandatory_channel_id || null);
+      setMandatoryChatId((settingsRes.data as any).mandatory_chat_id ? String((settingsRes.data as any).mandatory_chat_id) : "");
       setFreeTrialChannelIds((settingsRes.data as any).free_trial_channel_ids || []);
       setAutoScanEnabled((settingsRes.data as any).auto_scan_enabled ?? false);
       setAutoScanInterval((settingsRes.data as any).auto_scan_interval ?? 60);
@@ -247,7 +249,14 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     if (!botSettings) return;
     setSavingSettings(true);
     try {
-      const updates: any = { non_subscriber_message: nonSubMessage.trim(), public_channel_id: publicChannelId || null, subscribers_channel_id: subscribersChannelId || null, free_trial_enabled: freeTrialEnabled, free_trial_days: freeTrialDays, mandatory_channel_id: mandatoryChannelId || null, free_trial_channel_ids: freeTrialChannelIds, auto_scan_enabled: autoScanEnabled, auto_scan_interval: autoScanInterval };
+      const trimmedChatId = mandatoryChatId.trim();
+      const parsedChatId = trimmedChatId ? Number(trimmedChatId) : null;
+      if (trimmedChatId && (!Number.isFinite(parsedChatId) || !/^-?\d+$/.test(trimmedChatId))) {
+        toast({ title: t("common.error"), description: "Mandatory chat ID must be a number (e.g. -1001234567890)", variant: "destructive" });
+        setSavingSettings(false);
+        return;
+      }
+      const updates: any = { non_subscriber_message: nonSubMessage.trim(), public_channel_id: publicChannelId || null, subscribers_channel_id: subscribersChannelId || null, free_trial_enabled: freeTrialEnabled, free_trial_days: freeTrialDays, mandatory_channel_id: null, mandatory_chat_id: parsedChatId, free_trial_channel_ids: freeTrialChannelIds, auto_scan_enabled: autoScanEnabled, auto_scan_interval: autoScanInterval };
       updates.admin_telegram_id = adminId.trim() ? parseInt(adminId.trim()) : null;
       const { error } = await supabase.from("bot_tokens").update(updates).eq("id", botSettings.id);
       if (error) throw error;
@@ -2374,19 +2383,15 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   <Label className="text-foreground/80 flex items-center gap-2">
                     <Shield className="w-4 h-4" />{t("dash.mandatoryChannel")}
                   </Label>
-                  <Select value={mandatoryChannelId || "none"} onValueChange={(v) => setMandatoryChannelId(v === "none" ? null : v)}>
-                    <SelectTrigger className="bg-secondary/50 border-border/50">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">{t("dash.mandatoryChannelNone")}</SelectItem>
-                      {channels.map(ch => (
-                        <SelectItem key={ch.id} value={ch.id}>
-                          {ch.channel_type === "group" ? "👥" : "📺"} {ch.channel_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="-1001234567890"
+                    value={mandatoryChatId}
+                    onChange={(e) => setMandatoryChatId(e.target.value)}
+                    dir="ltr"
+                    className="bg-secondary/50 border-border/50 text-left font-mono"
+                  />
                   <p className="text-xs text-muted-foreground">{t("dash.mandatoryChannelHint")}</p>
                   <div className="flex-1">
                     <Label className="text-foreground/80 flex items-center gap-2">

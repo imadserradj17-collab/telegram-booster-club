@@ -38,7 +38,7 @@ async function getBotSettingsByToken(token: string) {
   const { data } = await sb
     .from("bot_tokens")
     .select(
-      "id, user_id, admin_telegram_id, non_subscriber_message, public_channel_id, subscribers_channel_id, free_trial_enabled, free_trial_days, mandatory_channel_id, free_trial_channel_ids",
+      "id, user_id, admin_telegram_id, non_subscriber_message, public_channel_id, subscribers_channel_id, free_trial_enabled, free_trial_days, mandatory_channel_id, mandatory_chat_id, free_trial_channel_ids",
     )
     .eq("token", token)
     .maybeSingle();
@@ -477,28 +477,48 @@ async function finalizeSubscriber(
   });
 }
 
-// Check if user is member of mandatory channel
+// Resolve mandatory chat info via Telegram getChat
+async function getMandatoryChatInfo(
+  botToken: string,
+  chatId: number,
+): Promise<{ channel_id: number; channel_name: string; invite_link: string | null; channel_type: string } | null> {
+  try {
+    const res = await tg(botToken, "getChat", { chat_id: chatId });
+    if (!res.ok) return null;
+    const c = res.result;
+    const type = c.type === "channel" ? "channel" : "group";
+    let invite: string | null = c.invite_link ?? null;
+    if (!invite && c.username) invite = `https://t.me/${c.username}`;
+    return {
+      channel_id: chatId,
+      channel_name: c.title || c.username || String(chatId),
+      invite_link: invite,
+      channel_type: type,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Check if user is member of mandatory channel (by raw Telegram chat id)
 async function checkMandatoryChannel(
   botToken: string,
-  mandatoryChannelId: string,
+  mandatoryChatId: number,
   telegramUserId: number,
 ): Promise<{ isMember: boolean; channelInfo: any | null }> {
-  const { data: ch } = await sb.from("telegram_channels").select(
-    "channel_id, channel_name, invite_link, channel_type",
-  ).eq("id", mandatoryChannelId).maybeSingle();
-  if (!ch) return { isMember: true, channelInfo: null }; // If channel not found, skip check
+  const channelInfo = await getMandatoryChatInfo(botToken, mandatoryChatId);
   try {
     const result = await tg(botToken, "getChatMember", {
-      chat_id: ch.channel_id,
+      chat_id: mandatoryChatId,
       user_id: telegramUserId,
     });
     if (result.ok) {
       const status = result.result.status;
       const isMember = ["member", "administrator", "creator"].includes(status);
-      return { isMember, channelInfo: ch };
+      return { isMember, channelInfo };
     }
   } catch {}
-  return { isMember: false, channelInfo: ch };
+  return { isMember: false, channelInfo };
 }
 
 async function handleUpdate(
@@ -512,7 +532,7 @@ async function handleUpdate(
   subscribersChannelId: string | null = null,
   freeTrialEnabled: boolean = false,
   freeTrialDays: number = 3,
-  mandatoryChannelId: string | null = null,
+  mandatoryChatId: number | null = null,
   freeTrialChannelIds: string[] = [],
 ) {
   console.log("handleUpdate called, keys:", Object.keys(update).join(","));
@@ -526,7 +546,7 @@ async function handleUpdate(
     const userId = cm.new_chat_member?.user?.id;
 
     console.log(
-      `chat_member update: chatId=${chatId}, userId=${userId}, old=${oldStatus}, new=${newStatus}, mandatoryChannelId=${mandatoryChannelId}`,
+      `chat_member update: chatId=${chatId}, userId=${userId}, old=${oldStatus}, new=${newStatus}, mandatoryChatId=${mandatoryChatId}`,
     );
 
     // Track when someone joins ANY channel
@@ -595,22 +615,13 @@ async function handleUpdate(
     const isNowInactive = ["left", "kicked", "restricted"].includes(newStatus);
     const userLeft = wasActive && isNowInactive;
 
-    if (mandatoryChannelId && userId && userLeft) {
+    if (mandatoryChatId && userId && userLeft && Number(mandatoryChatId) === Number(chatId)) {
       console.log(
-        `User ${userId} left/kicked from chat ${chatId}, checking if mandatory channel...`,
+        `User ${userId} left/kicked from mandatory chat ${chatId}, processing...`,
       );
-      const { data: mandatoryCh } = await sb.from("telegram_channels")
-        .select("id, channel_id, channel_name, invite_link, channel_type")
-        .eq("id", mandatoryChannelId)
-        .maybeSingle();
+      const mandatoryCh = await getMandatoryChatInfo(botToken, Number(mandatoryChatId));
 
-      console.log(
-        `mandatoryCh: id=${mandatoryCh?.id}, channel_id=${mandatoryCh?.channel_id}, chatId=${chatId}, match=${
-          mandatoryCh?.channel_id == chatId
-        }`,
-      );
-
-      if (mandatoryCh && Number(mandatoryCh.channel_id) === Number(chatId)) {
+      if (mandatoryCh) {
         console.log(`Mandatory channel match! Checking subscriber status...`);
         // Check both paid subscribers and free trial users in parallel
         const [subRes, trialRes] = await Promise.all([
@@ -1134,10 +1145,10 @@ async function handleUpdate(
         if (isActiveSub) {
           // ── ACTIVE SUBSCRIBER ──
           // 1. Mandatory channel check first
-          if (mandatoryChannelId && await subscriberHasAllChannels(sub.id)) {
+          if (mandatoryChatId && await subscriberHasAllChannels(sub.id)) {
             const { isMember, channelInfo } = await checkMandatoryChannel(
               botToken,
-              mandatoryChannelId,
+              mandatoryChatId,
               fromId,
             );
             if (!isMember && channelInfo) {
@@ -1348,12 +1359,12 @@ async function handleUpdate(
           (subCheck.expires_at && new Date(subCheck.expires_at) > new Date()));
 
       if (
-        isActiveSub && mandatoryChannelId && subCheck &&
+        isActiveSub && mandatoryChatId && subCheck &&
         await subscriberHasAllChannels(subCheck.id)
       ) {
         const { isMember, channelInfo } = await checkMandatoryChannel(
           botToken,
-          mandatoryChannelId,
+          mandatoryChatId,
           fromId,
         );
         if (!isMember && channelInfo) {
@@ -2232,10 +2243,10 @@ async function handleUpdate(
       }
 
       // Check mandatory channel before showing channel links
-      if (mandatoryChannelId) {
+      if (mandatoryChatId) {
         const { isMember, channelInfo } = await checkMandatoryChannel(
           botToken,
-          mandatoryChannelId,
+          mandatoryChatId,
           cbFromId,
         );
         if (!isMember && channelInfo) {
@@ -2885,7 +2896,7 @@ Deno.serve(async (req) => {
         settings.subscribers_channel_id,
         settings.free_trial_enabled ?? false,
         settings.free_trial_days ?? 3,
-        settings.mandatory_channel_id ?? null,
+        settings.mandatory_chat_id ? Number(settings.mandatory_chat_id) : null,
         settings.free_trial_channel_ids ?? [],
       );
       return new Response("ok", { headers: corsHeaders });
