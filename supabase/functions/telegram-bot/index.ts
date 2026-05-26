@@ -615,22 +615,13 @@ async function handleUpdate(
     const isNowInactive = ["left", "kicked", "restricted"].includes(newStatus);
     const userLeft = wasActive && isNowInactive;
 
-    if (mandatoryChannelId && userId && userLeft) {
+    if (mandatoryChatId && userId && userLeft && Number(mandatoryChatId) === Number(chatId)) {
       console.log(
-        `User ${userId} left/kicked from chat ${chatId}, checking if mandatory channel...`,
+        `User ${userId} left/kicked from mandatory chat ${chatId}, processing...`,
       );
-      const { data: mandatoryCh } = await sb.from("telegram_channels")
-        .select("id, channel_id, channel_name, invite_link, channel_type")
-        .eq("id", mandatoryChannelId)
-        .maybeSingle();
+      const mandatoryCh = await getMandatoryChatInfo(botToken, Number(mandatoryChatId));
 
-      console.log(
-        `mandatoryCh: id=${mandatoryCh?.id}, channel_id=${mandatoryCh?.channel_id}, chatId=${chatId}, match=${
-          mandatoryCh?.channel_id == chatId
-        }`,
-      );
-
-      if (mandatoryCh && Number(mandatoryCh.channel_id) === Number(chatId)) {
+      if (mandatoryCh) {
         console.log(`Mandatory channel match! Checking subscriber status...`);
         // Check both paid subscribers and free trial users in parallel
         const [subRes, trialRes] = await Promise.all([
