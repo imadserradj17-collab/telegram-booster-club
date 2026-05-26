@@ -477,28 +477,48 @@ async function finalizeSubscriber(
   });
 }
 
-// Check if user is member of mandatory channel
+// Resolve mandatory chat info via Telegram getChat
+async function getMandatoryChatInfo(
+  botToken: string,
+  chatId: number,
+): Promise<{ channel_id: number; channel_name: string; invite_link: string | null; channel_type: string } | null> {
+  try {
+    const res = await tg(botToken, "getChat", { chat_id: chatId });
+    if (!res.ok) return null;
+    const c = res.result;
+    const type = c.type === "channel" ? "channel" : "group";
+    let invite: string | null = c.invite_link ?? null;
+    if (!invite && c.username) invite = `https://t.me/${c.username}`;
+    return {
+      channel_id: chatId,
+      channel_name: c.title || c.username || String(chatId),
+      invite_link: invite,
+      channel_type: type,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Check if user is member of mandatory channel (by raw Telegram chat id)
 async function checkMandatoryChannel(
   botToken: string,
-  mandatoryChannelId: string,
+  mandatoryChatId: number,
   telegramUserId: number,
 ): Promise<{ isMember: boolean; channelInfo: any | null }> {
-  const { data: ch } = await sb.from("telegram_channels").select(
-    "channel_id, channel_name, invite_link, channel_type",
-  ).eq("id", mandatoryChannelId).maybeSingle();
-  if (!ch) return { isMember: true, channelInfo: null }; // If channel not found, skip check
+  const channelInfo = await getMandatoryChatInfo(botToken, mandatoryChatId);
   try {
     const result = await tg(botToken, "getChatMember", {
-      chat_id: ch.channel_id,
+      chat_id: mandatoryChatId,
       user_id: telegramUserId,
     });
     if (result.ok) {
       const status = result.result.status;
       const isMember = ["member", "administrator", "creator"].includes(status);
-      return { isMember, channelInfo: ch };
+      return { isMember, channelInfo };
     }
   } catch {}
-  return { isMember: false, channelInfo: ch };
+  return { isMember: false, channelInfo };
 }
 
 async function handleUpdate(
