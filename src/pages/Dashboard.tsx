@@ -98,6 +98,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const [publicChannelId, setPublicChannelId] = useState<string | null>(null);
   const [subscribersChannelId, setSubscribersChannelId] = useState<string | null>(null);
   const [mandatoryChannelId, setMandatoryChannelId] = useState<string | null>(null);
+  const [mandatoryChatId, setMandatoryChatId] = useState<string>("");
 
   // Add subscriber dialog
   const [showAddSub, setShowAddSub] = useState(false);
