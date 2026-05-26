@@ -2383,19 +2383,15 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   <Label className="text-foreground/80 flex items-center gap-2">
                     <Shield className="w-4 h-4" />{t("dash.mandatoryChannel")}
                   </Label>
-                  <Select value={mandatoryChannelId || "none"} onValueChange={(v) => setMandatoryChannelId(v === "none" ? null : v)}>
-                    <SelectTrigger className="bg-secondary/50 border-border/50">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">{t("dash.mandatoryChannelNone")}</SelectItem>
-                      {channels.map(ch => (
-                        <SelectItem key={ch.id} value={ch.id}>
-                          {ch.channel_type === "group" ? "👥" : "📺"} {ch.channel_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="-1001234567890"
+                    value={mandatoryChatId}
+                    onChange={(e) => setMandatoryChatId(e.target.value)}
+                    dir="ltr"
+                    className="bg-secondary/50 border-border/50 text-left font-mono"
+                  />
                   <p className="text-xs text-muted-foreground">{t("dash.mandatoryChannelHint")}</p>
                   <div className="flex-1">
                     <Label className="text-foreground/80 flex items-center gap-2">
