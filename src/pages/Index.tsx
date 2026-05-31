@@ -13,6 +13,7 @@ const Index = () => {
   const [hasBotToken, setHasBotToken] = useState<boolean | null>(null);
   const [isApproved, setIsApproved] = useState<boolean | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isModerator, setIsModerator] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -26,6 +27,7 @@ const Index = () => {
           setHasBotToken(null);
           setIsApproved(null);
           setIsAdmin(false);
+          setIsModerator(false);
           setShowAdmin(false);
           setLoading(false);
         }
@@ -45,19 +47,23 @@ const Index = () => {
   }, []);
 
   const checkUserStatus = async (userId: string) => {
-    const [profileRes, tokenRes, roleRes] = await Promise.all([
+    const [profileRes, tokenRes, adminRes, modRes] = await Promise.all([
       supabase.from("profiles").select("is_approved, approved_until").eq("id", userId).maybeSingle(),
       supabase.from("bot_tokens").select("id").eq("user_id", userId).maybeSingle(),
       supabase.rpc("has_role", { _user_id: userId, _role: "admin" }),
+      supabase.rpc("has_role", { _user_id: userId, _role: "moderator" as any }),
     ]);
 
     const profile = profileRes.data;
-    const approved = profile?.is_approved && 
+    const approved = profile?.is_approved &&
       (!profile.approved_until || new Date(profile.approved_until) > new Date());
     setIsApproved(approved ?? false);
     setHasBotToken(!!tokenRes.data);
-    setIsAdmin(roleRes.data === true);
-    setShowAdmin(roleRes.data === true);
+    const adminFlag = adminRes.data === true;
+    const modFlag = modRes.data === true;
+    setIsAdmin(adminFlag);
+    setIsModerator(modFlag);
+    setShowAdmin(adminFlag || modFlag);
     setLoading(false);
   };
 
@@ -70,16 +76,17 @@ const Index = () => {
   }
 
   if (!session) return <Auth />;
-  
-  // Admin can switch between admin panel and dashboard
-  if (isAdmin && showAdmin) {
-    return <AdminPanel onGoToDashboard={() => setShowAdmin(false)} />;
+
+  const canStaff = isAdmin || isModerator;
+
+  if (canStaff && showAdmin) {
+    return <AdminPanel role={isAdmin ? "admin" : "moderator"} onGoToDashboard={() => setShowAdmin(false)} />;
   }
 
-  if (!isApproved) return <PendingApproval />;
+  if (!isApproved && !canStaff) return <PendingApproval />;
   if (!hasBotToken) return <BotTokenSetup onComplete={() => setHasBotToken(true)} />;
-  
-  return <Dashboard onShowAdmin={isAdmin ? () => setShowAdmin(true) : undefined} />;
+
+  return <Dashboard onShowAdmin={canStaff ? () => setShowAdmin(true) : undefined} />;
 };
 
 export default Index;
