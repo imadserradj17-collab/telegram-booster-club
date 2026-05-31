@@ -18,7 +18,7 @@ interface Props {
   botTokenId: string;
 }
 
-export const BotModeratorsCard = ({ botTokenId, ownerId }: Props) => {
+export const BotModeratorsCard = ({ botTokenId }: Props) => {
   const { lang } = useLanguage();
   const ar = lang === "ar";
   const [mods, setMods] = useState<Moderator[]>([]);
