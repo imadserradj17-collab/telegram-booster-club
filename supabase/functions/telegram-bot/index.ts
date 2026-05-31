@@ -529,6 +529,24 @@ async function finalizeSubscriber(
     parse_mode: "Markdown",
     reply_markup: adminKeyboard(isModerator),
   });
+
+  // Log activity
+  logBotActivity({
+    botTokenId,
+    ownerId,
+    actorTelegramId: chatId,
+    isModerator,
+    action: "subscriber_added",
+    targetLabel: telegramUsername ? `@${telegramUsername}` : String(telegramUserId),
+    targetTelegramId: telegramUserId,
+    details: {
+      days,
+      is_permanent: isPermanent,
+      expires_at: expiresAt,
+      channels_count: selectedChannelIds.length,
+      subscriber_name: [fn, ln].filter(Boolean).join(" ") || null,
+    },
+  });
 }
 
 // Resolve mandatory chat info via Telegram getChat
