@@ -428,6 +428,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     { key: "broadcast", icon: Send, label: t("broadcast.title") },
     { key: "kick_nonsubs", icon: Shield, label: t("dash.kickNonSubscribers") },
     { key: "scan_logs", icon: FileText, label: t("scanLogs.title") },
+    { key: "admin_activity", icon: Activity, label: lang === "ar" ? "سجل أعمال الإدارة" : "Admin Activity" },
     { key: "analytics", icon: BarChart3, label: t("dash.analytics") },
     { key: "settings", icon: Settings, label: t("dash.settings") },
   ];
