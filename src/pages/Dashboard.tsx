@@ -2459,8 +2459,8 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                     </div>
                   )}
                 </div>
-                {botSettings && user && (
-                  <BotModeratorsCard botTokenId={botSettings.id} ownerId={user.id} />
+                {botSettings && (
+                  <BotModeratorsCard botTokenId={botSettings.id} />
                 )}
                 <Button onClick={handleSaveSettings} disabled={savingSettings} className="w-full gradient-telegram text-primary-foreground hover:opacity-90">
                   {savingSettings ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : <Save className="w-4 h-4 ml-2" />}
