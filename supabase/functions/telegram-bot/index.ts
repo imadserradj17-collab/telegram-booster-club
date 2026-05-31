@@ -2927,6 +2927,13 @@ async function handleUpdate(
               text: "⚠️ تم إلغاء اشتراكك وإزالتك من القنوات.",
             }),
           ]);
+          logBotActivity({
+            botTokenId, ownerId, actorTelegramId: cbFromId, isModerator,
+            action: "subscriber_deleted",
+            targetLabel: String(userId),
+            targetTelegramId: userId,
+            details: { kicked_channels: kicked },
+          });
         }
         break;
       }
