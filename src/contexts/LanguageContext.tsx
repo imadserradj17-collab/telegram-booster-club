@@ -278,6 +278,36 @@ const translations: Record<string, Record<Lang, string>> = {
   // Common
   "common.logout": { ar: "تسجيل الخروج", en: "Sign Out" },
   "common.error": { ar: "خطأ", en: "Error" },
+
+  // Moderators / Activity log
+  "admin.tabUsers": { ar: "المستخدمون", en: "Users" },
+  "admin.tabModerators": { ar: "المشرفون الفرعيون", en: "Moderators" },
+  "admin.tabActivity": { ar: "سجل الأعمال", en: "Activity Log" },
+  "admin.moderatorsTitle": { ar: "إدارة المشرفين الفرعيين", en: "Manage Moderators" },
+  "admin.moderatorsHint": { ar: "المشرف الفرعي يمكنه تفعيل/إيقاف المستخدمين وإدارة المشتركين فقط.", en: "Moderators can activate/deactivate users and manage subscribers only." },
+  "admin.addModerator": { ar: "ترقية إلى مشرف", en: "Promote to moderator" },
+  "admin.selectUser": { ar: "اختر مستخدماً مفعّلاً", en: "Select an active user" },
+  "admin.alreadyModerator": { ar: "هذا المستخدم مشرف بالفعل", en: "Already a moderator" },
+  "admin.promoted": { ar: "تمت الترقية ✅", en: "Promoted ✅" },
+  "admin.demote": { ar: "إزالة", en: "Remove" },
+  "admin.demoted": { ar: "تمت الإزالة", en: "Removed" },
+  "admin.confirmDemote": { ar: "إزالة هذا المشرف؟", en: "Remove this moderator?" },
+  "admin.noModerators": { ar: "لا يوجد مشرفون فرعيون", en: "No moderators yet" },
+  "admin.addedOn": { ar: "تمت الإضافة", en: "Added" },
+  "admin.activityTitle": { ar: "سجل الأعمال", en: "Activity Log" },
+  "admin.activityHint": { ar: "كل عمليات التفعيل والإيقاف والحذف والتعديل مع اسم المنفّذ.", en: "All activate/deactivate/edit actions with the actor." },
+  "admin.actor": { ar: "المنفّذ", en: "Actor" },
+  "admin.action": { ar: "العملية", en: "Action" },
+  "admin.target": { ar: "المستهدف", en: "Target" },
+  "admin.details": { ar: "التفاصيل", en: "Details" },
+  "admin.when": { ar: "الوقت", en: "When" },
+  "admin.noActivity": { ar: "لا توجد عمليات بعد", en: "No activity yet" },
+  "admin.actionActivate": { ar: "تفعيل مستخدم", en: "Activated user" },
+  "admin.actionDeactivate": { ar: "إيقاف مستخدم", en: "Deactivated user" },
+  "admin.actionPromote": { ar: "ترقية مشرف", en: "Promoted moderator" },
+  "admin.actionDemote": { ar: "إزالة مشرف", en: "Removed moderator" },
+  "admin.filterActor": { ar: "بحث بالمنفّذ...", en: "Search by actor..." },
+  "admin.days": { ar: "أيام", en: "days" },
 };
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
