@@ -1593,8 +1593,7 @@ async function handleUpdate(
               ln,
               days,
               isPermanent,
-              [],
-            );
+              [], isModerator);
             return;
           }
 
@@ -1611,8 +1610,7 @@ async function handleUpdate(
               ln,
               days,
               isPermanent,
-              [channels[0].id],
-            );
+              [channels[0].id], isModerator);
             return;
           }
 
@@ -1690,8 +1688,7 @@ async function handleUpdate(
               ln,
               days,
               false,
-              [],
-            );
+              [], isModerator);
             return;
           }
 
@@ -1708,8 +1705,7 @@ async function handleUpdate(
               ln,
               days,
               false,
-              [channels[0].id],
-            );
+              [channels[0].id], isModerator);
             return;
           }
 
@@ -2473,8 +2469,7 @@ async function handleUpdate(
         ln,
         days,
         isPermanent,
-        selectedChannels,
-      );
+        selectedChannels, isModerator);
       return;
     }
 
@@ -2746,8 +2741,7 @@ async function handleUpdate(
               ln,
               days,
               isPermanent,
-              [],
-            );
+              [], isModerator);
             break;
           }
 
@@ -2764,8 +2758,7 @@ async function handleUpdate(
               ln,
               days,
               isPermanent,
-              [channels[0].id],
-            );
+              [channels[0].id], isModerator);
             break;
           }
 
