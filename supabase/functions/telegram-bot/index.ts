@@ -234,7 +234,21 @@ async function subscriberHasAllChannels(
   return count === 0 || count > FULL_ACCESS_THRESHOLD;
 }
 
-function adminKeyboard() {
+function adminKeyboard(restricted: boolean = false) {
+  if (restricted) {
+    return {
+      inline_keyboard: [
+        [
+          { text: "➕ إضافة مشترك", callback_data: "add_subscriber" },
+          { text: "📋 المشتركين", callback_data: "list_subscribers" },
+        ],
+        [
+          { text: "🔍 بحث عن مشترك", callback_data: "search_subscriber" },
+          { text: "🗑 حذف مشترك", callback_data: "delete_subscriber" },
+        ],
+      ],
+    };
+  }
   return {
     inline_keyboard: [
       [
@@ -255,6 +269,15 @@ function adminKeyboard() {
       ],
     ],
   };
+}
+
+// Get moderator telegram_user_id set for a given bot
+async function getModeratorIds(botTokenId: string): Promise<Set<number>> {
+  const { data } = await sb.from("bot_moderators").select("telegram_user_id").eq(
+    "bot_token_id",
+    botTokenId,
+  );
+  return new Set((data || []).map((r: any) => Number(r.telegram_user_id)));
 }
 
 // Concurrent broadcast with controlled concurrency
