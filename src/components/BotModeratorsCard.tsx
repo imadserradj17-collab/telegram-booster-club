@@ -16,7 +16,6 @@ interface Moderator {
 
 interface Props {
   botTokenId: string;
-  ownerId: string;
 }
 
 export const BotModeratorsCard = ({ botTokenId, ownerId }: Props) => {
