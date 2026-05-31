@@ -2334,7 +2334,10 @@ async function handleUpdate(
       return;
     }
 
-    const isCbAdmin = !adminTelegramId || cbFromId === adminTelegramId;
+    const cbModeratorIds = await getModeratorIds(botTokenId);
+    const isCbOwnerAdmin = !adminTelegramId || cbFromId === adminTelegramId;
+    const isModerator = !isCbOwnerAdmin && cbModeratorIds.has(cbFromId);
+    const isCbAdmin = isCbOwnerAdmin || isModerator;
     if (!isCbAdmin) {
       await tg(botToken, "answerCallbackQuery", {
         callback_query_id: cb.id,
