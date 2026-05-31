@@ -34,6 +34,36 @@ const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 // Single cached client instance
 const sb = createClient(supabaseUrl, supabaseServiceKey);
 
+// Log an admin/moderator action performed via the bot
+async function logBotActivity(opts: {
+  botTokenId: string;
+  ownerId: string;
+  actorTelegramId: number;
+  isModerator: boolean;
+  actorName?: string | null;
+  actorUsername?: string | null;
+  action: string;
+  targetLabel?: string | null;
+  targetTelegramId?: number | null;
+  details?: Record<string, any>;
+}) {
+  try {
+    await sb.from("bot_admin_activity_log").insert({
+      bot_token_id: opts.botTokenId,
+      owner_id: opts.ownerId,
+      actor_telegram_id: opts.actorTelegramId,
+      actor_role: opts.isModerator ? "moderator" : "owner",
+      actor_name: opts.actorName ?? null,
+      actor_username: opts.actorUsername ?? null,
+      action: opts.action,
+      target_label: opts.targetLabel ?? null,
+      target_telegram_id: opts.targetTelegramId ?? null,
+      details: opts.details ?? {},
+    });
+  } catch (_e) { /* ignore logging failure */ }
+}
+
+
 async function getBotSettingsByToken(token: string) {
   const { data } = await sb
     .from("bot_tokens")
@@ -498,6 +528,24 @@ async function finalizeSubscriber(
       `✅ *تمت إضافة المشترك بنجاح!*\n\n🆔 المعرف: \`${telegramUserId}\`\n${subInfo}\n📺 القنوات: *${selectedChannelIds.length}*${notifStatus}`,
     parse_mode: "Markdown",
     reply_markup: adminKeyboard(isModerator),
+  });
+
+  // Log activity
+  logBotActivity({
+    botTokenId,
+    ownerId,
+    actorTelegramId: chatId,
+    isModerator,
+    action: "subscriber_added",
+    targetLabel: telegramUsername ? `@${telegramUsername}` : String(telegramUserId),
+    targetTelegramId: telegramUserId,
+    details: {
+      days,
+      is_permanent: isPermanent,
+      expires_at: expiresAt,
+      channels_count: selectedChannelIds.length,
+      subscriber_name: [fn, ln].filter(Boolean).join(" ") || null,
+    },
   });
 }
 
@@ -2837,6 +2885,12 @@ async function handleUpdate(
             parse_mode: "Markdown",
             reply_markup: adminKeyboard(isModerator),
           });
+          logBotActivity({
+            botTokenId, ownerId, actorTelegramId: cbFromId, isModerator,
+            action: "channel_deleted",
+            targetLabel: ch?.channel_name || String(channelId),
+            details: { telegram_channel_id: channelId },
+          });
         }
         if (data.startsWith("del_sub_")) {
           const userId = parseInt(data.replace("del_sub_", ""));
@@ -2873,6 +2927,13 @@ async function handleUpdate(
               text: "⚠️ تم إلغاء اشتراكك وإزالتك من القنوات.",
             }),
           ]);
+          logBotActivity({
+            botTokenId, ownerId, actorTelegramId: cbFromId, isModerator,
+            action: "subscriber_deleted",
+            targetLabel: String(userId),
+            targetTelegramId: userId,
+            details: { kicked_channels: kicked },
+          });
         }
         break;
       }

@@ -47,6 +47,51 @@ export type Database = {
         }
         Relationships: []
       }
+      bot_admin_activity_log: {
+        Row: {
+          action: string
+          actor_name: string | null
+          actor_role: string
+          actor_telegram_id: number
+          actor_username: string | null
+          bot_token_id: string
+          created_at: string
+          details: Json
+          id: string
+          owner_id: string
+          target_label: string | null
+          target_telegram_id: number | null
+        }
+        Insert: {
+          action: string
+          actor_name?: string | null
+          actor_role: string
+          actor_telegram_id: number
+          actor_username?: string | null
+          bot_token_id: string
+          created_at?: string
+          details?: Json
+          id?: string
+          owner_id: string
+          target_label?: string | null
+          target_telegram_id?: number | null
+        }
+        Update: {
+          action?: string
+          actor_name?: string | null
+          actor_role?: string
+          actor_telegram_id?: number
+          actor_username?: string | null
+          bot_token_id?: string
+          created_at?: string
+          details?: Json
+          id?: string
+          owner_id?: string
+          target_label?: string | null
+          target_telegram_id?: number | null
+        }
+        Relationships: []
+      }
       bot_moderators: {
         Row: {
           bot_token_id: string
