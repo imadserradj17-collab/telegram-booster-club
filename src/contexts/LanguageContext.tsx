@@ -297,7 +297,7 @@ const translations: Record<string, Record<Lang, string>> = {
   "admin.activityTitle": { ar: "سجل الأعمال", en: "Activity Log" },
   "admin.activityHint": { ar: "كل عمليات التفعيل والإيقاف والحذف والتعديل مع اسم المنفّذ.", en: "All activate/deactivate/edit actions with the actor." },
   "admin.actor": { ar: "المنفّذ", en: "Actor" },
-  "admin.action": { ar: "العملية", en: "Action" },
+  "admin.actionLabel": { ar: "العملية", en: "Action" },
   "admin.target": { ar: "المستهدف", en: "Target" },
   "admin.details": { ar: "التفاصيل", en: "Details" },
   "admin.when": { ar: "الوقت", en: "When" },
