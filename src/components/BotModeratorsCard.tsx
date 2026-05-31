@@ -48,6 +48,9 @@ export const BotModeratorsCard = ({ botTokenId }: Props) => {
       return;
     }
     setSaving(true);
+    const { data: auth } = await supabase.auth.getUser();
+    const ownerId = auth.user?.id;
+    if (!ownerId) { setSaving(false); toast.error("Not authenticated"); return; }
     const { error } = await supabase.from("bot_moderators").insert({
       bot_token_id: botTokenId,
       owner_id: ownerId,
