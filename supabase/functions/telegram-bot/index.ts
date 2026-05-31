@@ -1097,7 +1097,10 @@ async function handleUpdate(
     const text = msg.text || "";
     const fromId = msg.from.id;
     const firstName = msg.from.first_name || "";
-    const isAdmin = !adminTelegramId || fromId === adminTelegramId;
+    const moderatorIds = await getModeratorIds(botTokenId);
+    const isOwnerAdmin = !adminTelegramId || fromId === adminTelegramId;
+    const isModerator = !isOwnerAdmin && moderatorIds.has(fromId);
+    const isAdmin = isOwnerAdmin || isModerator;
 
     if (text === "/start") {
       await clearState(chatId, botToken);
