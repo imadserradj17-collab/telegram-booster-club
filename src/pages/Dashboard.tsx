@@ -20,7 +20,7 @@ import {
   LogOut, Trash2, RefreshCw, Users, Zap, Bot, UserPlus, Clock,
   Settings, Key, Shield, MessageSquare, Save, Loader2, User, Calendar, Hash,
   LayoutDashboard, ChevronLeft, ChevronRight, Search, AlertTriangle, Menu, X,
-  BarChart3, Tv, Plus, Send, Link, Edit, CheckCircle, XCircle, FileText, MessageCircle,
+  BarChart3, Tv, Plus, Send, Link, Edit, CheckCircle, XCircle, FileText, MessageCircle, Activity,
 } from "lucide-react";
 import ChannelMessagesView from "@/components/ChannelMessagesView";
 import { BotModeratorsCard } from "@/components/BotModeratorsCard";
