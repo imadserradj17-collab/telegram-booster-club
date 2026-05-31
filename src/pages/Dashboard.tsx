@@ -2214,6 +2214,14 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
             </div>
           )}
 
+          {activeTab === "admin_activity" && botSettings && (
+            <div className="animate-fade-in">
+              <BotActivityLogView botTokenId={botSettings.id} />
+            </div>
+          )}
+
+
+
 
           {activeTab === "analytics" && (
             <div className="space-y-4 md:space-y-6 animate-fade-in">
