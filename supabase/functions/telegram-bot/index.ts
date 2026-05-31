@@ -427,7 +427,7 @@ async function finalizeSubscriber(
     await tg(botToken, "sendMessage", {
       chat_id: chatId,
       text: "❌ خطأ: " + error.message,
-      reply_markup: adminKeyboard(),
+      reply_markup: adminKeyboard(isModerator),
     });
     return;
   }
@@ -496,7 +496,7 @@ async function finalizeSubscriber(
     text:
       `✅ *تمت إضافة المشترك بنجاح!*\n\n🆔 المعرف: \`${telegramUserId}\`\n${subInfo}\n📺 القنوات: *${selectedChannelIds.length}*${notifStatus}`,
     parse_mode: "Markdown",
-    reply_markup: adminKeyboard(),
+    reply_markup: adminKeyboard(isModerator),
   });
 }
 
@@ -1150,7 +1150,7 @@ async function handleUpdate(
               channelsRes.data?.length || 0
             }*\n\nاختر أحد الخيارات:`,
           parse_mode: "Markdown",
-          reply_markup: adminKeyboard(),
+          reply_markup: adminKeyboard(isModerator),
         });
       } else {
         // ─── NON-ADMIN /start FLOW ───
@@ -1356,7 +1356,7 @@ async function handleUpdate(
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
           text: "❌ تم الإلغاء.",
-          reply_markup: adminKeyboard(),
+          reply_markup: adminKeyboard(isModerator),
         });
       } else {
         const lang = await getUserLang(ownerId, fromId);
@@ -1827,7 +1827,7 @@ async function handleUpdate(
                 text:
                   `⚠️ البوت *ليس مسؤولاً* في *${channelName}*\n\nأضف البوت كمسؤول أولاً.`,
                 parse_mode: "Markdown",
-                reply_markup: adminKeyboard(),
+                reply_markup: adminKeyboard(isModerator),
               });
               return;
             }
@@ -1844,7 +1844,7 @@ async function handleUpdate(
               text:
                 `❌ فشل إنشاء رابط الدعوة\n\n💡 تأكد أن البوت لديه صلاحية *دعوة أعضاء*.`,
               parse_mode: "Markdown",
-              reply_markup: adminKeyboard(),
+              reply_markup: adminKeyboard(isModerator),
             });
             return;
           }
@@ -1866,7 +1866,7 @@ async function handleUpdate(
             await tg(botToken, "sendMessage", {
               chat_id: chatId,
               text: "❌ خطأ: " + error.message,
-              reply_markup: adminKeyboard(),
+              reply_markup: adminKeyboard(isModerator),
             });
             return;
           }
@@ -1934,7 +1934,7 @@ async function handleUpdate(
               membersRes.ok ? membersRes.result : "—"
             }\n🔗 [رابط الدعوة](${linkRes.result.invite_link})`,
             parse_mode: "Markdown",
-            reply_markup: adminKeyboard(),
+            reply_markup: adminKeyboard(isModerator),
           });
           return;
         }
@@ -1962,7 +1962,7 @@ async function handleUpdate(
             text:
               `📢 *تم الإرسال!*\n\n✅ نجح: *${sent}*\n❌ فشل: *${failed}*\n📊 الإجمالي: ${activeSubs.length}`,
             parse_mode: "Markdown",
-            reply_markup: adminKeyboard(),
+            reply_markup: adminKeyboard(isModerator),
           });
           return;
         }
@@ -2028,7 +2028,7 @@ async function handleUpdate(
             await tg(botToken, "sendMessage", {
               chat_id: chatId,
               text: "❌ لم يتم العثور على مشترك.",
-              reply_markup: adminKeyboard(),
+              reply_markup: adminKeyboard(isModerator),
             });
           }
           return;
@@ -2041,7 +2041,7 @@ async function handleUpdate(
             await tg(botToken, "sendMessage", {
               chat_id: chatId,
               text: "❌ أرسل رقم ID فقط.",
-              reply_markup: adminKeyboard(),
+              reply_markup: adminKeyboard(isModerator),
             });
             return;
           }
@@ -2056,7 +2056,7 @@ async function handleUpdate(
             await tg(botToken, "sendMessage", {
               chat_id: chatId,
               text: "❌ المشترك غير موجود.",
-              reply_markup: adminKeyboard(),
+              reply_markup: adminKeyboard(isModerator),
             });
             return;
           }
@@ -2079,7 +2079,7 @@ async function handleUpdate(
               text:
                 `✅ *تم حذف المشترك* \`${parsed}\`\n🚫 طُرد من *${kicked}* قناة`,
               parse_mode: "Markdown",
-              reply_markup: adminKeyboard(),
+              reply_markup: adminKeyboard(isModerator),
             }),
             tg(botToken, "sendMessage", {
               chat_id: parsed,
@@ -2500,7 +2500,7 @@ async function handleUpdate(
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
             text: "📋 لا يوجد مشتركون حالياً.",
-            reply_markup: adminKeyboard(),
+            reply_markup: adminKeyboard(isModerator),
           });
         } else {
           // Batch fetch all channel assignments (fixes N+1)
@@ -2524,7 +2524,7 @@ async function handleUpdate(
             chat_id: chatId,
             text: msgText,
             parse_mode: "Markdown",
-            reply_markup: adminKeyboard(),
+            reply_markup: adminKeyboard(isModerator),
           });
         }
         break;
@@ -2539,7 +2539,7 @@ async function handleUpdate(
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
             text: "📺 لا توجد قنوات أو مجموعات.",
-            reply_markup: adminKeyboard(),
+            reply_markup: adminKeyboard(isModerator),
           });
         } else {
           let msgText = `📺 *القنوات والمجموعات (${channels.length}):*\n\n`;
@@ -2651,7 +2651,7 @@ async function handleUpdate(
               channelsRes.data?.length || 0
             }`,
           parse_mode: "Markdown",
-          reply_markup: adminKeyboard(),
+          reply_markup: adminKeyboard(isModerator),
         });
         break;
       }
@@ -2661,7 +2661,7 @@ async function handleUpdate(
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
           text: "❌ تم الإلغاء.",
-          reply_markup: adminKeyboard(),
+          reply_markup: adminKeyboard(isModerator),
         });
         break;
       }
@@ -2672,7 +2672,7 @@ async function handleUpdate(
           chat_id: chatId,
           text: "🤖 *لوحة التحكم*",
           parse_mode: "Markdown",
-          reply_markup: adminKeyboard(),
+          reply_markup: adminKeyboard(isModerator),
         });
         break;
       }
@@ -2684,7 +2684,7 @@ async function handleUpdate(
             await tg(botToken, "sendMessage", {
               chat_id: chatId,
               text: "⚠️ انتهت صلاحية العملية. أعد المحاولة.",
-              reply_markup: adminKeyboard(),
+              reply_markup: adminKeyboard(isModerator),
             });
             break;
           }
@@ -2715,7 +2715,7 @@ async function handleUpdate(
             await tg(botToken, "sendMessage", {
               chat_id: chatId,
               text: "⚠️ انتهت صلاحية العملية. أعد المحاولة.",
-              reply_markup: adminKeyboard(),
+              reply_markup: adminKeyboard(isModerator),
             });
             break;
           }
@@ -2825,7 +2825,7 @@ async function handleUpdate(
             chat_id: chatId,
             text: `✅ تم حذف *${ch?.channel_name || channelId}*`,
             parse_mode: "Markdown",
-            reply_markup: adminKeyboard(),
+            reply_markup: adminKeyboard(isModerator),
           });
         }
         if (data.startsWith("del_sub_")) {
@@ -2856,7 +2856,7 @@ async function handleUpdate(
               chat_id: chatId,
               text: `✅ *تم حذف* \`${userId}\` — طُرد من *${kicked}* قناة`,
               parse_mode: "Markdown",
-              reply_markup: adminKeyboard(),
+              reply_markup: adminKeyboard(isModerator),
             }),
             tg(botToken, "sendMessage", {
               chat_id: userId,
