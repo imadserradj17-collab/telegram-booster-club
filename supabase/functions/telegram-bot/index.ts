@@ -2479,6 +2479,16 @@ async function handleUpdate(
       return;
     }
 
+    // Block moderator from non-subscriber-management actions
+    if (isModerator && ["manage_channels", "add_channel", "broadcast", "stats"].includes(data)) {
+      await tg(botToken, "sendMessage", {
+        chat_id: chatId,
+        text: "⛔ هذه الميزة متاحة لمالك البوت فقط.",
+        reply_markup: adminKeyboard(isModerator),
+      });
+      return;
+    }
+
     switch (data) {
       case "add_subscriber": {
         await setState(chatId, botToken, "await_sub_id");
