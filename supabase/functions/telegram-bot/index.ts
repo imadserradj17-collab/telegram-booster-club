@@ -377,6 +377,7 @@ async function finalizeSubscriber(
   days: number | null,
   isPermanent: boolean,
   selectedChannelIds: string[],
+  isModerator: boolean = false,
 ) {
   // Check existing subscription to add remaining days
   let expiresAt: string | null = null;
