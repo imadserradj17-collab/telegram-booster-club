@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import ChannelMessagesView from "@/components/ChannelMessagesView";
 import { BotModeratorsCard } from "@/components/BotModeratorsCard";
+import { BotActivityLogView } from "@/components/BotActivityLogView";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useLanguage } from "@/contexts/LanguageContext";
