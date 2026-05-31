@@ -2885,6 +2885,12 @@ async function handleUpdate(
             parse_mode: "Markdown",
             reply_markup: adminKeyboard(isModerator),
           });
+          logBotActivity({
+            botTokenId, ownerId, actorTelegramId: cbFromId, isModerator,
+            action: "channel_deleted",
+            targetLabel: ch?.channel_name || String(channelId),
+            details: { telegram_channel_id: channelId },
+          });
         }
         if (data.startsWith("del_sub_")) {
           const userId = parseInt(data.replace("del_sub_", ""));
