@@ -23,6 +23,7 @@ import {
   BarChart3, Tv, Plus, Send, Link, Edit, CheckCircle, XCircle, FileText, MessageCircle,
 } from "lucide-react";
 import ChannelMessagesView from "@/components/ChannelMessagesView";
+import { BotModeratorsCard } from "@/components/BotModeratorsCard";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useLanguage } from "@/contexts/LanguageContext";
