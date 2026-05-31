@@ -55,6 +55,7 @@ export type Database = {
           label: string | null
           owner_id: string
           telegram_user_id: number
+          telegram_username: string | null
         }
         Insert: {
           bot_token_id: string
@@ -63,6 +64,7 @@ export type Database = {
           label?: string | null
           owner_id: string
           telegram_user_id: number
+          telegram_username?: string | null
         }
         Update: {
           bot_token_id?: string
@@ -71,6 +73,7 @@ export type Database = {
           label?: string | null
           owner_id?: string
           telegram_user_id?: number
+          telegram_username?: string | null
         }
         Relationships: []
       }
