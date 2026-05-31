@@ -23,6 +23,7 @@ import {
   BarChart3, Tv, Plus, Send, Link, Edit, CheckCircle, XCircle, FileText, MessageCircle,
 } from "lucide-react";
 import ChannelMessagesView from "@/components/ChannelMessagesView";
+import { BotModeratorsCard } from "@/components/BotModeratorsCard";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -2459,6 +2460,9 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                     </div>
                   )}
                 </div>
+                {botSettings && (
+                  <BotModeratorsCard botTokenId={botSettings.id} />
+                )}
                 <Button onClick={handleSaveSettings} disabled={savingSettings} className="w-full gradient-telegram text-primary-foreground hover:opacity-90">
                   {savingSettings ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : <Save className="w-4 h-4 ml-2" />}
                   {t("dash.saveSettings")}

@@ -47,6 +47,33 @@ export type Database = {
         }
         Relationships: []
       }
+      bot_moderators: {
+        Row: {
+          bot_token_id: string
+          created_at: string
+          id: string
+          label: string | null
+          owner_id: string
+          telegram_user_id: number
+        }
+        Insert: {
+          bot_token_id: string
+          created_at?: string
+          id?: string
+          label?: string | null
+          owner_id: string
+          telegram_user_id: number
+        }
+        Update: {
+          bot_token_id?: string
+          created_at?: string
+          id?: string
+          label?: string | null
+          owner_id?: string
+          telegram_user_id?: number
+        }
+        Relationships: []
+      }
       bot_pending_states: {
         Row: {
           bot_token_id: string
