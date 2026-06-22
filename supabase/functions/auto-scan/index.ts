@@ -74,22 +74,16 @@ Deno.serve(async (_req) => {
 
       for (const s of (allSubs || [])) {
         const isActive = s.is_permanent || (s.expires_at && new Date(s.expires_at) > now);
-        
+
         if (isActive) {
-          const assignedChannels = subChannelMap.get(s.id);
-          // Full-access tier: no assignments OR 10+ channels assigned = access to ALL channels (incl. new ones)
-          if (!assignedChannels || assignedChannels.size === 0 || assignedChannels.size >= 10) {
-            for (const ch of channels) {
-              perChannelActiveUsers.get(ch.id)!.add(s.telegram_user_id);
-            }
-          } else {
-            // Only add to assigned channels
-            for (const chId of assignedChannels) {
-              if (perChannelActiveUsers.has(chId)) {
-                perChannelActiveUsers.get(chId)!.add(s.telegram_user_id);
-              }
-            }
+          // ⚠️ Any active subscriber must NOT be kicked from ANY channel during auto-scan.
+          // Per-channel access enforcement happens when the user requests to join a channel,
+          // not during a recurring scan. This prevents wrongful kicks of paying subscribers
+          // when channel assignments are incomplete or a new channel was added.
+          for (const ch of channels) {
+            perChannelActiveUsers.get(ch.id)!.add(s.telegram_user_id);
           }
+
         } else if (s.expires_at && new Date(s.expires_at) < now) {
           if (!expiredUserIds.has(s.telegram_user_id)) {
             expiredUserIds.add(s.telegram_user_id);
