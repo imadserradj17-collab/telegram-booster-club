@@ -1992,9 +1992,16 @@ async function handleUpdate(
           const { data: subs } = await sb.from("telegram_subscribers").select(
             "telegram_user_id, is_permanent, expires_at",
           ).eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+          const { data: botUsersRows } = await sb.from("bot_users").select(
+            "telegram_user_id",
+          ).eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+          const startedIds = new Set(
+            (botUsersRows || []).map((u: any) => Number(u.telegram_user_id)),
+          );
           const activeSubs = (subs || []).filter((s: any) =>
-            s.is_permanent ||
-            (s.expires_at && new Date(s.expires_at) > new Date())
+            (s.is_permanent ||
+              (s.expires_at && new Date(s.expires_at) > new Date())) &&
+            startedIds.has(Number(s.telegram_user_id))
           );
 
           const { sent, failed } = await broadcastConcurrent(
