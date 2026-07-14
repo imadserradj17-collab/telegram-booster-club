@@ -322,11 +322,18 @@ Deno.serve(async (req) => {
         for (let i = 0; i < users.length; i += CONCURRENCY) {
           const batch = users.slice(i, i + CONCURRENCY);
           const results = await Promise.allSettled(batch.map(async (u: any) => {
-            const res = await tg(botToken, "sendMessage", {
+            let res = await tg(botToken, "sendMessage", {
               chat_id: u.telegram_user_id,
               text: message,
               parse_mode: "Markdown",
             });
+            // Retry without Markdown if parsing failed (e.g. unescaped _ * [ in URLs)
+            if (!res.ok && /can't parse|parse entities/i.test(res.description || "")) {
+              res = await tg(botToken, "sendMessage", {
+                chat_id: u.telegram_user_id,
+                text: message,
+              });
+            }
             return res.ok;
           }));
           for (const r of results) {
@@ -334,6 +341,7 @@ Deno.serve(async (req) => {
             else failed++;
           }
         }
+
 
         return new Response(
           JSON.stringify({ ok: true, sent, failed, total: users.length }),
