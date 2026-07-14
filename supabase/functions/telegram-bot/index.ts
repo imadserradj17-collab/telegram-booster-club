@@ -2646,7 +2646,7 @@ async function handleUpdate(
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
           text:
-            `📢 *رسالة جماعية*\n\nسيتم إرسالها لـ *${active ?? 0}* مستخدم فعّل البوت.\n\nأرسل الرسالة الآن (نص، صورة، فيديو...):\n\n_أرسل /cancel للإلغاء_`,
+            `📢 *رسالة جماعية*\n\nسيتم إرسالها لـ *${active ?? 0}* مستخدم (جميع من استخدم البوت).\n\nأرسل الرسالة الآن (نص، صورة، فيديو...):\n\n_أرسل /cancel للإلغاء_`,
           parse_mode: "Markdown",
         });
         break;
