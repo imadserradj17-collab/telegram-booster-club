@@ -202,19 +202,27 @@ Deno.serve(async (req) => {
         for (let i = 0; i < activeSubs.length; i += BATCH_SIZE) {
           const batch = activeSubs.slice(i, i + BATCH_SIZE);
           const results = await Promise.allSettled(
-            batch.map((sub: any) =>
-              tg(botToken, "sendMessage", {
+            batch.map(async (sub: any) => {
+              let res = await tg(botToken, "sendMessage", {
                 chat_id: sub.telegram_user_id,
                 text: message,
                 parse_mode: "Markdown",
-              })
-            ),
+              });
+              if (!res.ok && /can't parse|parse entities/i.test(res.description || "")) {
+                res = await tg(botToken, "sendMessage", {
+                  chat_id: sub.telegram_user_id,
+                  text: message,
+                });
+              }
+              return res;
+            }),
           );
           for (const r of results) {
             if (r.status === "fulfilled" && r.value?.ok) sent++;
             else failed++;
           }
         }
+
 
         return new Response(
           JSON.stringify({ ok: true, sent, failed, total: activeSubs.length }),
