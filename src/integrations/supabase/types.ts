@@ -238,6 +238,7 @@ export type Database = {
           last_name: string | null
           owner_id: string
           photo_url: string | null
+          started_at: string
           telegram_user_id: number
           telegram_username: string | null
         }
@@ -250,6 +251,7 @@ export type Database = {
           last_name?: string | null
           owner_id: string
           photo_url?: string | null
+          started_at?: string
           telegram_user_id: number
           telegram_username?: string | null
         }
@@ -262,6 +264,7 @@ export type Database = {
           last_name?: string | null
           owner_id?: string
           photo_url?: string | null
+          started_at?: string
           telegram_user_id?: number
           telegram_username?: string | null
         }
