@@ -187,25 +187,15 @@ Deno.serve(async (req) => {
           });
         }
 
-        const { data: subs } = await sb.from("telegram_subscribers")
-          .select("telegram_user_id, is_permanent, expires_at")
-          .eq("owner_id", user.id)
-          .eq("bot_token_id", botTokenId);
-
-        // Only subscribers who have actually activated the bot (pressed /start)
+        // Send to everyone who activated the bot (pressed /start), regardless of subscription status
         const { data: botUsersRows } = await sb.from("bot_users")
           .select("telegram_user_id")
           .eq("owner_id", user.id)
           .eq("bot_token_id", botTokenId);
-        const startedIds = new Set(
-          (botUsersRows || []).map((u: any) => Number(u.telegram_user_id)),
-        );
 
-        const activeSubs = (subs || []).filter((s: any) =>
-          (s.is_permanent ||
-            (s.expires_at && new Date(s.expires_at) > new Date())) &&
-          startedIds.has(Number(s.telegram_user_id))
-        );
+        const activeSubs = (botUsersRows || []).map((u: any) => ({
+          telegram_user_id: u.telegram_user_id,
+        }));
 
         let sent = 0, failed = 0;
         const BATCH_SIZE = 20;
