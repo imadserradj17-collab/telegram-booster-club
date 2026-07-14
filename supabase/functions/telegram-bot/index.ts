@@ -1161,8 +1161,9 @@ async function handleUpdate(
           telegram_username: msg.from.username || null,
           first_name: msg.from.first_name || null,
           last_name: msg.from.last_name || null,
+          started_at: new Date().toISOString(),
         },
-        { onConflict: "owner_id,telegram_user_id" },
+        { onConflict: "owner_id,telegram_user_id", ignoreDuplicates: false },
       ).then(() => {
         // Update photo in background
         enrichUserInfo(botToken, fromId, {
