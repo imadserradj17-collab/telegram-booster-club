@@ -2905,15 +2905,20 @@ async function handleUpdate(
       }
 
       case "broadcast": {
-        const { count: active } = await sb.from("bot_users").select(
+        const { count: activeAll } = await sb.from("bot_users").select(
           "telegram_user_id",
           { count: "exact", head: true },
         ).eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+        const { count: bannedCount } = await sb.from("bot_banned_users").select(
+          "telegram_user_id",
+          { count: "exact", head: true },
+        ).eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+        const active = Math.max(0, (activeAll ?? 0) - (bannedCount ?? 0));
         await setState(chatId, botToken, "await_broadcast");
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
           text:
-            `📢 *رسالة جماعية*\n\nسيتم إرسالها لـ *${active ?? 0}* مستخدم (جميع من استخدم البوت).\n\nأرسل الرسالة الآن (نص، صورة، فيديو...):\n\n_أرسل /cancel للإلغاء_`,
+            `📢 *رسالة جماعية*\n\nسيتم إرسالها لـ *${active}* مستخدم (جميع من استخدم البوت، عدا المحظورين).\n\nأرسل الرسالة الآن (نص، صورة، فيديو...):\n\n_أرسل /cancel للإلغاء_`,
           parse_mode: "Markdown",
         });
         break;
