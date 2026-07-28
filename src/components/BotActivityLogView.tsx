@@ -148,6 +148,16 @@ export function BotActivityLogView({ botTokenId }: { botTokenId: string }) {
                         {r.action === "subscriber_deleted" && (
                           <span>👢 {r.details.kicked_channels} {lang === "ar" ? "قناة طُرد منها" : "channels kicked"}</span>
                         )}
+                        {r.action === "user_banned" && (
+                          <span>
+                            🚫 {r.details.channels_banned} {lang === "ar" ? "قناة" : "channels"}
+                            {r.details.reason ? ` • 📝 ${r.details.reason}` : ""}
+                          </span>
+                        )}
+                        {r.action === "user_unbanned" && (
+                          <span>✅ {r.details.channels_unbanned} {lang === "ar" ? "قناة" : "channels"}</span>
+                        )}
+
                       </div>
                     )}
                   </div>
