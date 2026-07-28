@@ -1589,9 +1589,9 @@ async function handleUpdate(
 
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
-          text: `🚫 *تم حظر المستخدم*\n\n🆔 \`${targetId}\`${
+          text: `🔇 *تم كتم المستخدم*\n\n🆔 \`${targetId}\`${
             targetUsername ? `\n👤 @${targetUsername}` : ""
-          }\n📺 تم الطرد والحظر من *${bannedCount}* قناة/مجموعة${
+          }\n📺 مُنع من إرسال الرسائل في *${bannedCount}* قناة/مجموعة (يبقى عضواً)${
             reason ? `\n📝 السبب: ${reason}` : ""
           }`,
           parse_mode: "Markdown",
