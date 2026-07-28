@@ -909,14 +909,8 @@ async function handleUpdate(
     const myChannel = channelRes.data;
     if (!myChannel) return;
 
-    // Banned users are always declined
-    if (await isBanned(botTokenId, telegramUserId)) {
-      await tg(botToken, "declineChatJoinRequest", {
-        chat_id: chatId,
-        user_id: telegramUserId,
-      });
-      return;
-    }
+
+
 
 
     // Check if this is the public channel (everyone can join)
