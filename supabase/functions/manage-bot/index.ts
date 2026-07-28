@@ -331,12 +331,23 @@ Deno.serve(async (req) => {
           });
         }
 
-        const { data: botUsers } = await sb.from("bot_users")
-          .select("telegram_user_id")
-          .eq("owner_id", user.id)
-          .eq("bot_token_id", botTokenId);
+        const [{ data: botUsers }, { data: bannedAllRows }] = await Promise.all([
+          sb.from("bot_users")
+            .select("telegram_user_id")
+            .eq("owner_id", user.id)
+            .eq("bot_token_id", botTokenId),
+          sb.from("bot_banned_users")
+            .select("telegram_user_id")
+            .eq("owner_id", user.id)
+            .eq("bot_token_id", botTokenId),
+        ]);
 
-        const users = botUsers || [];
+        const bannedAllSet = new Set(
+          (bannedAllRows || []).map((b: any) => Number(b.telegram_user_id)),
+        );
+        const users = (botUsers || []).filter((u: any) =>
+          !bannedAllSet.has(Number(u.telegram_user_id))
+        );
         let sent = 0, failed = 0;
         const CONCURRENCY = 10;
         for (let i = 0; i < users.length; i += CONCURRENCY) {
