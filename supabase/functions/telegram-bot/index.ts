@@ -1213,6 +1213,13 @@ async function handleUpdate(
     const isAdmin = isOwnerAdmin || isModerator;
 
     if (text === "/start") {
+      if (!isAdmin && await isBanned(botTokenId, fromId)) {
+        await tg(botToken, "sendMessage", {
+          chat_id: chatId,
+          text: "🚫 تم حظرك من استخدام هذا البوت. تواصل مع المسؤول.",
+        });
+        return;
+      }
       await clearState(chatId, botToken);
       // Save this user to bot_users (fire-and-forget)
       sb.from("bot_users").upsert(
