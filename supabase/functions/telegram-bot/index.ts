@@ -1632,7 +1632,7 @@ async function handleUpdate(
 
       await tg(botToken, "sendMessage", {
         chat_id: chatId,
-        text: `✅ *تم إلغاء الحظر*\n\n🆔 \`${targetId}\`\n📺 في *${unbanned}* قناة/مجموعة\n\nيمكنه الآن الانضمام مجدداً بعد الاشتراك.`,
+        text: `✅ *تم إلغاء الكتم*\n\n🆔 \`${targetId}\`\n📺 في *${unbanned}* قناة/مجموعة\n\nيمكنه الآن إرسال الرسائل مجدداً.`,
         parse_mode: "Markdown",
         reply_markup: adminKeyboard(isModerator),
       });
