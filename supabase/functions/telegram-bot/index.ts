@@ -2243,12 +2243,25 @@ async function handleUpdate(
 
         case "await_broadcast": {
           await clearState(chatId, botToken);
-          const { data: botUsersRows } = await sb.from("bot_users").select(
-            "telegram_user_id",
-          ).eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
-          const activeSubs = (botUsersRows || []).map((u: any) => ({
-            telegram_user_id: u.telegram_user_id,
-          }));
+          const [{ data: botUsersRows }, { data: bannedRows }] = await Promise
+            .all([
+              sb.from("bot_users").select("telegram_user_id").eq(
+                "owner_id",
+                ownerId,
+              ).eq("bot_token_id", botTokenId),
+              sb.from("bot_banned_users").select("telegram_user_id").eq(
+                "owner_id",
+                ownerId,
+              ).eq("bot_token_id", botTokenId),
+            ]);
+          const bannedSet = new Set(
+            (bannedRows || []).map((b: any) => Number(b.telegram_user_id)),
+          );
+          const activeSubs = (botUsersRows || [])
+            .filter((u: any) => !bannedSet.has(Number(u.telegram_user_id)))
+            .map((u: any) => ({
+              telegram_user_id: u.telegram_user_id,
+            }));
 
           const { sent, failed } = await broadcastConcurrent(
             botToken,
@@ -2892,15 +2905,20 @@ async function handleUpdate(
       }
 
       case "broadcast": {
-        const { count: active } = await sb.from("bot_users").select(
+        const { count: activeAll } = await sb.from("bot_users").select(
           "telegram_user_id",
           { count: "exact", head: true },
         ).eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+        const { count: bannedCount } = await sb.from("bot_banned_users").select(
+          "telegram_user_id",
+          { count: "exact", head: true },
+        ).eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+        const active = Math.max(0, (activeAll ?? 0) - (bannedCount ?? 0));
         await setState(chatId, botToken, "await_broadcast");
         await tg(botToken, "sendMessage", {
           chat_id: chatId,
           text:
-            `📢 *رسالة جماعية*\n\nسيتم إرسالها لـ *${active ?? 0}* مستخدم (جميع من استخدم البوت).\n\nأرسل الرسالة الآن (نص، صورة، فيديو...):\n\n_أرسل /cancel للإلغاء_`,
+            `📢 *رسالة جماعية*\n\nسيتم إرسالها لـ *${active}* مستخدم (جميع من استخدم البوت، عدا المحظورين).\n\nأرسل الرسالة الآن (نص، صورة، فيديو...):\n\n_أرسل /cancel للإلغاء_`,
           parse_mode: "Markdown",
         });
         break;
