@@ -383,7 +383,7 @@ async function isBanned(botTokenId: string, telegramUserId: number) {
   return !!data;
 }
 
-// Permanently ban a user from every channel/group of this bot
+// Mute a user (messages only) in every channel/group of this bot — stays a member
 async function banEverywhere(
   botToken: string,
   ownerId: string,
@@ -395,13 +395,29 @@ async function banEverywhere(
   const chIds = (data || []).map((c: any) => c.channel_id);
   const results = await Promise.allSettled(
     chIds.map((chId: number) =>
-      tg(botToken, "banChatMember", { chat_id: chId, user_id: userId })
+      tg(botToken, "restrictChatMember", {
+        chat_id: chId,
+        user_id: userId,
+        permissions: {
+          can_send_messages: false,
+          can_send_audios: false,
+          can_send_documents: false,
+          can_send_photos: false,
+          can_send_videos: false,
+          can_send_video_notes: false,
+          can_send_voice_notes: false,
+          can_send_polls: false,
+          can_send_other_messages: false,
+          can_add_web_page_previews: false,
+        },
+      })
     ),
   );
   return results.filter((r: any) => r.status === "fulfilled" && r.value?.ok)
     .length;
 }
 
+// Restore sending permissions
 async function unbanEverywhere(
   botToken: string,
   ownerId: string,
@@ -413,10 +429,22 @@ async function unbanEverywhere(
   const chIds = (data || []).map((c: any) => c.channel_id);
   const results = await Promise.allSettled(
     chIds.map((chId: number) =>
-      tg(botToken, "unbanChatMember", {
+      tg(botToken, "restrictChatMember", {
         chat_id: chId,
         user_id: userId,
-        only_if_banned: true,
+        permissions: {
+          can_send_messages: true,
+          can_send_audios: true,
+          can_send_documents: true,
+          can_send_photos: true,
+          can_send_videos: true,
+          can_send_video_notes: true,
+          can_send_voice_notes: true,
+          can_send_polls: true,
+          can_send_other_messages: true,
+          can_add_web_page_previews: true,
+          can_invite_users: true,
+        },
       })
     ),
   );
