@@ -1674,13 +1674,7 @@ async function handleUpdate(
 
 
     if (!isAdmin) {
-      if (await isBanned(botTokenId, fromId)) {
-        await tg(botToken, "sendMessage", {
-          chat_id: chatId,
-          text: "🚫 تم حظرك من استخدام هذا البوت. تواصل مع المسؤول.",
-        });
-        return;
-      }
+
 
       // Check subscription + mandatory channel for non-admin interactions
       const { data: subCheck } = await sb.from("telegram_subscribers").select(
