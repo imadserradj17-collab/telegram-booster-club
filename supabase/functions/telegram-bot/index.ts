@@ -374,6 +374,58 @@ async function kickFromChannels(
   return results.filter((r) => r.status === "fulfilled" && r.value).length;
 }
 
+// ─── Ban system ───
+async function isBanned(botTokenId: string, telegramUserId: number) {
+  const { data } = await sb.from("bot_banned_users").select("id")
+    .eq("bot_token_id", botTokenId)
+    .eq("telegram_user_id", telegramUserId)
+    .maybeSingle();
+  return !!data;
+}
+
+// Permanently ban a user from every channel/group of this bot
+async function banEverywhere(
+  botToken: string,
+  ownerId: string,
+  botTokenId: string,
+  userId: number,
+) {
+  const { data } = await sb.from("telegram_channels").select("channel_id")
+    .eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+  const chIds = (data || []).map((c: any) => c.channel_id);
+  const results = await Promise.allSettled(
+    chIds.map((chId: number) =>
+      tg(botToken, "banChatMember", { chat_id: chId, user_id: userId })
+    ),
+  );
+  return results.filter((r: any) => r.status === "fulfilled" && r.value?.ok)
+    .length;
+}
+
+async function unbanEverywhere(
+  botToken: string,
+  ownerId: string,
+  botTokenId: string,
+  userId: number,
+) {
+  const { data } = await sb.from("telegram_channels").select("channel_id")
+    .eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+  const chIds = (data || []).map((c: any) => c.channel_id);
+  const results = await Promise.allSettled(
+    chIds.map((chId: number) =>
+      tg(botToken, "unbanChatMember", {
+        chat_id: chId,
+        user_id: userId,
+        only_if_banned: true,
+      })
+    ),
+  );
+  return results.filter((r: any) => r.status === "fulfilled" && r.value?.ok)
+    .length;
+}
+
+
+
 // Get channels to kick a subscriber from
 async function getKickChannels(
   subscriberId: string | null,
