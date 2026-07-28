@@ -374,6 +374,58 @@ async function kickFromChannels(
   return results.filter((r) => r.status === "fulfilled" && r.value).length;
 }
 
+// ─── Ban system ───
+async function isBanned(botTokenId: string, telegramUserId: number) {
+  const { data } = await sb.from("bot_banned_users").select("id")
+    .eq("bot_token_id", botTokenId)
+    .eq("telegram_user_id", telegramUserId)
+    .maybeSingle();
+  return !!data;
+}
+
+// Permanently ban a user from every channel/group of this bot
+async function banEverywhere(
+  botToken: string,
+  ownerId: string,
+  botTokenId: string,
+  userId: number,
+) {
+  const { data } = await sb.from("telegram_channels").select("channel_id")
+    .eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+  const chIds = (data || []).map((c: any) => c.channel_id);
+  const results = await Promise.allSettled(
+    chIds.map((chId: number) =>
+      tg(botToken, "banChatMember", { chat_id: chId, user_id: userId })
+    ),
+  );
+  return results.filter((r: any) => r.status === "fulfilled" && r.value?.ok)
+    .length;
+}
+
+async function unbanEverywhere(
+  botToken: string,
+  ownerId: string,
+  botTokenId: string,
+  userId: number,
+) {
+  const { data } = await sb.from("telegram_channels").select("channel_id")
+    .eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+  const chIds = (data || []).map((c: any) => c.channel_id);
+  const results = await Promise.allSettled(
+    chIds.map((chId: number) =>
+      tg(botToken, "unbanChatMember", {
+        chat_id: chId,
+        user_id: userId,
+        only_if_banned: true,
+      })
+    ),
+  );
+  return results.filter((r: any) => r.status === "fulfilled" && r.value?.ok)
+    .length;
+}
+
+
+
 // Get channels to kick a subscriber from
 async function getKickChannels(
   subscriberId: string | null,
@@ -829,6 +881,16 @@ async function handleUpdate(
     const myChannel = channelRes.data;
     if (!myChannel) return;
 
+    // Banned users are always declined
+    if (await isBanned(botTokenId, telegramUserId)) {
+      await tg(botToken, "declineChatJoinRequest", {
+        chat_id: chatId,
+        user_id: telegramUserId,
+      });
+      return;
+    }
+
+
     // Check if this is the public channel (everyone can join)
     if (publicChannelId && myChannel.id === publicChannelId) {
       // Approve + save member in both tracking tables
@@ -1151,6 +1213,13 @@ async function handleUpdate(
     const isAdmin = isOwnerAdmin || isModerator;
 
     if (text === "/start") {
+      if (!isAdmin && await isBanned(botTokenId, fromId)) {
+        await tg(botToken, "sendMessage", {
+          chat_id: chatId,
+          text: "🚫 تم حظرك من استخدام هذا البوت. تواصل مع المسؤول.",
+        });
+        return;
+      }
       await clearState(chatId, botToken);
       // Save this user to bot_users (fire-and-forget)
       sb.from("bot_users").upsert(
@@ -1388,6 +1457,175 @@ async function handleUpdate(
       return;
     }
 
+    // ─── /ban & /unban (admins & moderators) ───
+    if (/^\/(ban|unban|banned)(\s|$)/i.test(text)) {
+      if (!isAdmin) {
+        await tg(botToken, "sendMessage", {
+          chat_id: chatId,
+          text: "❌ هذا الأمر للمشرفين فقط.",
+        });
+        return;
+      }
+
+      const parts = text.trim().split(/\s+/);
+      const cmd = parts[0].toLowerCase().replace("/", "");
+
+      if (cmd === "banned") {
+        const { data: list } = await sb.from("bot_banned_users")
+          .select("telegram_user_id, telegram_username, first_name, reason, created_at")
+          .eq("bot_token_id", botTokenId)
+          .order("created_at", { ascending: false })
+          .limit(50);
+        if (!list || list.length === 0) {
+          await tg(botToken, "sendMessage", {
+            chat_id: chatId,
+            text: "🚫 لا يوجد مستخدمون محظورون.",
+          });
+          return;
+        }
+        const lines = list.map((b: any, i: number) =>
+          `${i + 1}. \`${b.telegram_user_id}\`${
+            b.telegram_username ? ` @${b.telegram_username}` : ""
+          }${b.reason ? `\n   📝 ${b.reason}` : ""}`
+        ).join("\n");
+        await tg(botToken, "sendMessage", {
+          chat_id: chatId,
+          text: `🚫 *قائمة المحظورين* (${list.length}):\n\n${lines}`,
+          parse_mode: "Markdown",
+        });
+        return;
+      }
+
+      // target: reply-to user or numeric id argument
+      let targetId: number | null = null;
+      let targetUsername: string | null = null;
+      let targetName: string | null = null;
+      if (msg.reply_to_message?.from) {
+        targetId = msg.reply_to_message.from.id;
+        targetUsername = msg.reply_to_message.from.username || null;
+        targetName = msg.reply_to_message.from.first_name || null;
+      } else if (parts[1] && /^-?\d+$/.test(parts[1])) {
+        targetId = Number(parts[1]);
+      }
+
+      if (!targetId) {
+        await tg(botToken, "sendMessage", {
+          chat_id: chatId,
+          text: cmd === "ban"
+            ? "🚫 *حظر مستخدم*\n\nالاستخدام:\n`/ban 123456789 [السبب]`\nأو بالرد على رسالة المستخدم بـ /ban\n\n`/unban 123456789` لإلغاء الحظر\n`/banned` لعرض المحظورين"
+            : "✅ *إلغاء الحظر*\n\nالاستخدام:\n`/unban 123456789`\nأو بالرد على رسالة المستخدم بـ /unban",
+          parse_mode: "Markdown",
+        });
+        return;
+      }
+
+      if (cmd === "ban") {
+        if (targetId === fromId || targetId === adminTelegramId) {
+          await tg(botToken, "sendMessage", {
+            chat_id: chatId,
+            text: "⚠️ لا يمكن حظر المالك أو نفسك.",
+          });
+          return;
+        }
+        const reason = parts.slice(msg.reply_to_message?.from ? 1 : 2).join(" ") ||
+          null;
+
+        // remove subscription + trial, then ban across all channels
+        const { data: subRow } = await sb.from("telegram_subscribers")
+          .select("id, telegram_username, first_name")
+          .eq("owner_id", ownerId).eq("bot_token_id", botTokenId)
+          .eq("telegram_user_id", targetId).maybeSingle();
+        if (subRow) {
+          targetUsername = targetUsername || subRow.telegram_username;
+          targetName = targetName || subRow.first_name;
+          await sb.from("telegram_subscribers").delete().eq("id", subRow.id);
+        }
+        await sb.from("free_trial_users").delete()
+          .eq("bot_token_id", botTokenId).eq("telegram_user_id", targetId);
+
+        const bannedCount = await banEverywhere(
+          botToken,
+          ownerId,
+          botTokenId,
+          targetId,
+        );
+
+        await sb.from("bot_banned_users").upsert({
+          bot_token_id: botTokenId,
+          owner_id: ownerId,
+          telegram_user_id: targetId,
+          telegram_username: targetUsername,
+          first_name: targetName,
+          reason,
+          banned_by_telegram_id: fromId,
+        }, { onConflict: "bot_token_id,telegram_user_id" });
+
+        logBotActivity({
+          botTokenId,
+          ownerId,
+          actorTelegramId: fromId,
+          isModerator,
+          actorName: firstName,
+          actorUsername: msg.from.username || null,
+          action: "user_banned",
+          targetLabel: targetName || targetUsername || String(targetId),
+          targetTelegramId: targetId,
+          details: { reason, channels_banned: bannedCount },
+        });
+
+        await tg(botToken, "sendMessage", {
+          chat_id: chatId,
+          text: `🚫 *تم حظر المستخدم*\n\n🆔 \`${targetId}\`${
+            targetUsername ? `\n👤 @${targetUsername}` : ""
+          }\n📺 تم الطرد والحظر من *${bannedCount}* قناة/مجموعة${
+            reason ? `\n📝 السبب: ${reason}` : ""
+          }`,
+          parse_mode: "Markdown",
+          reply_markup: adminKeyboard(isModerator),
+        });
+        return;
+      }
+
+      // unban
+      const { data: banRow } = await sb.from("bot_banned_users")
+        .select("id, telegram_username, first_name")
+        .eq("bot_token_id", botTokenId)
+        .eq("telegram_user_id", targetId).maybeSingle();
+
+      const unbanned = await unbanEverywhere(
+        botToken,
+        ownerId,
+        botTokenId,
+        targetId,
+      );
+      if (banRow) {
+        await sb.from("bot_banned_users").delete().eq("id", banRow.id);
+      }
+
+      logBotActivity({
+        botTokenId,
+        ownerId,
+        actorTelegramId: fromId,
+        isModerator,
+        actorName: firstName,
+        actorUsername: msg.from.username || null,
+        action: "user_unbanned",
+        targetLabel: banRow?.first_name || banRow?.telegram_username ||
+          String(targetId),
+        targetTelegramId: targetId,
+        details: { channels_unbanned: unbanned },
+      });
+
+      await tg(botToken, "sendMessage", {
+        chat_id: chatId,
+        text: `✅ *تم إلغاء الحظر*\n\n🆔 \`${targetId}\`\n📺 في *${unbanned}* قناة/مجموعة\n\nيمكنه الآن الانضمام مجدداً بعد الاشتراك.`,
+        parse_mode: "Markdown",
+        reply_markup: adminKeyboard(isModerator),
+      });
+      return;
+    }
+
+
     if (text === "/id" || text === "/myid") {
       const lang = await getUserLang(ownerId, fromId);
       await tg(botToken, "sendMessage", {
@@ -1422,6 +1660,14 @@ async function handleUpdate(
 
 
     if (!isAdmin) {
+      if (await isBanned(botTokenId, fromId)) {
+        await tg(botToken, "sendMessage", {
+          chat_id: chatId,
+          text: "🚫 تم حظرك من استخدام هذا البوت. تواصل مع المسؤول.",
+        });
+        return;
+      }
+
       // Check subscription + mandatory channel for non-admin interactions
       const { data: subCheck } = await sb.from("telegram_subscribers").select(
         "id, is_permanent, expires_at",

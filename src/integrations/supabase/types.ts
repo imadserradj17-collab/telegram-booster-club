@@ -92,6 +92,42 @@ export type Database = {
         }
         Relationships: []
       }
+      bot_banned_users: {
+        Row: {
+          banned_by_telegram_id: number | null
+          bot_token_id: string
+          created_at: string
+          first_name: string | null
+          id: string
+          owner_id: string
+          reason: string | null
+          telegram_user_id: number
+          telegram_username: string | null
+        }
+        Insert: {
+          banned_by_telegram_id?: number | null
+          bot_token_id: string
+          created_at?: string
+          first_name?: string | null
+          id?: string
+          owner_id: string
+          reason?: string | null
+          telegram_user_id: number
+          telegram_username?: string | null
+        }
+        Update: {
+          banned_by_telegram_id?: number | null
+          bot_token_id?: string
+          created_at?: string
+          first_name?: string | null
+          id?: string
+          owner_id?: string
+          reason?: string | null
+          telegram_user_id?: number
+          telegram_username?: string | null
+        }
+        Relationships: []
+      }
       bot_moderators: {
         Row: {
           bot_token_id: string

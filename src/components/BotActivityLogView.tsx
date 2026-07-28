@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Activity, Search, UserPlus, UserX, Tv, Shield, Crown } from "lucide-react";
+import { Activity, Search, UserPlus, UserX, Tv, Shield, Crown, Ban, CheckCircle2 } from "lucide-react";
 
 interface LogRow {
   id: string;
@@ -24,6 +24,8 @@ const actionMeta: Record<string, { icon: any; color: string; ar: string; en: str
   subscriber_added: { icon: UserPlus, color: "text-green-500", ar: "إضافة/تجديد مشترك", en: "Subscriber added/renewed" },
   subscriber_deleted: { icon: UserX, color: "text-red-500", ar: "حذف مشترك", en: "Subscriber deleted" },
   channel_deleted: { icon: Tv, color: "text-orange-500", ar: "حذف قناة", en: "Channel deleted" },
+  user_banned: { icon: Ban, color: "text-red-500", ar: "حظر مستخدم", en: "User banned" },
+  user_unbanned: { icon: CheckCircle2, color: "text-green-500", ar: "إلغاء حظر مستخدم", en: "User unbanned" },
 };
 
 export function BotActivityLogView({ botTokenId }: { botTokenId: string }) {
@@ -146,6 +148,16 @@ export function BotActivityLogView({ botTokenId }: { botTokenId: string }) {
                         {r.action === "subscriber_deleted" && (
                           <span>👢 {r.details.kicked_channels} {lang === "ar" ? "قناة طُرد منها" : "channels kicked"}</span>
                         )}
+                        {r.action === "user_banned" && (
+                          <span>
+                            🚫 {r.details.channels_banned} {lang === "ar" ? "قناة" : "channels"}
+                            {r.details.reason ? ` • 📝 ${r.details.reason}` : ""}
+                          </span>
+                        )}
+                        {r.action === "user_unbanned" && (
+                          <span>✅ {r.details.channels_unbanned} {lang === "ar" ? "قناة" : "channels"}</span>
+                        )}
+
                       </div>
                     )}
                   </div>
