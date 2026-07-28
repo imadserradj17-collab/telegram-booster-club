@@ -1545,18 +1545,17 @@ async function handleUpdate(
         const reason = parts.slice(msg.reply_to_message?.from ? 1 : 2).join(" ") ||
           null;
 
-        // remove subscription + trial, then ban across all channels
+        // Keep subscription intact — mute only
         const { data: subRow } = await sb.from("telegram_subscribers")
-          .select("id, telegram_username, first_name")
+          .select("telegram_username, first_name")
           .eq("owner_id", ownerId).eq("bot_token_id", botTokenId)
           .eq("telegram_user_id", targetId).maybeSingle();
         if (subRow) {
           targetUsername = targetUsername || subRow.telegram_username;
           targetName = targetName || subRow.first_name;
-          await sb.from("telegram_subscribers").delete().eq("id", subRow.id);
         }
-        await sb.from("free_trial_users").delete()
-          .eq("bot_token_id", botTokenId).eq("telegram_user_id", targetId);
+
+
 
         const bannedCount = await banEverywhere(
           botToken,
