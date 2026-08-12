@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render } from "@testing-library/react";
-import { screen, waitFor } from "@testing-library/dom";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import ChannelMessagesView from "./ChannelMessagesView";
 
