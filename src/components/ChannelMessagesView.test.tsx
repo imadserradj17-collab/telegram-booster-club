@@ -1,9 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render } from "@testing-library/react";
-import { LanguageProvider } from "@/contexts/LanguageContext";
-import ChannelMessagesView from "./ChannelMessagesView";
 
-// Mock the Supabase client used by the component
+// Stub localStorage before any module imports it
+const store: Record<string, string> = {};
+const localStorageStub = {
+  getItem: (key: string) => store[key] ?? null,
+  setItem: (key: string, value: string) => { store[key] = value; },
+  removeItem: (key: string) => { delete store[key]; },
+  clear: () => { for (const key of Object.keys(store)) delete store[key]; },
+};
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(globalThis as any).localStorage = localStorageStub;
+
 const mockChannel = {
   on: vi.fn().mockReturnThis(),
   subscribe: vi.fn().mockReturnThis(),
@@ -37,6 +45,9 @@ const mockSupabase = {
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: mockSupabase,
 }));
+
+import { LanguageProvider } from "@/contexts/LanguageContext";
+import ChannelMessagesView from "./ChannelMessagesView";
 
 function renderWithLang(lang: "ar" | "en", channels: { id: string; channel_name: string; channel_type: string }[] = []) {
   localStorage.setItem("app_lang", lang);
