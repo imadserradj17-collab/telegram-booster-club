@@ -11,43 +11,33 @@ const localStorageStub = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (globalThis as any).localStorage = localStorageStub;
 
-const {
-  mockSupabase,
-  mockQuery,
-  mockChannel,
-  mockRemoveChannel,
-} = vi.hoisted(() => {
-  const channel = {
-    on: vi.fn().mockReturnThis(),
-    subscribe: vi.fn().mockReturnThis(),
-  };
-  const removeChannel = vi.fn();
-  const query = {
-    order: vi.fn().mockReturnThis(),
-    range: vi.fn().mockReturnThis(),
-    limit: vi.fn().mockReturnThis(),
-    eq: vi.fn().mockReturnThis(),
-    or: vi.fn().mockReturnThis(),
-    select: vi.fn().mockReturnThis(),
-    delete: vi.fn().mockReturnThis(),
-    lt: vi.fn().mockReturnThis(),
-    then: vi.fn().mockReturnThis(),
-  };
-  const supabase = {
-    from: vi.fn(() => query),
-    channel: vi.fn(() => channel),
-    removeChannel,
+vi.mock("@/integrations/supabase/client", () => ({
+  supabase: {
+    from: vi.fn(() => {
+      const query = {
+        order: vi.fn().mockReturnThis(),
+        range: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        or: vi.fn().mockReturnThis(),
+        select: vi.fn().mockReturnThis(),
+        delete: vi.fn().mockReturnThis(),
+        lt: vi.fn().mockReturnThis(),
+        then: vi.fn().mockResolvedValue({ data: null, count: 0 }),
+      };
+      return query;
+    }),
+    channel: vi.fn(() => ({
+      on: vi.fn().mockReturnThis(),
+      subscribe: vi.fn().mockReturnThis(),
+    })),
+    removeChannel: vi.fn(),
     auth: {
       getSession: vi.fn().mockResolvedValue({ data: { session: null } }),
       onAuthStateChange: vi.fn().mockReturnValue({ subscription: { unsubscribe: vi.fn() } }),
     },
     rpc: vi.fn().mockResolvedValue({}),
-  };
-  return { mockSupabase: supabase, mockQuery: query, mockChannel: channel, mockRemoveChannel: removeChannel };
-});
-
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: mockSupabase,
+  },
 }));
 
 const { render } = await import("@testing-library/react");
@@ -67,13 +57,6 @@ describe("ChannelMessagesView header", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
-    // Default select returns empty messages with count 0
-    mockQuery.select.mockImplementation(() => {
-      mockQuery.then.mockImplementation((cb: (value: { data: null; count: number }) => unknown) => {
-        return Promise.resolve(cb({ data: null, count: 0 }));
-      });
-      return mockQuery;
-    });
   });
 
   afterEach(() => {
