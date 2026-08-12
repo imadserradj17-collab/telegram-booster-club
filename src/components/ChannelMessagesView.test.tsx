@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render } from "@testing-library/react";
 
-// Stub localStorage before any module imports it
+// Stub localStorage before any component module imports it
 const store: Record<string, string> = {};
 const localStorageStub = {
   getItem: (key: string) => store[key] ?? null,
@@ -51,8 +50,9 @@ vi.mock("@/integrations/supabase/client", () => ({
   supabase: mockSupabase,
 }));
 
-import { LanguageProvider } from "@/contexts/LanguageContext";
-import ChannelMessagesView from "./ChannelMessagesView";
+const { render } = await import("@testing-library/react");
+const { LanguageProvider } = await import("@/contexts/LanguageContext");
+const { default: ChannelMessagesView } = await import("./ChannelMessagesView");
 
 function renderWithLang(lang: "ar" | "en", channels: { id: string; channel_name: string; channel_type: string }[] = []) {
   localStorage.setItem("app_lang", lang);
