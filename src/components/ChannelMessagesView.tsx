@@ -36,7 +36,7 @@ interface ChannelMessage {
 const PAGE_SIZE = 30;
 
 export default function ChannelMessagesView({ channels }: { channels: Channel[] }) {
-  const { lang, dir } = useLanguage();
+  const { lang, dir, t } = useLanguage();
   const [messages, setMessages] = useState<ChannelMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
