@@ -34,7 +34,9 @@ vi.mock("@/integrations/supabase/client", () => ({
     removeChannel: vi.fn(),
     auth: {
       getSession: vi.fn().mockResolvedValue({ data: { session: null } }),
-      onAuthStateChange: vi.fn().mockReturnValue({ subscription: { unsubscribe: vi.fn() } }),
+      onAuthStateChange: vi.fn().mockReturnValue({
+        data: { subscription: { unsubscribe: vi.fn() } },
+      }),
     },
     rpc: vi.fn().mockResolvedValue({}),
   },
