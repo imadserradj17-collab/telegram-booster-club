@@ -12,35 +12,40 @@ const localStorageStub = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (globalThis as any).localStorage = localStorageStub;
 
-const mockChannel = {
-  on: vi.fn().mockReturnThis(),
-  subscribe: vi.fn().mockReturnThis(),
-};
-
-const mockRemoveChannel = vi.fn();
-
-const mockQuery = {
-  order: vi.fn().mockReturnThis(),
-  range: vi.fn().mockReturnThis(),
-  limit: vi.fn().mockReturnThis(),
-  eq: vi.fn().mockReturnThis(),
-  or: vi.fn().mockReturnThis(),
-  select: vi.fn().mockReturnThis(),
-  delete: vi.fn().mockReturnThis(),
-  lt: vi.fn().mockReturnThis(),
-  then: vi.fn().mockReturnThis(),
-};
-
-const mockSupabase = {
-  from: vi.fn(() => mockQuery),
-  channel: vi.fn(() => mockChannel),
-  removeChannel: mockRemoveChannel,
-  auth: {
-    getSession: vi.fn().mockResolvedValue({ data: { session: null } }),
-    onAuthStateChange: vi.fn().mockReturnValue({ subscription: { unsubscribe: vi.fn() } }),
-  },
-  rpc: vi.fn().mockResolvedValue({}),
-};
+const {
+  mockSupabase,
+  mockQuery,
+  mockChannel,
+  mockRemoveChannel,
+} = vi.hoisted(() => {
+  const channel = {
+    on: vi.fn().mockReturnThis(),
+    subscribe: vi.fn().mockReturnThis(),
+  };
+  const removeChannel = vi.fn();
+  const query = {
+    order: vi.fn().mockReturnThis(),
+    range: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    or: vi.fn().mockReturnThis(),
+    select: vi.fn().mockReturnThis(),
+    delete: vi.fn().mockReturnThis(),
+    lt: vi.fn().mockReturnThis(),
+    then: vi.fn().mockReturnThis(),
+  };
+  const supabase = {
+    from: vi.fn(() => query),
+    channel: vi.fn(() => channel),
+    removeChannel,
+    auth: {
+      getSession: vi.fn().mockResolvedValue({ data: { session: null } }),
+      onAuthStateChange: vi.fn().mockReturnValue({ subscription: { unsubscribe: vi.fn() } }),
+    },
+    rpc: vi.fn().mockResolvedValue({}),
+  };
+  return { mockSupabase: supabase, mockQuery: query, mockChannel: channel, mockRemoveChannel: removeChannel };
+});
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: mockSupabase,
