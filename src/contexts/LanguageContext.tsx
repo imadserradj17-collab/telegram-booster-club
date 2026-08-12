@@ -186,6 +186,10 @@ const translations: Record<string, Record<Lang, string>> = {
   "channels.channel": { ar: "قناة", en: "Channel" },
   "channels.group": { ar: "مجموعة", en: "Group" },
 
+  // Messages
+  "messages.title": { ar: "قناة مربوطة بالبوت و يتم وصول رسالة فيها يتم تنزيلها باسم قناة و تكون مثل قنوات تلغرام", en: "Channel messages" },
+  "messages.live": { ar: "مباشر", en: "LIVE" },
+
   // Subscriber management
   "subs.add": { ar: "إضافة مشترك", en: "Add Subscriber" },
   "subs.telegramId": { ar: "معرف تلغرام", en: "Telegram ID" },
