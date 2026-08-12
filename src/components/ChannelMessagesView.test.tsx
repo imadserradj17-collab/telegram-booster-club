@@ -38,7 +38,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   supabase: mockSupabase,
 }));
 
-function renderWithLang(lang: "ar" | "en", channels = []) {
+function renderWithLang(lang: "ar" | "en", channels: { id: string; channel_name: string; channel_type: string }[] = []) {
   localStorage.setItem("app_lang", lang);
   return render(
     <LanguageProvider>
@@ -52,8 +52,7 @@ describe("ChannelMessagesView header", () => {
     vi.clearAllMocks();
     localStorage.clear();
     // Default select returns empty messages with count 0
-    mockQuery.select.mockImplementation((_columns: unknown, opts?: { count?: string }) => {
-      // Simulate the final promise resolution when the chain is awaited
+    mockQuery.select.mockImplementation(() => {
       mockQuery.then.mockImplementation((cb: (value: { data: null; count: number }) => unknown) => {
         return Promise.resolve(cb({ data: null, count: 0 }));
       });
@@ -66,31 +65,29 @@ describe("ChannelMessagesView header", () => {
   });
 
   it("renders the Arabic header title and live badge", async () => {
-    renderWithLang("ar");
+    const { findByTestId, getByTestId } = renderWithLang("ar");
 
-    const title = await screen.findByTestId("messages-header-title");
+    const title = await findByTestId("messages-header-title");
     expect(title).toHaveTextContent(
       "قناة مربوطة بالبوت و يتم وصول رسالة فيها يتم تنزيلها باسم قناة و تكون مثل قنوات تلغرام"
     );
 
-    const badge = screen.getByTestId("messages-live-badge");
-    expect(badge).toHaveTextContent("مباشر");
+    expect(getByTestId("messages-live-badge")).toHaveTextContent("مباشر");
   });
 
   it("renders the English header title and live badge", async () => {
-    renderWithLang("en");
+    const { findByTestId, getByTestId } = renderWithLang("en");
 
-    const title = await screen.findByTestId("messages-header-title");
+    const title = await findByTestId("messages-header-title");
     expect(title).toHaveTextContent("Channel messages");
 
-    const badge = screen.getByTestId("messages-live-badge");
-    expect(badge).toHaveTextContent("LIVE");
+    expect(getByTestId("messages-live-badge")).toHaveTextContent("LIVE");
   });
 
   it("switches header text when language changes", async () => {
-    const { rerender } = renderWithLang("ar");
+    const { findByText, rerender, getByTestId, findByTestId } = renderWithLang("ar");
 
-    await screen.findByText(
+    await findByText(
       "قناة مربوطة بالبوت و يتم وصول رسالة فيها يتم تنزيلها باسم قناة و تكون مثل قنوات تلغرام"
     );
 
@@ -101,10 +98,8 @@ describe("ChannelMessagesView header", () => {
       </LanguageProvider>
     );
 
-    await waitFor(() => {
-      expect(screen.getByTestId("messages-header-title")).toHaveTextContent("Channel messages");
-    });
-
-    expect(screen.getByTestId("messages-live-badge")).toHaveTextContent("LIVE");
+    const title = await findByTestId("messages-header-title");
+    expect(title).toHaveTextContent("Channel messages");
+    expect(getByTestId("messages-live-badge")).toHaveTextContent("LIVE");
   });
 });
