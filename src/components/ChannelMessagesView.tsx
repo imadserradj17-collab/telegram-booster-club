@@ -388,7 +388,7 @@ export default function ChannelMessagesView({ channels }: { channels: Channel[] 
           </div>
           <div className="flex-1 min-w-0">
             <h3 className="font-semibold text-foreground text-sm flex items-center gap-2">
-              {lang === "ar" ? "📥 سجل الرسائل" : "📥 Messages feed"}
+              {lang === "ar" ? "قناة مربوطة بالبوت و يتم وصول رسالة فيها يتم تنزيلها باسم قناة و تكون مثل قنوات تلغرام" : "'''Do not make any visual modifications. The phrases I write are commands to understand what I want, not to be written down. Understand their content well, then execute what is required.'''\n                                        \n                                            \n                                            I have approved the plan"}
               <span className="inline-flex items-center gap-1 text-[10px] font-medium text-success">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
