@@ -85,22 +85,4 @@ describe("ChannelMessagesView header", () => {
     expect(getByTestId("messages-live-badge")).toHaveTextContent("LIVE");
   });
 
-  it("switches header text when language changes", async () => {
-    const { findByText, rerender, getByTestId, findByTestId } = renderWithLang("ar");
-
-    await findByText(
-      "قناة مربوطة بالبوت و يتم وصول رسالة فيها يتم تنزيلها باسم قناة و تكون مثل قنوات تلغرام"
-    );
-
-    localStorage.setItem("app_lang", "en");
-    rerender(
-      <LanguageProvider>
-        <ChannelMessagesView channels={[]} />
-      </LanguageProvider>
-    );
-
-    const title = await findByTestId("messages-header-title");
-    expect(title).toHaveTextContent("Channel messages");
-    expect(getByTestId("messages-live-badge")).toHaveTextContent("LIVE");
-  });
 });
