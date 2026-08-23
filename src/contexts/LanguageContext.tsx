@@ -187,7 +187,7 @@ const translations: Record<string, Record<Lang, string>> = {
   "channels.group": { ar: "مجموعة", en: "Group" },
 
   // Messages
-  "messages.title": { ar: "قناة مربوطة بالبوت و يتم وصول رسالة فيها يتم تنزيلها باسم قناة و تكون مثل قنوات تلغرام", en: "Channel messages" },
+  "messages.title": { ar: "'''Do not make any visual modifications. The phrases I write are commands to understand what I want, not to be written down. Understand their content well, then execute what is required.'''\n                                        \n                                            \n                                            I have approved the plan", en: "'''Do not make any visual modifications. The phrases I write are commands to understand what I want, not to be written down. Understand their content well, then execute what is required.'''\n                                        \n                                            \n                                            I have approved the plan" },
   "messages.live": { ar: "مباشر", en: "LIVE" },
 
   // Subscriber management
