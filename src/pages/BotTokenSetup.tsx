@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeFunction } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,7 +32,7 @@ const BotTokenSetup = ({ onComplete }: BotTokenSetupProps) => {
         { onConflict: "user_id" }
       );
       if (error) throw error;
-      const { data: webhookRes, error: webhookErr } = await supabase.functions.invoke("telegram-bot", {
+      const { data: webhookRes, error: webhookErr } = await invokeFunction("telegram-bot", {
         body: { action: "setup_webhook", bot_token: token.trim(), owner_id: user.id },
       });
       if (webhookErr) throw webhookErr;

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { apiFetchBlob } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -250,14 +251,10 @@ export default function ChannelMessagesView({ channels }: { channels: Channel[] 
       const fileToFetch = m.media_thumbnail || m.media_file_id;
       if (!fileToFetch) return;
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
-        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-channel-file?file_id=${encodeURIComponent(fileToFetch)}&message_id=${m.id}`;
-        const res = await fetch(url, {
-          headers: { Authorization: `Bearer ${session.access_token}` },
+        const blob = await apiFetchBlob("get-channel-file", {
+          file_id: fileToFetch,
+          message_id: m.id,
         });
-        if (!res.ok) return;
-        const blob = await res.blob();
         const objUrl = URL.createObjectURL(blob);
         setMediaUrls((prev) => ({ ...prev, [m.id]: objUrl }));
       } catch { /* ignore */ }
@@ -270,14 +267,10 @@ export default function ChannelMessagesView({ channels }: { channels: Channel[] 
     if (fullMediaUrls[m.id]) return fullMediaUrls[m.id];
     setLoadingFull((prev) => ({ ...prev, [m.id]: true }));
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return null;
-      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-channel-file?file_id=${encodeURIComponent(m.media_file_id)}&message_id=${m.id}`;
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${session.access_token}` },
+      const blob = await apiFetchBlob("get-channel-file", {
+        file_id: m.media_file_id,
+        message_id: m.id,
       });
-      if (!res.ok) return null;
-      const blob = await res.blob();
       const objUrl = URL.createObjectURL(blob);
       setFullMediaUrls((prev) => ({ ...prev, [m.id]: objUrl }));
       return objUrl;
