@@ -31,7 +31,7 @@ const BotTokenSetup = ({ onComplete }: BotTokenSetupProps) => {
         { onConflict: "user_id" }
       );
       if (error) throw error;
-      const { data: webhookRes, error: webhookErr } = await supabase.functions.invoke("telegram-bot", {
+      const { data: webhookRes, error: webhookErr } = await invokeFunction("telegram-bot", {
         body: { action: "setup_webhook", bot_token: token.trim(), owner_id: user.id },
       });
       if (webhookErr) throw webhookErr;

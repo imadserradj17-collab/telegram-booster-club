@@ -237,7 +237,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     try {
       const { error } = await supabase.from("bot_tokens").update({ token: newToken.trim(), token_updated_at: new Date().toISOString() }).eq("id", botSettings!.id);
       if (error) throw error;
-      const { error: webhookErr } = await supabase.functions.invoke("telegram-bot", { body: { action: "setup_webhook", bot_token: newToken.trim() } });
+      const { error: webhookErr } = await invokeFunction("telegram-bot", { body: { action: "setup_webhook", bot_token: newToken.trim() } });
       if (webhookErr) throw webhookErr;
       toast({ title: t("dash.tokenChanged") });
       setNewToken("");
@@ -273,7 +273,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     if (!confirm(t("subs.deleteConfirm"))) return;
     // Kick from all channels first, then delete
     try {
-      const { data, error } = await supabase.functions.invoke("manage-bot", {
+      const { data, error } = await invokeFunction("manage-bot", {
         body: { action: "kick_from_channels", subscriber_id: id },
       });
       if (error) throw error;
@@ -296,7 +296,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     if (!confirm(t("subs.kickConfirm"))) return;
     setKickingId(sub.id);
     try {
-      const { data, error } = await supabase.functions.invoke("manage-bot", {
+      const { data, error } = await invokeFunction("manage-bot", {
         body: { action: "kick_from_channels", subscriber_id: sub.id },
       });
       if (error) throw error;
@@ -309,7 +309,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
 
   const deleteChannel = async (id: string) => {
     try {
-      const { data } = await supabase.functions.invoke("manage-bot", {
+      const { data } = await invokeFunction("manage-bot", {
         body: { action: "delete_channel", channel_id: id },
       });
       if (data?.ok) {
@@ -334,7 +334,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
         return;
       }
 
-      const { data, error } = await supabase.functions.invoke("manage-bot", {
+      const { data, error } = await invokeFunction("manage-bot", {
         body: {
           action: "add_subscriber",
           telegram_user_id: parseInt(addSubForm.telegram_user_id),
@@ -373,7 +373,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     if (!editChannelsSub) return;
     setSavingChannels(true);
     try {
-      const { data, error } = await supabase.functions.invoke("manage-bot", {
+      const { data, error } = await invokeFunction("manage-bot", {
         body: { action: "update_subscriber_channels", subscriber_id: editChannelsSub.id, channel_ids: editChannelIds },
       });
       if (error) throw error;
@@ -392,7 +392,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     setBroadcastResult(null);
     try {
       const action = broadcastTarget === "all_users" ? "broadcast_all" : broadcastTarget === "channels" ? "broadcast_channels" : "broadcast";
-      const { data, error } = await supabase.functions.invoke("manage-bot", {
+      const { data, error } = await invokeFunction("manage-bot", {
         body: { action, message: broadcastMsg },
       });
       if (error) throw error;
@@ -840,7 +840,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                       if (!confirm(t("dash.kickAllPublicConfirm"))) return;
                       setKickingPublic(true);
                       try {
-                        const { data, error } = await supabase.functions.invoke("manage-bot", {
+                        const { data, error } = await invokeFunction("manage-bot", {
                           body: { action: "kick_public_members" },
                         });
                         if (error) throw error;
@@ -879,7 +879,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                       if (!confirm(t("dash.kickExpiredConfirm"))) return;
                       setKickingExpired(true);
                       try {
-                        const { data, error } = await supabase.functions.invoke("manage-bot", {
+                        const { data, error } = await invokeFunction("manage-bot", {
                           body: { action: "kick_expired_from_channels" },
                         });
                         if (error) throw error;
@@ -916,7 +916,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                     if (!confirm(t("dash.unbanAllConfirm"))) return;
                     setUnbanningAll(true);
                     try {
-                      const { data, error } = await supabase.functions.invoke("manage-bot", {
+                      const { data, error } = await invokeFunction("manage-bot", {
                         body: { action: "unban_all_from_channels" },
                       });
                       if (error) throw error;
@@ -950,7 +950,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                     if (!confirm(t("dash.checkBlockedConfirm"))) return;
                     setCheckingBlocked(true);
                     try {
-                      const { data, error } = await supabase.functions.invoke("manage-bot", {
+                      const { data, error } = await invokeFunction("manage-bot", {
                         body: { action: "check_blocked_subscribers" },
                       });
                       if (error) throw error;
@@ -1004,7 +1004,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                       setBotAdminCheckIdx(prev => prev < channels.length - 1 ? prev + 1 : prev);
                     }, 1500);
                     try {
-                      const { data, error } = await supabase.functions.invoke("manage-bot", {
+                      const { data, error } = await invokeFunction("manage-bot", {
                         body: { action: "check_bot_admin" },
                       });
                       clearInterval(progressInterval);
@@ -1221,7 +1221,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                     try {
                       const body: any = { action: "kick_non_subscribers" };
                       if (kickNonSubsChannelId !== "all") body.target_channel_id = kickNonSubsChannelId;
-                      const { data, error } = await supabase.functions.invoke("manage-bot", { body });
+                      const { data, error } = await invokeFunction("manage-bot", { body });
                       clearInterval(progressInterval);
                       if (error) throw error;
                       if (data?.error) throw new Error(data.error);
@@ -1307,7 +1307,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                     try {
                       const body: any = { action: "kick_all_members" };
                       if (kickAllChannelId !== "all") body.target_channel_id = kickAllChannelId;
-                      const { data, error } = await supabase.functions.invoke("manage-bot", { body });
+                      const { data, error } = await invokeFunction("manage-bot", { body });
                       clearInterval(progressInterval);
                       if (error) throw error;
                       if (data?.error) throw new Error(data.error);
@@ -1911,7 +1911,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                       if (!confirm(lang === "ar" ? "هل تريد طرد هذا المستخدم؟" : "Kick this user?")) return;
                       setKickingId(u.id);
                       try {
-                        const { data, error } = await supabase.functions.invoke("manage-bot", {
+                        const { data, error } = await invokeFunction("manage-bot", {
                           body: { action: "kick_trial_user", telegram_user_id: u.telegram_user_id },
                         });
                         if (error) throw error;
