@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeFunction } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -198,8 +199,8 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     // Fetch subscriber-channel mappings + bot users count + public members count
     try {
       const [scRes, buRes, pmRes, trialRes] = await Promise.all([
-        supabase.functions.invoke("manage-bot", { body: { action: "get_subscriber_channels" } }),
-        supabase.functions.invoke("manage-bot", { body: { action: "get_bot_users" } }),
+        invokeFunction("manage-bot", { body: { action: "get_subscriber_channels" } }),
+        invokeFunction("manage-bot", { body: { action: "get_bot_users" } }),
         supabase.from("public_channel_members").select("id", { count: "exact", head: true }),
         supabase.from("free_trial_users").select("*").order("activated_at", { ascending: false }),
       ]);
