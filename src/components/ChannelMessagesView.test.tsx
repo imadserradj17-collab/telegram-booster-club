@@ -12,6 +12,8 @@ const localStorageStub = {
 (globalThis as any).localStorage = localStorageStub;
 
 vi.mock("@/lib/db", () => ({
+  API_BASE_URL: "/api",
+  db: { getAccessToken: () => null },
   supabase: {
     from: vi.fn(() => {
       const query = {
