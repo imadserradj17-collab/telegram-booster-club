@@ -150,7 +150,11 @@ class QueryBuilder<T = any> implements PromiseLike<Result<T>> {
 
   insert(values: unknown) { this.payload.op = "insert"; this.payload.values = values; return this; }
   update(values: unknown) { this.payload.op = "update"; this.payload.values = values; return this; }
-  delete() { this.payload.op = "delete"; return this; }
+  delete(options?: { count?: "exact" }) {
+    this.payload.op = "delete";
+    if (options?.count) this.payload.count = options.count;
+    return this;
+  }
   upsert(values: unknown, options?: { onConflict?: string }) {
     this.payload.op = "upsert";
     this.payload.values = values;
