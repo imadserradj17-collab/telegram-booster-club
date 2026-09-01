@@ -1,1 +1,0 @@
-CREATE POLICY "Owners can update own free trial users" ON public.free_trial_users FOR UPDATE TO authenticated USING (auth.uid() = owner_id) WITH CHECK (auth.uid() = owner_id);

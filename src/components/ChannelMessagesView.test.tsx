@@ -11,7 +11,9 @@ const localStorageStub = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (globalThis as any).localStorage = localStorageStub;
 
-vi.mock("@/integrations/supabase/client", () => ({
+vi.mock("@/lib/db", () => ({
+  API_BASE_URL: "/api",
+  db: { getAccessToken: () => null },
   supabase: {
     from: vi.fn(() => {
       const query = {

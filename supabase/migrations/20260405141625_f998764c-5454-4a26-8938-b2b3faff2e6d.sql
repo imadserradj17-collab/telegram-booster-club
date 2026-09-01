@@ -1,1 +1,0 @@
-ALTER TABLE public.bot_tokens ADD COLUMN free_trial_channel_ids jsonb DEFAULT '[]'::jsonb;

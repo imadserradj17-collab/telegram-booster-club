@@ -1,2 +1,0 @@
-ALTER TABLE public.bot_users ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ NOT NULL DEFAULT now();
-UPDATE public.bot_users SET started_at = created_at WHERE started_at IS DISTINCT FROM created_at AND created_at IS NOT NULL;
