@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { Session } from "@supabase/supabase-js";
+import { supabase } from "@/lib/db";
+import type { Session } from "@/lib/db";
 import Auth from "@/pages/Auth";
 import BotTokenSetup from "@/pages/BotTokenSetup";
 import Dashboard from "@/pages/Dashboard";

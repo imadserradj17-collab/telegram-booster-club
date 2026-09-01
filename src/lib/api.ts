@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/db";
 
 /**
  * Base URL of the custom backend (Node.js / Express on the VPS).

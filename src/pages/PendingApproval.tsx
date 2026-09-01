@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/db";
 import { Button } from "@/components/ui/button";
 import { Clock, LogOut } from "lucide-react";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
