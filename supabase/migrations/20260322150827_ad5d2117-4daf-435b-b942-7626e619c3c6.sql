@@ -1,1 +1,0 @@
-ALTER TABLE public.telegram_channels ADD COLUMN IF NOT EXISTS channel_type text NOT NULL DEFAULT 'channel';

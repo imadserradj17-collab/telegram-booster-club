@@ -1,1 +1,0 @@
-ALTER TABLE public.telegram_subscribers ADD COLUMN IF NOT EXISTS expiry_notified boolean NOT NULL DEFAULT false;
