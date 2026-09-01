@@ -1,28 +1,20 @@
-import { supabase } from "@/lib/db";
+import { db, API_BASE_URL } from "@/lib/db";
 
-/**
- * Base URL of the custom backend (Node.js / Express on the VPS).
- * Defaults to the same origin under /api, so nginx can proxy it.
- * Override with VITE_API_BASE_URL (e.g. https://api.example.com/api).
- */
-export const API_BASE_URL: string =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") || "/api";
+export { API_BASE_URL };
 
 export type ApiResult<T = any> = { data: T | null; error: Error | null };
 
-async function authHeaders(): Promise<Record<string, string>> {
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+function authHeaders(json = true): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (json) headers["Content-Type"] = "application/json";
+  const token = db.getAccessToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  const apikey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
-  if (apikey) headers["apikey"] = apikey;
   return headers;
 }
 
 /**
- * Drop-in replacement for supabase.functions.invoke(name, { body }).
- * Calls POST {API_BASE_URL}/{name} on the self-hosted backend.
+ * Calls the custom Node.js/Express backend on the VPS.
+ * POST {API_BASE_URL}/{name}
  */
 export async function invokeFunction<T = any>(
   name: "telegram-bot" | "manage-bot" | "auto-scan" | "get-channel-file",
@@ -31,7 +23,7 @@ export async function invokeFunction<T = any>(
   try {
     const res = await fetch(`${API_BASE_URL}/${name}`, {
       method: "POST",
-      headers: await authHeaders(),
+      headers: authHeaders(),
       body: JSON.stringify(options.body ?? {}),
     });
 
@@ -70,9 +62,7 @@ export async function apiFetchBlob(
   path: string,
   params?: Record<string, string | number | undefined>
 ): Promise<Blob> {
-  const headers = await authHeaders();
-  delete headers["Content-Type"];
-  const res = await fetch(apiUrl(path, params), { headers });
+  const res = await fetch(apiUrl(path, params), { headers: authHeaders(false) });
   if (!res.ok) throw new Error(`Request failed (${res.status})`);
   return res.blob();
 }
