@@ -22,6 +22,13 @@
       "when": 1791371972323,
       "tag": "0002_bot_referrer_stats",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791393824612,
+      "tag": "0003_referral_protection",
+      "breakpoints": true
     }
   ]
 }

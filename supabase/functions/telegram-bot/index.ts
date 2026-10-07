@@ -405,6 +405,18 @@ async function handleReferralStart(
   ]);
   if ([a1, a2, a3, a4].some((x: any) => (x.data || []).length > 0)) return;
   if (from.is_bot) return;
+  // Protection: blocked referrers and daily invite limit
+  const { data: blocked } = await sb.from("bot_referral_blocks").select("id")
+    .eq("bot_token_id", botTokenId).eq("telegram_user_id", referrerId).maybeSingle();
+  if (blocked) return;
+  const { data: lim } = await sb.from("bot_tokens").select("referral_daily_limit").eq("id", botTokenId).maybeSingle();
+  const dailyLimit = lim?.referral_daily_limit ?? 20;
+  if (dailyLimit > 0) {
+    const { count: today } = await sb.from("bot_referrals").select("id", { count: "exact", head: true })
+      .eq("bot_token_id", botTokenId).eq("referrer_telegram_id", referrerId)
+      .gte("created_at", new Date(Date.now() - 86400000).toISOString());
+    if ((today ?? 0) >= dailyLimit) return;
+  }
   const { data: refUser } = await sb.from("bot_users").select("id").eq("owner_id", ownerId).eq("telegram_user_id", referrerId).maybeSingle();
   if (!refUser) return;
   const { error } = await sb.from("bot_referrals").insert({

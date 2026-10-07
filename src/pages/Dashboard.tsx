@@ -22,10 +22,12 @@ import {
   Settings, Key, Shield, MessageSquare, Save, Loader2, User, Calendar, Hash,
   LayoutDashboard, ChevronLeft, ChevronRight, Search, AlertTriangle, Menu, X,
   BarChart3, Tv, Plus, Send, Link, Edit, CheckCircle, XCircle, FileText, MessageCircle, Activity,
+  Network,
 } from "lucide-react";
 import ChannelMessagesView from "@/components/ChannelMessagesView";
 import { BotModeratorsCard } from "@/components/BotModeratorsCard";
 import { BotActivityLogView } from "@/components/BotActivityLogView";
+import { ReferralTreeView } from "@/components/ReferralTreeView";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -78,7 +80,7 @@ interface FreeTrialUser {
   expires_at: string;
 }
 
-type TabKey = "overview" | "subscribers" | "expired" | "channels" | "messages" | "broadcast" | "analytics" | "settings" | "free_trial" | "kick_nonsubs" | "scan_logs" | "admin_activity";
+type TabKey = "overview" | "subscribers" | "expired" | "channels" | "messages" | "broadcast" | "analytics" | "settings" | "free_trial" | "kick_nonsubs" | "scan_logs" | "admin_activity" | "referrals";
 
 interface DashboardProps {
   onShowAdmin?: () => void;
@@ -431,6 +433,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
     { key: "broadcast", icon: Send, label: t("broadcast.title") },
     { key: "kick_nonsubs", icon: Shield, label: t("dash.kickNonSubscribers") },
     { key: "scan_logs", icon: FileText, label: t("scanLogs.title") },
+    { key: "referrals", icon: Network, label: lang === "ar" ? "شجرة الإحالات" : "Referrals" },
     { key: "admin_activity", icon: Activity, label: lang === "ar" ? "سجل أعمال الإدارة" : "Admin Activity" },
     { key: "analytics", icon: BarChart3, label: t("dash.analytics") },
     { key: "settings", icon: Settings, label: t("dash.settings") },
@@ -2230,6 +2233,12 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {activeTab === "referrals" && botSettings && (
+            <div className="animate-fade-in">
+              <ReferralTreeView botTokenId={botSettings.id} ownerId={(botSettings as any).user_id} />
             </div>
           )}
 
