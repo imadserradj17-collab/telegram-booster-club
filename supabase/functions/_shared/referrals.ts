@@ -20,8 +20,16 @@ async function referredBy(sb: any, botTokenId: string, ids: number[]): Promise<n
   return out;
 }
 
+/** Per-bot level sizes (editable from the website), falling back to defaults. */
+export async function getLevelNeeds(sb: any, botTokenId: string): Promise<number[]> {
+  const { data } = await sb.from("bot_tokens").select("ref_level1_need, ref_level2_need, ref_level3_need").eq("id", botTokenId).maybeSingle();
+  return [data?.ref_level1_need, data?.ref_level2_need, data?.ref_level3_need]
+    .map((v, i) => (Number(v) >= 1 ? Number(v) : REF_LEVELS[i].need));
+}
+
 /** Valid invite counts per level for a referrer. */
 export async function levelCounts(sb: any, botTokenId: string, referrerId: number) {
+  const needs = await getLevelNeeds(sb, botTokenId);
   const counts: number[] = [];
   let frontier = [referrerId];
   for (let i = 0; i < REF_LEVELS.length; i++) {
@@ -29,8 +37,8 @@ export async function levelCounts(sb: any, botTokenId: string, referrerId: numbe
     counts.push(frontier.length);
   }
   return REF_LEVELS.map((l, i) => ({
-    level: l.level, need: l.need, count: counts[i],
-    achieved: Math.floor(counts[i] / l.need), counter: counts[i] % l.need,
+    level: l.level, need: needs[i], count: counts[i],
+    achieved: Math.floor(counts[i] / needs[i]), counter: counts[i] % needs[i],
   }));
 }
 

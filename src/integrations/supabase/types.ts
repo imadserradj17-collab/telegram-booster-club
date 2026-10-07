@@ -289,6 +289,9 @@ export type Database = {
           mandatory_chat_id: number | null
           non_subscriber_message: string
           public_channel_id: string | null
+          ref_level1_need: number
+          ref_level2_need: number
+          ref_level3_need: number
           referral_daily_limit: number
           subscribers_channel_id: string | null
           token: string
@@ -309,6 +312,9 @@ export type Database = {
           mandatory_chat_id?: number | null
           non_subscriber_message?: string
           public_channel_id?: string | null
+          ref_level1_need?: number
+          ref_level2_need?: number
+          ref_level3_need?: number
           referral_daily_limit?: number
           subscribers_channel_id?: string | null
           token: string
@@ -329,6 +335,9 @@ export type Database = {
           mandatory_chat_id?: number | null
           non_subscriber_message?: string
           public_channel_id?: string | null
+          ref_level1_need?: number
+          ref_level2_need?: number
+          ref_level3_need?: number
           referral_daily_limit?: number
           subscribers_channel_id?: string | null
           token?: string
