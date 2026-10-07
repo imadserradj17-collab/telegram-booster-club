@@ -1340,6 +1340,42 @@ Deno.serve(async (req) => {
       }
 
       // ── CHECK BOT ADMIN STATUS ──
+      case "set_public_channel": {
+        const raw = String(params.chat_id ?? "").trim();
+        const json = (b: any, status = 200) => new Response(JSON.stringify(b), { status, headers: corsHeaders });
+        if (!raw) {
+          await sb.from("bot_tokens").update({ public_channel_id: null }).eq("id", botTokenId);
+          return json({ ok: true, cleared: true });
+        }
+        if (!/^-?\d+$/.test(raw)) return json({ error: "invalid_id" }, 400);
+        const chatId = Number(raw);
+        const chat = await tg(botToken, "getChat", { chat_id: chatId });
+        if (!chat.ok) return json({ error: "not_found", details: chat.description }, 400);
+        const me = await tg(botToken, "getMe", {});
+        const member = await tg(botToken, "getChatMember", { chat_id: chatId, user_id: me.result?.id });
+        if (!member.ok || member.result?.status !== "administrator") return json({ error: "not_admin", title: chat.result.title }, 400);
+        let invite = chat.result.invite_link || (chat.result.username ? `https://t.me/${chat.result.username}` : null);
+        if (!invite) {
+          const inv = await tg(botToken, "exportChatInviteLink", { chat_id: chatId });
+          if (inv.ok) invite = inv.result;
+        }
+        const title = chat.result.title || String(chatId);
+        const { data: existing } = await sb.from("telegram_channels").select("id")
+          .eq("owner_id", user.id).eq("bot_token_id", botTokenId).eq("channel_id", chatId).maybeSingle();
+        let rowId = existing?.id;
+        if (rowId) {
+          await sb.from("telegram_channels").update({ channel_name: title, invite_link: invite, channel_type: "public" }).eq("id", rowId);
+        } else {
+          const { data: ins, error } = await sb.from("telegram_channels").insert({
+            owner_id: user.id, bot_token_id: botTokenId, channel_id: chatId, channel_name: title, invite_link: invite, channel_type: "public",
+          }).select("id").single();
+          if (error) return json({ error: error.message }, 400);
+          rowId = ins.id;
+        }
+        await sb.from("bot_tokens").update({ public_channel_id: rowId }).eq("id", botTokenId);
+        return json({ ok: true, id: rowId, title, chat_type: chat.result.type, invite_link: invite });
+      }
+
       case "check_bot_admin": {
         const { data: chList } = await sb
           .from("telegram_channels")
