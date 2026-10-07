@@ -1,0 +1,1 @@
+ALTER TABLE public.bot_tokens ADD COLUMN IF NOT EXISTS trial_offer_message text NOT NULL DEFAULT '';
