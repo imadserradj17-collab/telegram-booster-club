@@ -29,6 +29,7 @@ export function ReferralTreeView({ botTokenId, ownerId }: { botTokenId: string; 
   const [names, setNames] = useState<Map<number, string>>(new Map());
   const [blocked, setBlocked] = useState<Set<number>>(new Set());
   const [limit, setLimit] = useState(20);
+  const [needs, setNeeds] = useState<number[]>([5, 10, 20]);
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -39,7 +40,7 @@ export function ReferralTreeView({ botTokenId, ownerId }: { botTokenId: string; 
       supabase.from("bot_referrals").select("*").eq("bot_token_id", botTokenId).order("created_at", { ascending: true }).limit(5000),
       supabase.from("bot_referral_blocks").select("telegram_user_id").eq("bot_token_id", botTokenId),
       supabase.from("bot_users").select("telegram_user_id, first_name, last_name, telegram_username").eq("bot_token_id", botTokenId).limit(10000),
-      supabase.from("bot_tokens").select("referral_daily_limit").eq("id", botTokenId).maybeSingle(),
+      supabase.from("bot_tokens").select("referral_daily_limit, ref_level1_need, ref_level2_need, ref_level3_need").eq("id", botTokenId).maybeSingle(),
     ]);
     setRefs((r.data || []) as Ref[]);
     setBlocked(new Set((b.data || []).map((x: any) => Number(x.telegram_user_id))));
@@ -49,6 +50,8 @@ export function ReferralTreeView({ botTokenId, ownerId }: { botTokenId: string; 
     }
     setNames(m);
     setLimit((s.data as any)?.referral_daily_limit ?? 20);
+    const sd: any = s.data || {};
+    setNeeds([sd.ref_level1_need ?? 5, sd.ref_level2_need ?? 10, sd.ref_level3_need ?? 20]);
     setLoading(false);
   };
 
@@ -121,6 +124,12 @@ export function ReferralTreeView({ botTokenId, ownerId }: { botTokenId: string; 
     toast({ title: ar ? "تم حفظ الحد اليومي ✅" : "Daily limit saved ✅" });
   };
 
+  const saveNeeds = async () => {
+    const { error } = await supabase.from("bot_tokens").update({ ref_level1_need: needs[0], ref_level2_need: needs[1], ref_level3_need: needs[2] } as any).eq("id", botTokenId);
+    if (error) return toast({ title: ar ? "خطأ" : "Error", description: error.message, variant: "destructive" });
+    toast({ title: ar ? "تم حفظ عدد الإحالات لكل مستوى ✅" : "Level sizes saved ✅" });
+  };
+
   const name = (id: number, r?: Ref) => r?.referred_name || names.get(id) || String(id);
 
   const Node = ({ id, depth, r, path }: { id: number; depth: number; r?: Ref; path: string }) => {
@@ -185,6 +194,21 @@ export function ReferralTreeView({ botTokenId, ownerId }: { botTokenId: string; 
         <div className="rounded-lg bg-secondary/40 p-2"><div className="text-lg font-bold">{total}</div><div className="text-xs text-muted-foreground">{ar ? "كل الدعوات" : "Total"}</div></div>
         <div className="rounded-lg bg-secondary/40 p-2"><div className="text-lg font-bold">{pending}</div><div className="text-xs text-muted-foreground">{ar ? "بانتظار الانضمام" : "Pending"}</div></div>
         <div className="rounded-lg bg-secondary/40 p-2"><div className="text-lg font-bold">{revoked}</div><div className="text-xs text-muted-foreground">{ar ? "ملغاة" : "Revoked"}</div></div>
+      </div>
+
+      <div className="rounded-lg border border-border p-3 space-y-2">
+        <div className="text-sm font-semibold">{ar ? "🎁 عدد الإحالات المطلوب لكل مستوى (كل إنجاز = 3 أيام)" : "🎁 Invites needed per level (each = 3 days)"}</div>
+        <div className="flex flex-wrap items-center gap-3">
+          {needs.map((n, i) => (
+            <label key={i} className="flex items-center gap-1 text-xs">
+              {ar ? `المستوى ${i + 1}` : `Level ${i + 1}`}
+              <Input type="number" min={1} max={1000} value={n} className="w-20 h-8 text-sm"
+                onChange={(e) => setNeeds((p) => p.map((v, j) => (j === i ? Math.max(1, Math.min(1000, parseInt(e.target.value) || 1)) : v)))} />
+            </label>
+          ))}
+          <Button size="sm" variant="outline" className="h-8 text-xs" onClick={saveNeeds}><Save className="w-3 h-3 me-1" />{ar ? "حفظ" : "Save"}</Button>
+        </div>
+        <p className="text-xs text-muted-foreground">{ar ? "التغيير يُطبّق على العدادات فوراً عند الدعوة التالية." : "Applies to counters from the next invite."}</p>
       </div>
 
       <div className="rounded-lg border border-border p-3 space-y-2">
