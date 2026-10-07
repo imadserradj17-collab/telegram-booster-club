@@ -118,14 +118,20 @@ async function request<T = any>(path: string, init: RequestInit = {}): Promise<R
         `Request failed (${res.status})`;
       return { data: null, error: { message: String(message), code: String(res.status) } };
     }
-    if (body && body.error) {
+    if (body === null || typeof body !== "object") {
+      return {
+        data: null,
+        error: { message: "الخادم غير متصل (Server not reachable). شغّل الموقع على الـ VPS مع الخادم." },
+      };
+    }
+    if (body.error) {
       const err = body.error;
       return { data: null, error: typeof err === "string" ? { message: err } : err };
     }
     return {
-      data: (body && "data" in body ? body.data : body) as T,
+      data: ("data" in body ? body.data : body) as T,
       error: null,
-      count: body?.count ?? null,
+      count: body.count ?? null,
     };
   } catch (e) {
     return { data: null, error: toError(e) };
