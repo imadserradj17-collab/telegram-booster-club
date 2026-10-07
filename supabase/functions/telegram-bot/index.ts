@@ -2584,7 +2584,7 @@ async function handleUpdate(
       const revoked = (refs || []).length - valid;
       await tg(botToken, "sendMessage", {
         chat_id: chatId,
-        text: `👥 *شارك البوت مع أصدقائك*\n\n🤝 كل صديق ينضم عبر رابطك يحصل على *${REF_INVITEE_DAYS} يوم*\n🎁 مكافأتك عن كل ${REF_EVERY} دعوات:\n${REF_LEVELS.map((l) => `• المستوى ${l.level}${l.from ? ` (من ${l.from} دعوة)` : ""}: *${l.days} أيام*`).join("\\n")}\n⚠️ الدعوة تُلغى إذا لم ينضم صديقك لأي قناة خلال 12 ساعة\n\n🏅 مستواك: *${levelFor(valid).level}*\n📊 دعواتك: *${valid}* (التالية بعد ${REF_EVERY - (valid % REF_EVERY)})${revoked ? `\n❌ ملغاة: ${revoked}` : ""}\n\n🔗 رابطك:\n${link}`,
+        text: `👥 *شارك البوت مع أصدقائك*\n\n🤝 كل صديق ينضم عبر رابطك يحصل على *${REF_INVITEE_DAYS} يوم*\n🎁 مكافأتك عن كل ${REF_EVERY} دعوات:\n${REF_LEVELS.map((l) => `• المستوى ${l.level}${l.from ? ` (من ${l.from} دعوة)` : ""}: *${l.days} أيام*`).join("\n")}\n⚠️ الدعوة تُلغى إذا لم ينضم صديقك لأي قناة خلال 12 ساعة\n\n🏅 مستواك: *${levelFor(valid).level}*\n📊 دعواتك: *${valid}* (التالية بعد ${REF_EVERY - (valid % REF_EVERY)})${revoked ? `\n❌ ملغاة: ${revoked}` : ""}\n\n🔗 رابطك:\n${link}`,
         parse_mode: "Markdown",
         disable_web_page_preview: true,
         reply_markup: { inline_keyboard: [[{ text: "📤 مشاركة الرابط", url: `https://t.me/share/url?url=${encodeURIComponent(link)}` }]] },
