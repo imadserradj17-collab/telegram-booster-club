@@ -147,6 +147,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const [kickAllActiveChannel, setKickAllActiveChannel] = useState<number>(-1);
   const [freeTrialEnabled, setFreeTrialEnabled] = useState(false);
   const [freeTrialDays, setFreeTrialDays] = useState(3);
+  const [trialOfferMessage, setTrialOfferMessage] = useState("");
   const [freeTrialUsers, setFreeTrialUsers] = useState<FreeTrialUser[]>([]);
   const [freeTrialChannelIds, setFreeTrialChannelIds] = useState<string[]>([]);
   const [checkingBotAdmin, setCheckingBotAdmin] = useState(false);
@@ -185,6 +186,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
       setSubscribersChannelId((settingsRes.data as any).subscribers_channel_id || null);
       setFreeTrialEnabled((settingsRes.data as any).free_trial_enabled ?? false);
       setFreeTrialDays((settingsRes.data as any).free_trial_days ?? 3);
+      setTrialOfferMessage((settingsRes.data as any).trial_offer_message ?? "");
       setMandatoryChannelId((settingsRes.data as any).mandatory_channel_id || null);
       setMandatoryChatId((settingsRes.data as any).mandatory_chat_id ? String((settingsRes.data as any).mandatory_chat_id) : "");
       setFreeTrialChannelIds((settingsRes.data as any).free_trial_channel_ids || []);
@@ -1896,6 +1898,22 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                         </Button>
                       </div>
                     </div>
+                  </div>
+                )}
+                {freeTrialEnabled && (
+                  <div className="p-3 rounded-lg border border-border bg-card space-y-2">
+                    <h3 className="text-sm font-semibold text-foreground">{lang === "ar" ? "🎁 رسالة عرض التجربة المجانية" : "🎁 Free trial offer message"}</h3>
+                    <p className="text-xs text-muted-foreground">{lang === "ar" ? "يرسلها الأدمن من البوت (زر 🎁 عرض تجربة مجانية) لكل من فعّل البوت مع زر للحصول على التجربة." : "Sent by the admin from the bot (🎁 Free trial offer button) to everyone who started the bot, with a button to claim the trial."}</p>
+                    <Textarea value={trialOfferMessage} onChange={(e) => setTrialOfferMessage(e.target.value)} rows={4} placeholder={lang === "ar" ? "مثال: احصل الآن على تجربة مجانية لكل القنوات!" : "e.g. Get a free trial of all channels now!"} />
+                    <Button size="sm" variant="outline" className="h-8 text-xs" onClick={async () => {
+                      if (!botSettings) return;
+                      const { error } = await supabase.from("bot_tokens").update({ trial_offer_message: trialOfferMessage.trim() } as any).eq("id", botSettings.id);
+                      if (error) toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+                      else toast({ title: lang === "ar" ? "تم حفظ رسالة العرض ✅" : "Offer message saved ✅" });
+                    }}>
+                      <Save className="w-3 h-3 mr-1" />
+                      {t("common.save")}
+                    </Button>
                   </div>
                 )}
               </div>
