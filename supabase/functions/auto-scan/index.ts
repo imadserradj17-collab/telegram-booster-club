@@ -22,6 +22,57 @@ Deno.serve(async (_req) => {
 
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+    // ─── Referral 12h verification (runs for every bot) ───
+    for (const bot of bots) {
+      try {
+        const cutoff = new Date(Date.now() - 12 * 3600000).toISOString();
+        const { data: pend } = await sb.from("bot_referrals").select("*")
+          .eq("bot_token_id", bot.id).eq("status", "pending").lt("created_at", cutoff).limit(200);
+        if (!pend || pend.length === 0) continue;
+        const { data: chs } = await sb.from("telegram_channels").select("channel_id")
+          .eq("owner_id", bot.user_id).eq("bot_token_id", bot.id);
+        const chIds = (chs || []).map((c: any) => Number(c.channel_id));
+        for (const r of pend) {
+          let joined = false;
+          for (const chId of chIds) {
+            const m = await tg(bot.token, "getChatMember", { chat_id: chId, user_id: r.referred_telegram_id });
+            const st = m?.result?.status;
+            if (m?.ok && ["member", "administrator", "creator", "restricted"].includes(st)) { joined = true; break; }
+          }
+          if (joined) {
+            await sb.from("bot_referrals").update({ status: "valid", checked_at: new Date().toISOString() }).eq("id", r.id);
+            continue;
+          }
+          await sb.from("bot_referrals").update({ status: "revoked", checked_at: new Date().toISOString() }).eq("id", r.id);
+          // Remove the invitee: drop their subscription (unless permanent) and kick
+          const { data: sub } = await sb.from("telegram_subscribers").select("id, is_permanent")
+            .eq("owner_id", bot.user_id).eq("telegram_user_id", r.referred_telegram_id).maybeSingle();
+          if (sub && !sub.is_permanent) {
+            await sb.from("subscriber_channels").delete().eq("subscriber_id", sub.id);
+            await sb.from("telegram_subscribers").delete().eq("id", sub.id);
+          }
+          // Deduct 3 days from referrer
+          const { data: rsub } = await sb.from("telegram_subscribers").select("id, expires_at, is_permanent")
+            .eq("owner_id", bot.user_id).eq("telegram_user_id", r.referrer_telegram_id).maybeSingle();
+          if (rsub && !rsub.is_permanent && rsub.expires_at) {
+            const newExp = new Date(new Date(rsub.expires_at).getTime() - 3 * 86400000).toISOString();
+            await sb.from("telegram_subscribers").update({ expires_at: newExp }).eq("id", rsub.id);
+          }
+          await tg(bot.token, "sendMessage", {
+            chat_id: r.referred_telegram_id,
+            text: "❌ تم إلغاء هدية الدعوة لأنك لم تنضم إلى أي قناة خلال 12 ساعة.",
+          }).catch(() => {});
+          await tg(bot.token, "sendMessage", {
+            chat_id: r.referrer_telegram_id,
+            text: `⚠️ ${r.referred_name || r.referred_telegram_id} لم ينضم لأي قناة خلال 12 ساعة، تم إلغاء دعوته وخصم 3 أيام من اشتراكك.`,
+          }).catch(() => {});
+          await sleep(50);
+        }
+      } catch (e) {
+        console.error("referral check failed", e);
+      }
+    }
+
     for (const bot of bots) {
       if (!bot.auto_scan_enabled) continue;
 

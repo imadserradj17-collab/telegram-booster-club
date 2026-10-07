@@ -8,6 +8,13 @@
       "when": 1791354541176,
       "tag": "0000_trial_offer_message",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791371501020,
+      "tag": "0001_bot_referrals",
+      "breakpoints": true
     }
   ]
 }

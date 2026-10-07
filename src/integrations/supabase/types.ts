@@ -185,6 +185,45 @@ export type Database = {
         }
         Relationships: []
       }
+      bot_referrals: {
+        Row: {
+          bot_token_id: string
+          checked_at: string | null
+          created_at: string
+          id: string
+          owner_id: string
+          referred_name: string | null
+          referred_telegram_id: number
+          referred_username: string | null
+          referrer_telegram_id: number
+          status: string
+        }
+        Insert: {
+          bot_token_id: string
+          checked_at?: string | null
+          created_at?: string
+          id?: string
+          owner_id: string
+          referred_name?: string | null
+          referred_telegram_id: number
+          referred_username?: string | null
+          referrer_telegram_id: number
+          status?: string
+        }
+        Update: {
+          bot_token_id?: string
+          checked_at?: string | null
+          created_at?: string
+          id?: string
+          owner_id?: string
+          referred_name?: string | null
+          referred_telegram_id?: number
+          referred_username?: string | null
+          referrer_telegram_id?: number
+          status?: string
+        }
+        Relationships: []
+      }
       bot_tokens: {
         Row: {
           admin_telegram_id: number | null
