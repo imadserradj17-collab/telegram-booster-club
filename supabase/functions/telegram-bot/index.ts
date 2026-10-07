@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { REF_EVERY, REF_LEVELS, levelFor, syncReferrerReward } from "../_shared/referrals.ts";
+import { REF_LEVELS, REF_REWARD_DAYS, progressFor, syncReferrerReward } from "../_shared/referrals.ts";
 import { t, langPickerKeyboard, type Lang } from "./i18n.ts";
 
 async function getUserLang(
@@ -396,6 +396,15 @@ async function handleReferralStart(
   // Only brand-new bot users count
   const { data: already } = await sb.from("bot_users").select("id").eq("owner_id", ownerId).eq("telegram_user_id", from.id).maybeSingle();
   if (already) return;
+  // Anti-fraud: anyone ever seen before (subscriber, trial, channel member, previous referral) never counts
+  const [a1, a2, a3, a4] = await Promise.all([
+    sb.from("telegram_subscribers").select("id").eq("owner_id", ownerId).eq("telegram_user_id", from.id).limit(1),
+    sb.from("free_trial_users").select("id").eq("owner_id", ownerId).eq("telegram_user_id", from.id).limit(1),
+    sb.from("channel_members").select("id").eq("owner_id", ownerId).eq("telegram_user_id", from.id).limit(1),
+    sb.from("bot_referrals").select("id").eq("bot_token_id", botTokenId).eq("referred_telegram_id", from.id).limit(1),
+  ]);
+  if ([a1, a2, a3, a4].some((x: any) => (x.data || []).length > 0)) return;
+  if (from.is_bot) return;
   const { data: refUser } = await sb.from("bot_users").select("id").eq("owner_id", ownerId).eq("telegram_user_id", referrerId).maybeSingle();
   if (!refUser) return;
   const { error } = await sb.from("bot_referrals").insert({
@@ -414,13 +423,13 @@ async function handleReferralStart(
   if (r.diff > 0) {
     tgFire(botToken, "sendMessage", {
       chat_id: referrerId,
-      text: `🏆 مبروك! وصلت إلى *${r.total}* دعوة (المستوى ${r.level.level}) وحصلت على *${r.diff} أيام* إضافية.\n⏰ ينتهي اشتراكك: ${formatDate(r.expiresAt!)}`,
+      text: `🏆 مبروك! أكملت المستوى وحصلت على *${r.diff} أيام* إضافية (مرات الإنجاز: ${r.achieved}).\n🔄 العداد بدأ من 0 • المستوى الحالي ${r.level}: 0/${r.need}\n⏰ ينتهي اشتراكك: ${formatDate(r.expiresAt!)}`,
       parse_mode: "Markdown",
     });
   } else {
     tgFire(botToken, "sendMessage", {
       chat_id: referrerId,
-      text: `👥 انضم شخص جديد عبر رابطك! (${r.total % REF_EVERY}/${REF_EVERY} للمكافأة القادمة • المستوى ${r.level.level})`,
+      text: `👥 انضم شخص جديد عبر رابطك! المستوى ${r.level}: ${r.counter}/${r.need}`,
     });
   }
 }
@@ -2582,9 +2591,10 @@ async function handleUpdate(
         .eq("bot_token_id", botTokenId).eq("referrer_telegram_id", cbFromId);
       const valid = (refs || []).filter((r: any) => r.status !== "revoked").length;
       const revoked = (refs || []).length - valid;
+      const pr = progressFor(valid);
       await tg(botToken, "sendMessage", {
         chat_id: chatId,
-        text: `👥 *شارك البوت مع أصدقائك*\n\n🤝 كل صديق ينضم عبر رابطك يحصل على *${REF_INVITEE_DAYS} يوم*\n🎁 مكافأتك عن كل ${REF_EVERY} دعوات:\n${REF_LEVELS.map((l) => `• المستوى ${l.level}${l.from ? ` (من ${l.from} دعوة)` : ""}: *${l.days} أيام*`).join("\n")}\n⚠️ الدعوة تُلغى إذا لم ينضم صديقك لأي قناة خلال 12 ساعة\n\n🏅 مستواك: *${levelFor(valid).level}*\n📊 دعواتك: *${valid}* (التالية بعد ${REF_EVERY - (valid % REF_EVERY)})${revoked ? `\n❌ ملغاة: ${revoked}` : ""}\n\n🔗 رابطك:\n${link}`,
+        text: `👥 *شارك البوت مع أصدقائك*\n\n🤝 كل صديق ينضم عبر رابطك يحصل على *${REF_INVITEE_DAYS} يوم*\n🎁 كل مستوى = *${REF_REWARD_DAYS} أيام*، ثم يبدأ العداد من 0:\n${REF_LEVELS.map((l) => `• المستوى ${l.level}: ${l.need} دعوات`).join("\n")}\n⚠️ الدعوة تُلغى إذا لم ينضم صديقك لأي قناة خلال 12 ساعة\n🛡 من دخل البوت سابقاً لا يُحتسب\n\n🏅 المستوى الحالي: *${pr.level}* — *${pr.counter}/${pr.need}*\n🏆 مرات الإنجاز: *${pr.achieved}*${revoked ? `\n❌ ملغاة: ${revoked}` : ""}\n\n🔗 رابطك:\n${link}`,
         parse_mode: "Markdown",
         disable_web_page_preview: true,
         reply_markup: { inline_keyboard: [[{ text: "📤 مشاركة الرابط", url: `https://t.me/share/url?url=${encodeURIComponent(link)}` }]] },
