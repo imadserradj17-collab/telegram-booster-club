@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { REF_EVERY, REF_LEVELS, levelFor, syncReferrerReward } from "../_shared/referrals.ts";
 import { t, langPickerKeyboard, type Lang } from "./i18n.ts";
 
 async function getUserLang(
@@ -356,8 +357,6 @@ async function broadcastConcurrent(
 
 // ─── Referral system ───
 const REF_INVITEE_DAYS = 2;
-const REF_EVERY = 5;
-const REF_REWARD_DAYS = 3;
 
 async function addSubscriptionDays(
   ownerId: string, botTokenId: string, user: { id: number; username?: string; first_name?: string; last_name?: string }, days: number,
@@ -365,6 +364,12 @@ async function addSubscriptionDays(
   const { data: existing } = await sb.from("telegram_subscribers").select("id, expires_at, is_permanent")
     .eq("owner_id", ownerId).eq("telegram_user_id", user.id).maybeSingle();
   if (existing?.is_permanent) return existing.expires_at;
+  if (days < 0) {
+    if (!existing?.expires_at) return null;
+    const e = new Date(new Date(existing.expires_at).getTime() + days * 86400000).toISOString();
+    await sb.from("telegram_subscribers").update({ expires_at: e }).eq("id", existing.id);
+    return e;
+  }
   const base = existing?.expires_at && new Date(existing.expires_at) > new Date() ? new Date(existing.expires_at) : new Date();
   const expiresAt = new Date(base.getTime() + days * 86400000).toISOString();
   if (existing) {
@@ -404,20 +409,18 @@ async function handleReferralStart(
     text: `🎉 انضممت عبر رابط دعوة وحصلت على *${REF_INVITEE_DAYS} يوم* مجاناً!\n⏰ ينتهي: ${formatDate(exp)}\n\n⚠️ انضم إلى إحدى القنوات خلال 12 ساعة وإلا سيتم إلغاء الهدية.`,
     parse_mode: "Markdown",
   });
-  const { count } = await sb.from("bot_referrals").select("id", { count: "exact", head: true })
-    .eq("bot_token_id", botTokenId).eq("referrer_telegram_id", referrerId).neq("status", "revoked");
-  const total = count ?? 0;
-  if (total > 0 && total % REF_EVERY === 0) {
-    const rexp = await addSubscriptionDays(ownerId, botTokenId, { id: referrerId }, REF_REWARD_DAYS);
+  const r = await syncReferrerReward(sb, ownerId, botTokenId, referrerId,
+    (d) => addSubscriptionDays(ownerId, botTokenId, { id: referrerId }, d));
+  if (r.diff > 0) {
     tgFire(botToken, "sendMessage", {
       chat_id: referrerId,
-      text: `🏆 مبروك! وصلت إلى *${total}* دعوة وحصلت على *${REF_REWARD_DAYS} أيام* إضافية.\n⏰ ينتهي اشتراكك: ${formatDate(rexp)}`,
+      text: `🏆 مبروك! وصلت إلى *${r.total}* دعوة (المستوى ${r.level.level}) وحصلت على *${r.diff} أيام* إضافية.\n⏰ ينتهي اشتراكك: ${formatDate(r.expiresAt!)}`,
       parse_mode: "Markdown",
     });
   } else {
     tgFire(botToken, "sendMessage", {
       chat_id: referrerId,
-      text: `👥 انضم شخص جديد عبر رابطك! (${total % REF_EVERY}/${REF_EVERY} للمكافأة القادمة)`,
+      text: `👥 انضم شخص جديد عبر رابطك! (${r.total % REF_EVERY}/${REF_EVERY} للمكافأة القادمة • المستوى ${r.level.level})`,
     });
   }
 }
@@ -2581,7 +2584,7 @@ async function handleUpdate(
       const revoked = (refs || []).length - valid;
       await tg(botToken, "sendMessage", {
         chat_id: chatId,
-        text: `👥 *شارك البوت مع أصدقائك*\n\n🎁 كل ${REF_EVERY} دعوات = *${REF_REWARD_DAYS} أيام* مجاناً\n🤝 كل صديق ينضم عبر رابطك يحصل على *${REF_INVITEE_DAYS} يوم*\n⚠️ إذا لم ينضم صديقك لأي قناة خلال 12 ساعة يُلغى ويُخصم منك ${REF_REWARD_DAYS} أيام\n\n📊 دعواتك: *${valid}* (التالية بعد ${REF_EVERY - (valid % REF_EVERY)})${revoked ? `\n❌ ملغاة: ${revoked}` : ""}\n\n🔗 رابطك:\n${link}`,
+        text: `👥 *شارك البوت مع أصدقائك*\n\n🤝 كل صديق ينضم عبر رابطك يحصل على *${REF_INVITEE_DAYS} يوم*\n🎁 مكافأتك عن كل ${REF_EVERY} دعوات:\n${REF_LEVELS.map((l) => `• المستوى ${l.level}${l.from ? ` (من ${l.from} دعوة)` : ""}: *${l.days} أيام*`).join("\\n")}\n⚠️ الدعوة تُلغى إذا لم ينضم صديقك لأي قناة خلال 12 ساعة\n\n🏅 مستواك: *${levelFor(valid).level}*\n📊 دعواتك: *${valid}* (التالية بعد ${REF_EVERY - (valid % REF_EVERY)})${revoked ? `\n❌ ملغاة: ${revoked}` : ""}\n\n🔗 رابطك:\n${link}`,
         parse_mode: "Markdown",
         disable_web_page_preview: true,
         reply_markup: { inline_keyboard: [[{ text: "📤 مشاركة الرابط", url: `https://t.me/share/url?url=${encodeURIComponent(link)}` }]] },
