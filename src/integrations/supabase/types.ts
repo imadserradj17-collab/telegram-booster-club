@@ -185,6 +185,33 @@ export type Database = {
         }
         Relationships: []
       }
+      bot_referral_blocks: {
+        Row: {
+          bot_token_id: string
+          created_at: string
+          id: string
+          owner_id: string
+          reason: string | null
+          telegram_user_id: number
+        }
+        Insert: {
+          bot_token_id: string
+          created_at?: string
+          id?: string
+          owner_id: string
+          reason?: string | null
+          telegram_user_id: number
+        }
+        Update: {
+          bot_token_id?: string
+          created_at?: string
+          id?: string
+          owner_id?: string
+          reason?: string | null
+          telegram_user_id?: number
+        }
+        Relationships: []
+      }
       bot_referrals: {
         Row: {
           bot_token_id: string
@@ -262,6 +289,7 @@ export type Database = {
           mandatory_chat_id: number | null
           non_subscriber_message: string
           public_channel_id: string | null
+          referral_daily_limit: number
           subscribers_channel_id: string | null
           token: string
           token_updated_at: string
@@ -281,6 +309,7 @@ export type Database = {
           mandatory_chat_id?: number | null
           non_subscriber_message?: string
           public_channel_id?: string | null
+          referral_daily_limit?: number
           subscribers_channel_id?: string | null
           token: string
           token_updated_at?: string
@@ -300,6 +329,7 @@ export type Database = {
           mandatory_chat_id?: number | null
           non_subscriber_message?: string
           public_channel_id?: string | null
+          referral_daily_limit?: number
           subscribers_channel_id?: string | null
           token?: string
           token_updated_at?: string
