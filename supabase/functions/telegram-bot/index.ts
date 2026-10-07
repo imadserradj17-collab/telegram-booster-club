@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { REF_EVERY, REF_LEVELS, levelFor, syncReferrerReward } from "../_shared/referrals.ts";
+import { REF_LEVELS, REF_REWARD_DAYS, progressFor, syncReferrerReward } from "../_shared/referrals.ts";
 import { t, langPickerKeyboard, type Lang } from "./i18n.ts";
 
 async function getUserLang(
@@ -414,13 +414,13 @@ async function handleReferralStart(
   if (r.diff > 0) {
     tgFire(botToken, "sendMessage", {
       chat_id: referrerId,
-      text: `🏆 مبروك! وصلت إلى *${r.total}* دعوة (المستوى ${r.level.level}) وحصلت على *${r.diff} أيام* إضافية.\n⏰ ينتهي اشتراكك: ${formatDate(r.expiresAt!)}`,
+      text: `🏆 مبروك! أكملت المستوى وحصلت على *${r.diff} أيام* إضافية (مرات الإنجاز: ${r.achieved}).\n🔄 العداد بدأ من 0 • المستوى الحالي ${r.level}: 0/${r.need}\n⏰ ينتهي اشتراكك: ${formatDate(r.expiresAt!)}`,
       parse_mode: "Markdown",
     });
   } else {
     tgFire(botToken, "sendMessage", {
       chat_id: referrerId,
-      text: `👥 انضم شخص جديد عبر رابطك! (${r.total % REF_EVERY}/${REF_EVERY} للمكافأة القادمة • المستوى ${r.level.level})`,
+      text: `👥 انضم شخص جديد عبر رابطك! المستوى ${r.level}: ${r.counter}/${r.need}`,
     });
   }
 }
@@ -2584,7 +2584,8 @@ async function handleUpdate(
       const revoked = (refs || []).length - valid;
       await tg(botToken, "sendMessage", {
         chat_id: chatId,
-        text: `👥 *شارك البوت مع أصدقائك*\n\n🤝 كل صديق ينضم عبر رابطك يحصل على *${REF_INVITEE_DAYS} يوم*\n🎁 مكافأتك عن كل ${REF_EVERY} دعوات:\n${REF_LEVELS.map((l) => `• المستوى ${l.level}${l.from ? ` (من ${l.from} دعوة)` : ""}: *${l.days} أيام*`).join("\n")}\n⚠️ الدعوة تُلغى إذا لم ينضم صديقك لأي قناة خلال 12 ساعة\n\n🏅 مستواك: *${levelFor(valid).level}*\n📊 دعواتك: *${valid}* (التالية بعد ${REF_EVERY - (valid % REF_EVERY)})${revoked ? `\n❌ ملغاة: ${revoked}` : ""}\n\n🔗 رابطك:\n${link}`,
+      const pr = progressFor(valid);
+        text: `👥 *شارك البوت مع أصدقائك*\n\n🤝 كل صديق ينضم عبر رابطك يحصل على *${REF_INVITEE_DAYS} يوم*\n🎁 كل مستوى = *${REF_REWARD_DAYS} أيام*، ثم يبدأ العداد من 0:\n${REF_LEVELS.map((l) => `• المستوى ${l.level}: ${l.need} دعوات`).join("\n")}\n⚠️ الدعوة تُلغى إذا لم ينضم صديقك لأي قناة خلال 12 ساعة\n🛡 من دخل البوت سابقاً لا يُحتسب\n\n🏅 المستوى الحالي: *${pr.level}* — *${pr.counter}/${pr.need}*\n🏆 مرات الإنجاز: *${pr.achieved}*${revoked ? `\n❌ ملغاة: ${revoked}` : ""}\n\n🔗 رابطك:\n${link}`,
         parse_mode: "Markdown",
         disable_web_page_preview: true,
         reply_markup: { inline_keyboard: [[{ text: "📤 مشاركة الرابط", url: `https://t.me/share/url?url=${encodeURIComponent(link)}` }]] },
