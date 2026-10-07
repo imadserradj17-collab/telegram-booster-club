@@ -206,7 +206,7 @@ const FULL_ACCESS_THRESHOLD = 5;
 async function getAllChannelIdsForBot(botTokenId: string): Promise<string[]> {
   const { data } = await sb.from("telegram_channels")
     .select("id")
-    .eq("bot_token_id", botTokenId);
+    .eq("bot_token_id", botTokenId).neq("channel_type", "public");
   return (data || []).map((r: any) => r.id);
 }
 
@@ -383,7 +383,7 @@ async function addSubscriptionDays(
     subscription_days: days, expires_at: expiresAt, is_permanent: false, expiry_notified: false,
   }).select("id").single();
   if (sub) {
-    const { data: chs } = await sb.from("telegram_channels").select("id").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+    const { data: chs } = await sb.from("telegram_channels").select("id").eq("owner_id", ownerId).eq("bot_token_id", botTokenId).neq("channel_type", "public");
     if (chs && chs.length) await sb.from("subscriber_channels").insert(chs.map((c: any) => ({ subscriber_id: sub.id, channel_id: c.id })));
   }
   return expiresAt;
@@ -485,7 +485,7 @@ async function banEverywhere(
   userId: number,
 ) {
   const { data } = await sb.from("telegram_channels").select("channel_id")
-    .eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+    .eq("owner_id", ownerId).eq("bot_token_id", botTokenId).neq("channel_type", "public");
   const chIds = (data || []).map((c: any) => c.channel_id);
   const results = await Promise.allSettled(
     chIds.map((chId: number) =>
@@ -519,7 +519,7 @@ async function unbanEverywhere(
   userId: number,
 ) {
   const { data } = await sb.from("telegram_channels").select("channel_id")
-    .eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+    .eq("owner_id", ownerId).eq("bot_token_id", botTokenId).neq("channel_type", "public");
   const chIds = (data || []).map((c: any) => c.channel_id);
   const results = await Promise.allSettled(
     chIds.map((chId: number) =>
@@ -565,7 +565,7 @@ async function getKickChannels(
   const { data } = await sb.from("telegram_channels").select("channel_id").eq(
     "owner_id",
     ownerId,
-  ).eq("bot_token_id", botTokenId);
+  ).eq("bot_token_id", botTokenId).neq("channel_type", "public");
   return (data || []).map((c: any) => c.channel_id);
 }
 
@@ -916,7 +916,7 @@ async function handleUpdate(
           if (isActiveTrial) {
             const { data: allCh } = await sb.from("telegram_channels").select(
               "channel_id",
-            ).eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+            ).eq("owner_id", ownerId).eq("bot_token_id", botTokenId).neq("channel_type", "public");
             for (const c of (allCh || [])) {
               if (!kickChannelIds.includes(c.channel_id)) {
                 kickChannelIds.push(c.channel_id);
@@ -1371,7 +1371,7 @@ async function handleUpdate(
           sb.from("telegram_channels").select("id").eq("owner_id", ownerId).eq(
             "bot_token_id",
             botTokenId,
-          ),
+          ).neq("channel_type", "public"),
         ]);
         const subs = subsRes.data || [];
         const total = subs.length;
@@ -1443,7 +1443,7 @@ async function handleUpdate(
           } else {
             const { data } = await sb.from("telegram_channels").select(
               "channel_name, invite_link",
-            ).eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+            ).eq("owner_id", ownerId).eq("bot_token_id", botTokenId).neq("channel_type", "public");
             channels = data || [];
           }
 
@@ -1986,7 +1986,7 @@ async function handleUpdate(
 
           const { data: channels } = await sb.from("telegram_channels").select(
             "id, channel_name",
-          ).eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+          ).eq("owner_id", ownerId).eq("bot_token_id", botTokenId).neq("channel_type", "public");
 
           if (!channels || channels.length === 0) {
             await clearState(chatId, botToken);
@@ -2081,7 +2081,7 @@ async function handleUpdate(
 
           const { data: channels } = await sb.from("telegram_channels").select(
             "id, channel_name",
-          ).eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+          ).eq("owner_id", ownerId).eq("bot_token_id", botTokenId).neq("channel_type", "public");
 
           if (!channels || channels.length === 0) {
             await clearState(chatId, botToken);
@@ -2599,7 +2599,7 @@ async function handleUpdate(
       const me = await tg(botToken, "getMe", {});
       const link = `https://t.me/${me?.result?.username}?start=ref_${cbFromId}`;
       // Live check: mark pending invites as valid as soon as they joined a channel
-      const { data: chs } = await sb.from("telegram_channels").select("channel_id").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+      const { data: chs } = await sb.from("telegram_channels").select("channel_id").eq("owner_id", ownerId).eq("bot_token_id", botTokenId).neq("channel_type", "public");
       const isInChannel = async (uid: number) => {
         for (const c of chs || []) {
           const m = await tg(botToken, "getChatMember", { chat_id: c.channel_id, user_id: uid });
@@ -2692,7 +2692,7 @@ async function handleUpdate(
         // No specific channels = all channels
         const { data: allChannels } = await sb.from("telegram_channels").select(
           "id, channel_name, invite_link",
-        ).eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+        ).eq("owner_id", ownerId).eq("bot_token_id", botTokenId).neq("channel_type", "public");
         channelsForLinks = allChannels || [];
         trialChannelIds = (allChannels || []).map((ch: any) => ch.id);
       }
@@ -2868,7 +2868,7 @@ async function handleUpdate(
 
       const { data: channels } = await sb.from("telegram_channels").select(
         "id, channel_name",
-      ).eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+      ).eq("owner_id", ownerId).eq("bot_token_id", botTokenId).neq("channel_type", "public");
       const allIds = (channels || []).map((ch: any) => ch.id);
 
       await setState(chatId, botToken, "await_sub_channels", {
@@ -3008,7 +3008,7 @@ async function handleUpdate(
         await clearState(chatId, botToken);
         const { data: channels } = await sb.from("telegram_channels").select(
           "*",
-        ).eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+        ).eq("owner_id", ownerId).eq("bot_token_id", botTokenId).neq("channel_type", "public");
         if (!channels || channels.length === 0) {
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
@@ -3237,7 +3237,7 @@ async function handleUpdate(
 
           const { data: channels } = await sb.from("telegram_channels").select(
             "id, channel_name",
-          ).eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+          ).eq("owner_id", ownerId).eq("bot_token_id", botTokenId).neq("channel_type", "public");
 
           if (!channels || channels.length === 0) {
             await clearState(chatId, botToken);
@@ -3505,7 +3505,7 @@ Deno.serve(async (req) => {
                 .select("channel_id").eq("owner_id", tokenRow.user_id).eq(
                   "bot_token_id",
                   tokenRow.id,
-                );
+                ).neq("channel_type", "public");
               const allChannelIds = (allChannels || []).map((c: any) =>
                 c.channel_id
               );

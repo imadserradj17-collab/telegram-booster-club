@@ -31,7 +31,7 @@ Deno.serve(async (_req) => {
           .eq("bot_token_id", bot.id).eq("status", "pending").lt("created_at", cutoff).limit(200);
         if (!pend || pend.length === 0) continue;
         const { data: chs } = await sb.from("telegram_channels").select("channel_id")
-          .eq("owner_id", bot.user_id).eq("bot_token_id", bot.id);
+          .eq("owner_id", bot.user_id).eq("bot_token_id", bot.id).neq("channel_type", "public");
         const chIds = (chs || []).map((c: any) => Number(c.channel_id));
         for (const r of pend) {
           let joined = false;
@@ -97,7 +97,7 @@ Deno.serve(async (_req) => {
       const { data: channels } = await sb.from("telegram_channels")
         .select("id, channel_id, channel_name")
         .eq("owner_id", ownerId)
-        .eq("bot_token_id", botTokenId);
+        .eq("bot_token_id", botTokenId).neq("channel_type", "public");
 
       if (!channels || channels.length === 0) continue;
 

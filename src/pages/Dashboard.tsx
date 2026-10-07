@@ -101,6 +101,32 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
   const [adminId, setAdminId] = useState("");
   const [nonSubMessage, setNonSubMessage] = useState("");
   const [publicChannelId, setPublicChannelId] = useState<string | null>(null);
+  const [publicChatInput, setPublicChatInput] = useState("");
+  const [publicChannelInfo, setPublicChannelInfo] = useState<{ name: string; chatId: string } | null>(null);
+  const [publicSaving, setPublicSaving] = useState(false);
+  const savePublicChannel = async () => {
+    setPublicSaving(true);
+    const { data, error } = await invokeFunction("manage-bot", { body: { action: "set_public_channel", chat_id: publicChatInput.trim() } });
+    setPublicSaving(false);
+    if (error) {
+      const code = (data as any)?.error;
+      const msg = code === "not_admin"
+        ? (lang === "ar" ? `البوت ليس مشرفاً في "${(data as any)?.title || ""}". عيّنه أدمن ثم أعد المحاولة.` : `The bot is not an admin in "${(data as any)?.title || ""}". Make it admin and retry.`)
+        : code === "not_found" ? (lang === "ar" ? "لم يتم العثور على القناة/المجموعة. تأكد من المعرف وأن البوت مضاف إليها." : "Chat not found. Check the ID and that the bot was added.")
+        : code === "invalid_id" ? (lang === "ar" ? "المعرف يجب أن يكون رقماً مثل -1001234567890" : "ID must be a number like -1001234567890")
+        : error.message;
+      toast({ title: t("common.error"), description: msg, variant: "destructive" });
+      return;
+    }
+    if ((data as any)?.cleared) {
+      setPublicChannelId(null); setPublicChannelInfo(null);
+      toast({ title: lang === "ar" ? "تمت إزالة القناة العامة ✅" : "Public channel removed ✅" });
+    } else {
+      setPublicChannelId((data as any).id);
+      setPublicChannelInfo({ name: (data as any).title, chatId: publicChatInput.trim() });
+      toast({ title: lang === "ar" ? `تم الحفظ: ${(data as any).title} ✅` : `Saved: ${(data as any).title} ✅` });
+    }
+  };
   const [subscribersChannelId, setSubscribersChannelId] = useState<string | null>(null);
   const [mandatoryChannelId, setMandatoryChannelId] = useState<string | null>(null);
   const [mandatoryChatId, setMandatoryChatId] = useState<string>("");
@@ -198,7 +224,12 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
 
     // Fetch channels
     const channelsRes = await supabase.from("telegram_channels").select("*").order("created_at", { ascending: false });
-    if (channelsRes.data) setChannels(channelsRes.data);
+    if (channelsRes.data) {
+      setChannels(channelsRes.data.filter((c: any) => c.channel_type !== "public"));
+      const pub = channelsRes.data.find((c: any) => c.id === (settingsRes.data as any)?.public_channel_id);
+      setPublicChannelInfo(pub ? { name: pub.channel_name, chatId: String(pub.channel_id) } : null);
+      setPublicChatInput(pub ? String(pub.channel_id) : "");
+    }
 
     // Fetch subscriber-channel mappings + bot users count + public members count
     try {
@@ -833,8 +864,7 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                       </div>
                       <div>
                         <h3 className="text-sm font-semibold text-foreground">{t("dash.publicMembers")}</h3>
-                        <p className="text-xs text-muted-foreground">{t("dash.publicChannelHint")}</p>
-                      </div>
+                            </div>
                     </div>
                     <div className="text-2xl font-bold text-foreground">{publicMembersCount}</div>
                   </div>
@@ -2379,19 +2409,24 @@ const Dashboard = ({ onShowAdmin }: DashboardProps) => {
                   <Label className="text-foreground/80 flex items-center gap-2">
                     <Link className="w-4 h-4" />{t("dash.publicChannel")}
                   </Label>
-                  <Select value={publicChannelId || "none"} onValueChange={(v) => setPublicChannelId(v === "none" ? null : v)}>
-                    <SelectTrigger className="bg-secondary/50 border-border/50">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">{t("dash.publicChannelNone")}</SelectItem>
-                      {channels.map(ch => (
-                        <SelectItem key={ch.id} value={ch.id}>
-                          {ch.channel_type === "group" ? "👥" : "📺"} {ch.channel_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex gap-2">
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="-1001234567890"
+                      value={publicChatInput}
+                      onChange={(e) => setPublicChatInput(e.target.value)}
+                      dir="ltr"
+                      className="bg-secondary/50 border-border/50 text-left font-mono"
+                    />
+                    <Button type="button" variant="outline" onClick={savePublicChannel} disabled={publicSaving}>
+                      {publicSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    </Button>
+                  </div>
+                  {publicChannelInfo && (
+                    <p className="text-xs text-primary">✅ {publicChannelInfo.name} <span className="font-mono text-muted-foreground">({publicChannelInfo.chatId})</span></p>
+                  )}
+                  <p className="text-xs text-muted-foreground">{lang === "ar" ? "قناة/مجموعة منفصلة عن قنوات المشتركين (مثل قناة التسريبات). عيّن البوت أدمن فيها، ضع معرفها واضغط حفظ ليتم جلب اسمها تلقائياً. اترك الخانة فارغة واضغط حفظ للإزالة." : "A separate chat, not one of the subscriber channels. Make the bot admin, enter its ID and save — the name is fetched automatically. Empty + save to remove."}</p>
                   <p className="text-xs text-muted-foreground">{t("dash.publicChannelHint")}</p>
                   {publicChannelId && publicChannelId !== "none" && (
                     <p className="text-xs text-muted-foreground mt-1">
