@@ -1371,8 +1371,8 @@ async function handleUpdate(
           sb.from("telegram_channels").select("id").eq("owner_id", ownerId).eq(
             "bot_token_id",
             botTokenId,
-          ),
-        ]).neq("channel_type", "public");
+          ).neq("channel_type", "public"),
+        ]);
         const subs = subsRes.data || [];
         const total = subs.length;
         const active = subs.filter((s: any) =>
@@ -2283,7 +2283,7 @@ async function handleUpdate(
               .eq("bot_token_id", botTokenId),
             sb.from("telegram_subscribers").select("id").eq("owner_id", ownerId)
               .eq("bot_token_id", botTokenId),
-          ]).neq("channel_type", "public");
+          ]);
 
           const otherChannelIds = (allChannelsRes.data || []).map((ch: any) =>
             ch.id
@@ -2831,7 +2831,7 @@ async function handleUpdate(
           "owner_id",
           ownerId,
         ).eq("bot_token_id", botTokenId),
-      ]).neq("channel_type", "public");
+      ]);
 
       const channels = channelsRes.data || [];
       const channelButtons = channels.map((ch: any) => {
@@ -3135,7 +3135,7 @@ async function handleUpdate(
             "bot_token_id",
             botTokenId,
           ),
-        ]).neq("channel_type", "public");
+        ]);
         const subs = subsRes.data || [];
         const total = subs.length;
         const active = subs.filter((s: any) =>
