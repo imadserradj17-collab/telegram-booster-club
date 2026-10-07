@@ -15,6 +15,13 @@
       "when": 1791371501020,
       "tag": "0001_bot_referrals",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791371972323,
+      "tag": "0002_bot_referrer_stats",
+      "breakpoints": true
     }
   ]
 }

@@ -224,6 +224,30 @@ export type Database = {
         }
         Relationships: []
       }
+      bot_referrer_stats: {
+        Row: {
+          bot_token_id: string
+          owner_id: string
+          referrer_telegram_id: number
+          rewarded_days: number
+          updated_at: string
+        }
+        Insert: {
+          bot_token_id: string
+          owner_id: string
+          referrer_telegram_id: number
+          rewarded_days?: number
+          updated_at?: string
+        }
+        Update: {
+          bot_token_id?: string
+          owner_id?: string
+          referrer_telegram_id?: number
+          rewarded_days?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       bot_tokens: {
         Row: {
           admin_telegram_id: number | null
