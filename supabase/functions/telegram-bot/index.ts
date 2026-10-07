@@ -354,6 +354,74 @@ async function broadcastConcurrent(
   return { sent, failed };
 }
 
+// ─── Referral system ───
+const REF_INVITEE_DAYS = 2;
+const REF_EVERY = 5;
+const REF_REWARD_DAYS = 3;
+
+async function addSubscriptionDays(
+  ownerId: string, botTokenId: string, user: { id: number; username?: string; first_name?: string; last_name?: string }, days: number,
+) {
+  const { data: existing } = await sb.from("telegram_subscribers").select("id, expires_at, is_permanent")
+    .eq("owner_id", ownerId).eq("telegram_user_id", user.id).maybeSingle();
+  if (existing?.is_permanent) return existing.expires_at;
+  const base = existing?.expires_at && new Date(existing.expires_at) > new Date() ? new Date(existing.expires_at) : new Date();
+  const expiresAt = new Date(base.getTime() + days * 86400000).toISOString();
+  if (existing) {
+    await sb.from("telegram_subscribers").update({ expires_at: expiresAt, expiry_notified: false }).eq("id", existing.id);
+    const { count } = await sb.from("subscriber_channels").select("id", { count: "exact", head: true }).eq("subscriber_id", existing.id);
+    if ((count ?? 0) > 0) return expiresAt;
+  }
+  const { data: sub } = existing ? { data: existing } : await sb.from("telegram_subscribers").insert({
+    owner_id: ownerId, bot_token_id: botTokenId, telegram_user_id: user.id,
+    telegram_username: user.username || null, first_name: user.first_name || null, last_name: user.last_name || null,
+    subscription_days: days, expires_at: expiresAt, is_permanent: false, expiry_notified: false,
+  }).select("id").single();
+  if (sub) {
+    const { data: chs } = await sb.from("telegram_channels").select("id").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+    if (chs && chs.length) await sb.from("subscriber_channels").insert(chs.map((c: any) => ({ subscriber_id: sub.id, channel_id: c.id })));
+  }
+  return expiresAt;
+}
+
+async function handleReferralStart(
+  botToken: string, ownerId: string, botTokenId: string, from: any, referrerId: number, adminTelegramId: number | null,
+) {
+  if (!referrerId || referrerId === from.id) return;
+  // Only brand-new bot users count
+  const { data: already } = await sb.from("bot_users").select("id").eq("owner_id", ownerId).eq("telegram_user_id", from.id).maybeSingle();
+  if (already) return;
+  const { data: refUser } = await sb.from("bot_users").select("id").eq("owner_id", ownerId).eq("telegram_user_id", referrerId).maybeSingle();
+  if (!refUser) return;
+  const { error } = await sb.from("bot_referrals").insert({
+    bot_token_id: botTokenId, owner_id: ownerId, referrer_telegram_id: referrerId, referred_telegram_id: from.id,
+    referred_name: [from.first_name, from.last_name].filter(Boolean).join(" ") || null, referred_username: from.username || null,
+  });
+  if (error) return;
+  const exp = await addSubscriptionDays(ownerId, botTokenId, from, REF_INVITEE_DAYS);
+  await tg(botToken, "sendMessage", {
+    chat_id: from.id,
+    text: `🎉 انضممت عبر رابط دعوة وحصلت على *${REF_INVITEE_DAYS} يوم* مجاناً!\n⏰ ينتهي: ${formatDate(exp)}\n\n⚠️ انضم إلى إحدى القنوات خلال 12 ساعة وإلا سيتم إلغاء الهدية.`,
+    parse_mode: "Markdown",
+  });
+  const { count } = await sb.from("bot_referrals").select("id", { count: "exact", head: true })
+    .eq("bot_token_id", botTokenId).eq("referrer_telegram_id", referrerId).neq("status", "revoked");
+  const total = count ?? 0;
+  if (total > 0 && total % REF_EVERY === 0) {
+    const rexp = await addSubscriptionDays(ownerId, botTokenId, { id: referrerId }, REF_REWARD_DAYS);
+    tgFire(botToken, "sendMessage", {
+      chat_id: referrerId,
+      text: `🏆 مبروك! وصلت إلى *${total}* دعوة وحصلت على *${REF_REWARD_DAYS} أيام* إضافية.\n⏰ ينتهي اشتراكك: ${formatDate(rexp)}`,
+      parse_mode: "Markdown",
+    });
+  } else {
+    tgFire(botToken, "sendMessage", {
+      chat_id: referrerId,
+      text: `👥 انضم شخص جديد عبر رابطك! (${total % REF_EVERY}/${REF_EVERY} للمكافأة القادمة)`,
+    });
+  }
+}
+
 // Parallel kick from channels
 async function kickFromChannels(
   botToken: string,
@@ -1229,8 +1297,15 @@ async function handleUpdate(
 
     // Ignore messages from groups/channels - only respond in private chats
     if (msg.chat.type !== "private") return;
-    const text = msg.text || "";
+    let text = msg.text || "";
     const fromId = msg.from.id;
+    const refMatch = text.match(/^\/start\s+ref_(\d+)$/);
+    if (refMatch) {
+      await handleReferralStart(botToken, ownerId, botTokenId, msg.from, Number(refMatch[1]), adminTelegramId);
+      text = "/start";
+    } else if (text.startsWith("/start ")) {
+      text = "/start";
+    }
     const firstName = msg.from.first_name || "";
     const moderatorIds = await getModeratorIds(botTokenId);
     const isOwnerAdmin = !adminTelegramId || fromId === adminTelegramId;
@@ -1375,6 +1450,7 @@ async function handleUpdate(
             text: t(lang, "btn_my_sub"),
             callback_data: "my_subscription",
           }]);
+          buttons.push([{ text: "👥 شارك البوت مع أصدقائك", callback_data: "share_bot" }]);
 
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
@@ -2491,6 +2567,24 @@ async function handleUpdate(
           parse_mode: "Markdown",
         });
       }
+      return;
+    }
+
+    if (data === "share_bot") {
+      await tg(botToken, "answerCallbackQuery", { callback_query_id: cb.id });
+      const me = await tg(botToken, "getMe", {});
+      const link = `https://t.me/${me?.result?.username}?start=ref_${cbFromId}`;
+      const { data: refs } = await sb.from("bot_referrals").select("status")
+        .eq("bot_token_id", botTokenId).eq("referrer_telegram_id", cbFromId);
+      const valid = (refs || []).filter((r: any) => r.status !== "revoked").length;
+      const revoked = (refs || []).length - valid;
+      await tg(botToken, "sendMessage", {
+        chat_id: chatId,
+        text: `👥 *شارك البوت مع أصدقائك*\n\n🎁 كل ${REF_EVERY} دعوات = *${REF_REWARD_DAYS} أيام* مجاناً\n🤝 كل صديق ينضم عبر رابطك يحصل على *${REF_INVITEE_DAYS} يوم*\n⚠️ إذا لم ينضم صديقك لأي قناة خلال 12 ساعة يُلغى ويُخصم منك ${REF_REWARD_DAYS} أيام\n\n📊 دعواتك: *${valid}* (التالية بعد ${REF_EVERY - (valid % REF_EVERY)})${revoked ? `\n❌ ملغاة: ${revoked}` : ""}\n\n🔗 رابطك:\n${link}`,
+        parse_mode: "Markdown",
+        disable_web_page_preview: true,
+        reply_markup: { inline_keyboard: [[{ text: "📤 مشاركة الرابط", url: `https://t.me/share/url?url=${encodeURIComponent(link)}` }]] },
+      });
       return;
     }
 
