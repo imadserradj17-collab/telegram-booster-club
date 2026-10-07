@@ -202,6 +202,7 @@ export type Database = {
           subscribers_channel_id: string | null
           token: string
           token_updated_at: string
+          trial_offer_message: string
           user_id: string
         }
         Insert: {
@@ -220,6 +221,7 @@ export type Database = {
           subscribers_channel_id?: string | null
           token: string
           token_updated_at?: string
+          trial_offer_message?: string
           user_id: string
         }
         Update: {
@@ -238,6 +240,7 @@ export type Database = {
           subscribers_channel_id?: string | null
           token?: string
           token_updated_at?: string
+          trial_offer_message?: string
           user_id?: string
         }
         Relationships: [

@@ -1,21 +1,19 @@
-import { db, API_BASE_URL } from "@/lib/db";
+import { supabase, API_BASE_URL } from "@/lib/db";
 
 export { API_BASE_URL };
 
 export type ApiResult<T = any> = { data: T | null; error: Error | null };
 
-function authHeaders(json = true): Record<string, string> {
-  const headers: Record<string, string> = {};
-  if (json) headers["Content-Type"] = "application/json";
-  const token = db.getAccessToken();
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  return headers;
+async function authHeaders(): Promise<Record<string, string>> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  return {
+    Authorization: `Bearer ${token}`,
+    apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+  };
 }
 
-/**
- * Calls the custom Node.js/Express backend on the VPS.
- * POST {API_BASE_URL}/{name}
- */
+/** Calls a backend function. */
 export async function invokeFunction<T = any>(
   name: "telegram-bot" | "manage-bot" | "auto-scan" | "get-channel-file",
   options: { body?: unknown } = {}
@@ -23,31 +21,22 @@ export async function invokeFunction<T = any>(
   try {
     const res = await fetch(`${API_BASE_URL}/${name}`, {
       method: "POST",
-      headers: authHeaders(),
+      headers: { ...(await authHeaders()), "Content-Type": "application/json" },
       body: JSON.stringify(options.body ?? {}),
     });
-
     const text = await res.text();
     let payload: any = null;
-    try {
-      payload = text ? JSON.parse(text) : null;
-    } catch {
-      payload = text;
-    }
-
+    try { payload = text ? JSON.parse(text) : null; } catch { payload = text; }
     if (!res.ok) {
-      const message =
-        (payload && (payload.error || payload.message)) || `Request failed (${res.status})`;
+      const message = (payload && (payload.error || payload.message)) || `Request failed (${res.status})`;
       return { data: payload, error: new Error(String(message)) };
     }
-
     return { data: payload as T, error: null };
   } catch (e: any) {
     return { data: null, error: e instanceof Error ? e : new Error(String(e)) };
   }
 }
 
-/** Build a GET URL on the custom backend (used for media streaming). */
 export function apiUrl(path: string, params?: Record<string, string | number | undefined>): string {
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(params ?? {})) {
@@ -57,12 +46,11 @@ export function apiUrl(path: string, params?: Record<string, string | number | u
   return `${API_BASE_URL}/${path.replace(/^\//, "")}${query ? `?${query}` : ""}`;
 }
 
-/** Authenticated GET returning a Blob (media files proxied by the backend). */
 export async function apiFetchBlob(
   path: string,
   params?: Record<string, string | number | undefined>
 ): Promise<Blob> {
-  const res = await fetch(apiUrl(path, params), { headers: authHeaders(false) });
+  const res = await fetch(apiUrl(path, params), { headers: await authHeaders() });
   if (!res.ok) throw new Error(`Request failed (${res.status})`);
   return res.blob();
 }
