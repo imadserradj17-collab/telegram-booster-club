@@ -1,27 +1,33 @@
-// Referral levels: reward days per completed block of 5 valid invites.
-export const REF_EVERY = 5;
+// Referral levels: each level needs N new valid invites (counter restarts at 0
+// after every achievement). Each achievement = 3 days. After level 3 it repeats.
+export const REF_REWARD_DAYS = 3;
 export const REF_LEVELS = [
-  { level: 1, from: 0, days: 3 },
-  { level: 2, from: 15, days: 5 },
-  { level: 3, from: 40, days: 7 },
+  { level: 1, need: 5 },
+  { level: 2, need: 10 },
+  { level: 3, need: 20 },
 ];
 
-export function levelFor(count: number) {
-  let cur = REF_LEVELS[0];
-  for (const l of REF_LEVELS) if (count >= l.from) cur = l;
-  return cur;
+/** Progress for `count` valid invites. */
+export function progressFor(count: number) {
+  let left = count;
+  let achieved = 0;
+  let idx = 0;
+  while (left >= REF_LEVELS[idx].need) {
+    left -= REF_LEVELS[idx].need;
+    achieved++;
+    if (idx < REF_LEVELS.length - 1) idx++;
+  }
+  const cur = REF_LEVELS[idx];
+  return { achieved, level: cur.level, need: cur.need, counter: left };
 }
 
-/** Total reward days earned for `count` valid invites. */
 export function rewardFor(count: number): number {
-  let total = 0;
-  for (let end = REF_EVERY; end <= count; end += REF_EVERY) total += levelFor(end).days;
-  return total;
+  return progressFor(count).achieved * REF_REWARD_DAYS;
 }
 
 /**
  * Recompute referrer reward vs. what was already granted and apply the difference
- * (positive = add days, negative = take back days previously granted).
+ * (positive = add days, negative = take back days when an invite gets revoked).
  */
 export async function syncReferrerReward(
   sb: any, ownerId: string, botTokenId: string, referrerId: number,
@@ -43,5 +49,5 @@ export async function syncReferrerReward(
       rewarded_days: target, updated_at: new Date().toISOString(),
     }, { onConflict: "bot_token_id,referrer_telegram_id" });
   }
-  return { total, diff, expiresAt, level: levelFor(total) };
+  return { total, diff, expiresAt, ...progressFor(total) };
 }
