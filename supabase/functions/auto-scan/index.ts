@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-import { syncReferrerReward } from "../_shared/referrals.ts";
+import { syncReferrerReward, uplineOf } from "../_shared/referrals.ts";
 const sb = createClient(supabaseUrl, supabaseServiceKey);
 
 async function tg(token: string, method: string, body?: any) {
@@ -52,22 +52,31 @@ Deno.serve(async (_req) => {
             await sb.from("subscriber_channels").delete().eq("subscriber_id", sub.id);
             await sb.from("telegram_subscribers").delete().eq("id", sub.id);
           }
-          // Take back rewards only if the referrer drops below an already-rewarded milestone
-          const rs = await syncReferrerReward(sb, bot.user_id, bot.id, Number(r.referrer_telegram_id), async (d) => {
-            const { data: rsub } = await sb.from("telegram_subscribers").select("id, expires_at, is_permanent")
-              .eq("owner_id", bot.user_id).eq("telegram_user_id", r.referrer_telegram_id).maybeSingle();
-            if (!rsub || rsub.is_permanent || !rsub.expires_at) return null;
-            const e = new Date(new Date(rsub.expires_at).getTime() + d * 86400000).toISOString();
-            await sb.from("telegram_subscribers").update({ expires_at: e }).eq("id", rsub.id);
-            return e;
-          });
+          // Recompute rewards for the whole upline (L1..L3); take back only if a milestone is undone
+          const refId = Number(r.referrer_telegram_id);
+          const chain = [refId, ...(await uplineOf(sb, bot.id, refId))].slice(0, 3);
+          let rs: any = { diff: 0 };
+          for (const uid of chain) {
+            const res = await syncReferrerReward(sb, bot.user_id, bot.id, uid, async (d) => {
+              const { data: rsub } = await sb.from("telegram_subscribers").select("id, expires_at, is_permanent")
+                .eq("owner_id", bot.user_id).eq("telegram_user_id", uid).maybeSingle();
+              if (!rsub || rsub.is_permanent || !rsub.expires_at) return null;
+              const e = new Date(new Date(rsub.expires_at).getTime() + d * 86400000).toISOString();
+              await sb.from("telegram_subscribers").update({ expires_at: e }).eq("id", rsub.id);
+              return e;
+            });
+            if (uid === refId) rs = res;
+            else if (res.diff < 0) {
+              await tg(bot.token, "sendMessage", { chat_id: uid, text: `⚠️ أُلغيت دعوة في شبكتك فتم سحب ${-res.diff} أيام من مكافأة سابقة.` }).catch(() => {});
+            }
+          }
           await tg(bot.token, "sendMessage", {
             chat_id: r.referred_telegram_id,
             text: "❌ تم إلغاء هدية الدعوة لأنك لم تنضم إلى أي قناة خلال 12 ساعة.",
           }).catch(() => {});
           await tg(bot.token, "sendMessage", {
             chat_id: r.referrer_telegram_id,
-            text: `⚠️ ${r.referred_name || r.referred_telegram_id} لم ينضم لأي قناة خلال 12 ساعة، تم إلغاء دعوته.${rs.diff < 0 ? ` نزل عدد دعواتك إلى ${rs.total} فتم سحب ${-rs.diff} أيام من مكافأة سابقة.` : ""}`,
+            text: `⚠️ ${r.referred_name || r.referred_telegram_id} لم ينضم لأي قناة خلال 12 ساعة، تم إلغاء دعوته.${rs.diff < 0 ? ` تم سحب ${-rs.diff} أيام من مكافأة سابقة.` : ""}`,
           }).catch(() => {});
           await sleep(50);
         }

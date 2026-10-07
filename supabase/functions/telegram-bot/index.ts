@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { REF_LEVELS, REF_REWARD_DAYS, progressFor, syncReferrerReward } from "../_shared/referrals.ts";
+import { REF_LEVELS, REF_REWARD_DAYS, REF_PENDING_HOURS, levelCounts, uplineOf, syncReferrerReward, timeLeft } from "../_shared/referrals.ts";
 import { t, langPickerKeyboard, type Lang } from "./i18n.ts";
 
 async function getUserLang(
@@ -415,22 +415,21 @@ async function handleReferralStart(
   const exp = await addSubscriptionDays(ownerId, botTokenId, from, REF_INVITEE_DAYS);
   await tg(botToken, "sendMessage", {
     chat_id: from.id,
-    text: `🎉 انضممت عبر رابط دعوة وحصلت على *${REF_INVITEE_DAYS} يوم* مجاناً!\n⏰ ينتهي: ${formatDate(exp)}\n\n⚠️ انضم إلى إحدى القنوات خلال 12 ساعة وإلا سيتم إلغاء الهدية.`,
+    text: `🎉 انضممت عبر رابط دعوة وحصلت على *${REF_INVITEE_DAYS} يوم* مجاناً!\n⏰ ينتهي: ${formatDate(exp)}\n\n⚠️ انضم إلى إحدى القنوات خلال 12 ساعة وإلا سيتم إلغاء الهدية.\n📊 اضغط "👥 شارك البوت" لمتابعة حالة دعوتك والوقت المتبقي.`,
     parse_mode: "Markdown",
   });
-  const r = await syncReferrerReward(sb, ownerId, botTokenId, referrerId,
-    (d) => addSubscriptionDays(ownerId, botTokenId, { id: referrerId }, d));
-  if (r.diff > 0) {
-    tgFire(botToken, "sendMessage", {
-      chat_id: referrerId,
-      text: `🏆 مبروك! أكملت المستوى وحصلت على *${r.diff} أيام* إضافية (مرات الإنجاز: ${r.achieved}).\n🔄 العداد بدأ من 0 • المستوى الحالي ${r.level}: 0/${r.need}\n⏰ ينتهي اشتراكك: ${formatDate(r.expiresAt!)}`,
-      parse_mode: "Markdown",
-    });
-  } else {
-    tgFire(botToken, "sendMessage", {
-      chat_id: referrerId,
-      text: `👥 انضم شخص جديد عبر رابطك! المستوى ${r.level}: ${r.counter}/${r.need}`,
-    });
+  // Reward the whole upline: referrer = L1, their referrer = L2, then L3
+  const upline = [referrerId, ...(await uplineOf(sb, botTokenId, referrerId))].slice(0, REF_LEVELS.length);
+  const who = [from.first_name, from.last_name].filter(Boolean).join(" ") || String(from.id);
+  for (let i = 0; i < upline.length; i++) {
+    const uid = upline[i];
+    const r = await syncReferrerReward(sb, ownerId, botTokenId, uid,
+      (d) => addSubscriptionDays(ownerId, botTokenId, { id: uid }, d));
+    const lv = r.levels[i];
+    let txt = `👥 انضم *${who}* إلى شبكتك في *المستوى ${lv.level}*\n📊 المستوى ${lv.level}: ${lv.counter}/${lv.need} • إنجازات: ${lv.achieved}`;
+    if (i === 0) txt += `\n⏳ يجب أن ينضم لقناة خلال: ${REF_PENDING_HOURS}س`;
+    if (r.diff > 0) txt += `\n\n🏆 مبروك! حصلت على *${r.diff} أيام* إضافية، والعداد بدأ من 0.\n⏰ ينتهي اشتراكك: ${formatDate(r.expiresAt!)}`;
+    tgFire(botToken, "sendMessage", { chat_id: uid, text: txt, parse_mode: "Markdown" });
   }
 }
 
@@ -2587,17 +2586,43 @@ async function handleUpdate(
       await tg(botToken, "answerCallbackQuery", { callback_query_id: cb.id });
       const me = await tg(botToken, "getMe", {});
       const link = `https://t.me/${me?.result?.username}?start=ref_${cbFromId}`;
-      const { data: refs } = await sb.from("bot_referrals").select("status")
-        .eq("bot_token_id", botTokenId).eq("referrer_telegram_id", cbFromId);
-      const valid = (refs || []).filter((r: any) => r.status !== "revoked").length;
-      const revoked = (refs || []).length - valid;
-      const pr = progressFor(valid);
+      // Live check: mark pending invites as valid as soon as they joined a channel
+      const { data: chs } = await sb.from("telegram_channels").select("channel_id").eq("owner_id", ownerId).eq("bot_token_id", botTokenId);
+      const isInChannel = async (uid: number) => {
+        for (const c of chs || []) {
+          const m = await tg(botToken, "getChatMember", { chat_id: c.channel_id, user_id: uid });
+          if (m?.ok && ["member", "administrator", "creator", "restricted"].includes(m.result?.status)) return true;
+        }
+        return false;
+      };
+      const { data: mine } = await sb.from("bot_referrals").select("*")
+        .eq("bot_token_id", botTokenId).eq("referrer_telegram_id", cbFromId).order("created_at", { ascending: false }).limit(200);
+      const { data: myInvite } = await sb.from("bot_referrals").select("*")
+        .eq("bot_token_id", botTokenId).eq("referred_telegram_id", cbFromId).maybeSingle();
+      const toCheck = [...(mine || []).filter((r: any) => r.status === "pending").slice(0, 10), ...(myInvite?.status === "pending" ? [myInvite] : [])];
+      await Promise.all(toCheck.map(async (r: any) => {
+        if (await isInChannel(Number(r.referred_telegram_id))) {
+          r.status = "valid";
+          await sb.from("bot_referrals").update({ status: "valid", checked_at: new Date().toISOString() }).eq("id", r.id);
+        }
+      }));
+      const levels = await levelCounts(sb, botTokenId, cbFromId);
+      const stIcon = (r: any) => r.status === "valid" ? "✅ انضم لقناة" : r.status === "revoked" ? "❌ ملغاة" : `⏳ متبقي ${timeLeft(r.created_at)}`;
+      const recent = (mine || []).slice(0, 10).map((r: any) =>
+        `• ${r.referred_name || r.referred_telegram_id}${r.referred_username ? ` (@${r.referred_username})` : ""} — ${stIcon(r)}`).join("\n");
+      let txt = `👥 شارك البوت مع أصدقائك\n\n🤝 كل صديق ينضم عبر رابطك يحصل على ${REF_INVITEE_DAYS} يوم\n🌳 المستوى 1 = من دعوتهم مباشرة، المستوى 2 = من دعاهم المستوى 1، المستوى 3 = من دعاهم المستوى 2\n🎁 كل إنجاز = ${REF_REWARD_DAYS} أيام ثم يبدأ العداد من 0\n⚠️ تُلغى الدعوة إذا لم ينضم المدعو لقناة خلال ${REF_PENDING_HOURS} ساعة\n🛡 من دخل البوت سابقاً لا يُحتسب\n\n`;
+      txt += levels.map((l) => `🏅 المستوى ${l.level}: ${l.counter}/${l.need} • إنجازات: ${l.achieved} • الإجمالي: ${l.count}`).join("\n");
+      if (recent) txt += `\n\n📋 آخر دعواتك المباشرة:\n${recent}`;
+      if (myInvite) txt += `\n\n🎟 دعوتك أنت: ${stIcon(myInvite)}${myInvite.status === "pending" ? " — انضم لأي قناة للحفاظ على هديتك" : ""}`;
+      txt += `\n\n🔗 رابطك:\n${link}`;
       await tg(botToken, "sendMessage", {
         chat_id: chatId,
-        text: `👥 *شارك البوت مع أصدقائك*\n\n🤝 كل صديق ينضم عبر رابطك يحصل على *${REF_INVITEE_DAYS} يوم*\n🎁 كل مستوى = *${REF_REWARD_DAYS} أيام*، ثم يبدأ العداد من 0:\n${REF_LEVELS.map((l) => `• المستوى ${l.level}: ${l.need} دعوات`).join("\n")}\n⚠️ الدعوة تُلغى إذا لم ينضم صديقك لأي قناة خلال 12 ساعة\n🛡 من دخل البوت سابقاً لا يُحتسب\n\n🏅 المستوى الحالي: *${pr.level}* — *${pr.counter}/${pr.need}*\n🏆 مرات الإنجاز: *${pr.achieved}*${revoked ? `\n❌ ملغاة: ${revoked}` : ""}\n\n🔗 رابطك:\n${link}`,
-        parse_mode: "Markdown",
+        text: txt.slice(0, 4000),
         disable_web_page_preview: true,
-        reply_markup: { inline_keyboard: [[{ text: "📤 مشاركة الرابط", url: `https://t.me/share/url?url=${encodeURIComponent(link)}` }]] },
+        reply_markup: { inline_keyboard: [
+          [{ text: "📤 مشاركة الرابط", url: `https://t.me/share/url?url=${encodeURIComponent(link)}` }],
+          [{ text: "🔄 تحديث الحالة", callback_data: "share_bot" }],
+        ] },
       });
       return;
     }
