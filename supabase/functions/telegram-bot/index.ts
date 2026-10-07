@@ -1528,6 +1528,7 @@ async function handleUpdate(
               }]);
             }
           }
+          buttons.push([{ text: "👥 شارك البوت مع أصدقائك", callback_data: "share_bot" }]);
           const replyMarkup = buttons.length > 0
             ? { inline_keyboard: buttons }
             : undefined;
