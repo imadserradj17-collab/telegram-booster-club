@@ -248,7 +248,7 @@ Deno.serve(async (req) => {
           .select("*")
           .eq("owner_id", user.id)
           .eq("bot_token_id", botTokenId)
-          .order("created_at", { ascending: false });
+          .order("created_at", { ascending: false }).neq("channel_type", "public");
 
         return new Response(
           JSON.stringify({ ok: true, channels: channels || [] }),
@@ -404,7 +404,7 @@ Deno.serve(async (req) => {
         const { data: allChannels } = await sb.from("telegram_channels")
           .select("channel_id, channel_name")
           .eq("owner_id", user.id)
-          .eq("bot_token_id", sub.bot_token_id || botData.id);
+          .eq("bot_token_id", sub.bot_token_id || botData.id).neq("channel_type", "public");
 
         const channelsList = (allChannels || []).filter((c: any) => c.channel_id);
 
@@ -527,7 +527,7 @@ Deno.serve(async (req) => {
         const { data: allChs } = await sb.from("telegram_channels")
           .select("channel_id")
           .eq("owner_id", user.id)
-          .eq("bot_token_id", botTokenId);
+          .eq("bot_token_id", botTokenId).neq("channel_type", "public");
 
         const chIds = (allChs || []).map((c: any) => c.channel_id).filter(
           Boolean,
@@ -609,7 +609,7 @@ Deno.serve(async (req) => {
         const { data: allChsUnban } = await sb.from("telegram_channels")
           .select("channel_id")
           .eq("owner_id", user.id)
-          .eq("bot_token_id", botTokenId);
+          .eq("bot_token_id", botTokenId).neq("channel_type", "public");
 
         const chIdsUnban = (allChsUnban || []).map((c: any) => c.channel_id)
           .filter(Boolean);
@@ -781,7 +781,7 @@ Deno.serve(async (req) => {
 
         const { data: allChannels } = await sb.from("telegram_channels").select(
           "channel_id",
-        ).eq("owner_id", user.id).eq("bot_token_id", botTokenId);
+        ).eq("owner_id", user.id).eq("bot_token_id", botTokenId).neq("channel_type", "public");
         const channelIds = (allChannels || []).map((c: any) => c.channel_id);
 
         let kicked = 0, failed = 0;
@@ -850,7 +850,7 @@ Deno.serve(async (req) => {
         const { data: allChs2 } = await sb.from("telegram_channels")
           .select("channel_id")
           .eq("owner_id", user.id)
-          .eq("bot_token_id", botTokenId);
+          .eq("bot_token_id", botTokenId).neq("channel_type", "public");
         const chIds2 = (allChs2 || []).map((c: any) => c.channel_id).filter(
           Boolean,
         );
@@ -937,7 +937,7 @@ Deno.serve(async (req) => {
         let qNS = sb.from("telegram_channels")
           .select("id, channel_id, channel_name")
           .eq("owner_id", user.id)
-          .eq("bot_token_id", botTokenId);
+          .eq("bot_token_id", botTokenId).neq("channel_type", "public");
         if (target_channel_id) qNS = qNS.eq("id", target_channel_id);
         const { data: allChsNS } = await qNS;
 
@@ -1136,7 +1136,7 @@ Deno.serve(async (req) => {
         let qKA = sb.from("telegram_channels")
           .select("id, channel_id, channel_name")
           .eq("owner_id", user.id)
-          .eq("bot_token_id", botTokenId);
+          .eq("bot_token_id", botTokenId).neq("channel_type", "public");
         if (targetChKA) qKA = qKA.eq("id", targetChKA);
         const { data: allChsKA } = await qKA;
 
@@ -1302,7 +1302,7 @@ Deno.serve(async (req) => {
         const { data: allChs } = await sb.from("telegram_channels")
           .select("channel_id, channel_name")
           .eq("owner_id", user.id)
-          .eq("bot_token_id", botTokenId);
+          .eq("bot_token_id", botTokenId).neq("channel_type", "public");
 
         const chList = allChs || [];
         if (chList.length === 0) {
@@ -1345,7 +1345,7 @@ Deno.serve(async (req) => {
           .from("telegram_channels")
           .select("id, channel_id, channel_name, channel_type")
           .eq("owner_id", user.id)
-          .eq("bot_token_id", botTokenId);
+          .eq("bot_token_id", botTokenId).neq("channel_type", "public");
 
         if (!chList || chList.length === 0) {
           return new Response(
