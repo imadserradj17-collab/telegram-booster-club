@@ -2602,19 +2602,6 @@ async function handleUpdate(
       return;
     }
 
-    if (data === "my_link") {
-      await tg(botToken, "answerCallbackQuery", { callback_query_id: cb.id });
-      const me = await tg(botToken, "getMe", {});
-      const link = `https://t.me/${me?.result?.username}?start=ref_${cbFromId}`;
-      await tg(botToken, "sendMessage", {
-        chat_id: chatId,
-        text: `🔗 رابط الدعوة الخاص بك:\n${link}`,
-        disable_web_page_preview: true,
-        reply_markup: { inline_keyboard: [[{ text: "📤 مشاركة الرابط", url: `https://t.me/share/url?url=${encodeURIComponent(link)}` }]] },
-      });
-      return;
-    }
-
     if (data === "my_channels" || data === "available_channels") {
       await tg(botToken, "answerCallbackQuery", { callback_query_id: cb.id });
       const { data: sub } = await sb.from("telegram_subscribers").select("*")
@@ -2647,7 +2634,7 @@ async function handleUpdate(
       return;
     }
 
-    if (data === "share_bot") {
+    if (data === "share_bot" || data === "my_link") {
       await tg(botToken, "answerCallbackQuery", { callback_query_id: cb.id });
       const me = await tg(botToken, "getMe", {});
       const link = `https://t.me/${me?.result?.username}?start=ref_${cbFromId}`;
@@ -2675,7 +2662,8 @@ async function handleUpdate(
       const stIcon = (r: any) => r.status === "valid" ? "✅ انضم لقناة" : r.status === "revoked" ? "❌ ملغاة" : `⏳ متبقي ${timeLeft(r.created_at)}`;
       const recent = (mine || []).slice(0, 10).map((r: any) =>
         `• ${r.referred_name || r.referred_telegram_id}${r.referred_username ? ` (@${r.referred_username})` : ""} — ${stIcon(r)}`).join("\n");
-      let txt = `👥 شارك البوت مع أصدقائك\n\n🤝 كل صديق ينضم عبر رابطك يحصل على ${REF_INVITEE_DAYS} يوم\n🌳 المستوى 1 = من دعوتهم مباشرة، المستوى 2 = من دعاهم المستوى 1، المستوى 3 = من دعاهم المستوى 2\n🎁 كل إنجاز = ${REF_REWARD_DAYS} أيام ثم يبدأ العداد من 0\n⚠️ تُلغى الدعوة إذا لم ينضم المدعو لقناة خلال ${REF_PENDING_HOURS} ساعة\n🛡 من دخل البوت سابقاً لا يُحتسب\n\n`;
+      const title = data === "my_link" ? "🔗 رابط الدعوة الخاص بك" : "👥 شارك البوت مع أصدقائك";
+      let txt = `${title}\n\n🤝 كل صديق ينضم عبر رابطك يحصل على ${REF_INVITEE_DAYS} يوم\n🌳 المستوى 1 = من دعوتهم مباشرة، المستوى 2 = من دعاهم المستوى 1، المستوى 3 = من دعاهم المستوى 2\n🎁 كل إنجاز = ${REF_REWARD_DAYS} أيام ثم يبدأ العداد من 0\n⚠️ تُلغى الدعوة إذا لم ينضم المدعو لقناة خلال ${REF_PENDING_HOURS} ساعة\n🛡 من دخل البوت سابقاً لا يُحتسب\n\n`;
       txt += levels.map((l) => `🏅 المستوى ${l.level}: ${l.counter}/${l.need} • إنجازات: ${l.achieved} • الإجمالي: ${l.count}`).join("\n");
       if (recent) txt += `\n\n📋 آخر دعواتك المباشرة:\n${recent}`;
       if (myInvite) txt += `\n\n🎟 دعوتك أنت: ${stIcon(myInvite)}${myInvite.status === "pending" ? " — انضم لأي قناة للحفاظ على هديتك" : ""}`;
