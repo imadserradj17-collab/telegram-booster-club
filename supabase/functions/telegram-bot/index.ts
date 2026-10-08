@@ -2647,7 +2647,7 @@ async function handleUpdate(
       return;
     }
 
-    if (data === "share_bot") {
+    if (data === "share_bot" || data === "my_link_full") {
       await tg(botToken, "answerCallbackQuery", { callback_query_id: cb.id });
       const me = await tg(botToken, "getMe", {});
       const link = `https://t.me/${me?.result?.username}?start=ref_${cbFromId}`;
