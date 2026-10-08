@@ -2602,19 +2602,6 @@ async function handleUpdate(
       return;
     }
 
-    if (data === "my_link") {
-      await tg(botToken, "answerCallbackQuery", { callback_query_id: cb.id });
-      const me = await tg(botToken, "getMe", {});
-      const link = `https://t.me/${me?.result?.username}?start=ref_${cbFromId}`;
-      await tg(botToken, "sendMessage", {
-        chat_id: chatId,
-        text: `🔗 رابط الدعوة الخاص بك:\n${link}`,
-        disable_web_page_preview: true,
-        reply_markup: { inline_keyboard: [[{ text: "📤 مشاركة الرابط", url: `https://t.me/share/url?url=${encodeURIComponent(link)}` }]] },
-      });
-      return;
-    }
-
     if (data === "my_channels" || data === "available_channels") {
       await tg(botToken, "answerCallbackQuery", { callback_query_id: cb.id });
       const { data: sub } = await sb.from("telegram_subscribers").select("*")
