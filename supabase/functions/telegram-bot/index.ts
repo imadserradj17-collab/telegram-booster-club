@@ -1473,6 +1473,7 @@ async function handleUpdate(
             text: t(lang, "btn_my_sub"),
             callback_data: "my_subscription",
           }]);
+          buttons.push([{ text: "🔗 رابطي", callback_data: "my_link" }, { text: "📺 قنواتي", callback_data: "my_channels" }]);
           buttons.push([{ text: "👥 شارك البوت مع أصدقائك", callback_data: "share_bot" }]);
 
           await tg(botToken, "sendMessage", {
@@ -1501,6 +1502,11 @@ async function handleUpdate(
               };
             }
           }
+          replyMarkup = { inline_keyboard: [
+            ...(replyMarkup?.inline_keyboard || []),
+            [{ text: "🔗 رابطي", callback_data: "my_link" }, { text: "📺 قنواتي", callback_data: "my_channels" }],
+            [{ text: "📋 القنوات المتاحة", callback_data: "available_channels" }],
+          ] };
           await tg(botToken, "sendMessage", {
             chat_id: chatId,
             text: t(lang, "sub_expired", {
@@ -1551,6 +1557,8 @@ async function handleUpdate(
               }]);
             }
           }
+          buttons.push([{ text: "🔗 رابطي", callback_data: "my_link" }, { text: "📺 قنواتي", callback_data: "my_channels" }]);
+          buttons.push([{ text: "📋 القنوات المتاحة", callback_data: "available_channels" }]);
           buttons.push([{ text: "👥 شارك البوت مع أصدقائك", callback_data: "share_bot" }]);
           const replyMarkup = buttons.length > 0
             ? { inline_keyboard: buttons }
@@ -2591,6 +2599,51 @@ async function handleUpdate(
           parse_mode: "Markdown",
         });
       }
+      return;
+    }
+
+    if (data === "my_link") {
+      await tg(botToken, "answerCallbackQuery", { callback_query_id: cb.id });
+      const me = await tg(botToken, "getMe", {});
+      const link = `https://t.me/${me?.result?.username}?start=ref_${cbFromId}`;
+      await tg(botToken, "sendMessage", {
+        chat_id: chatId,
+        text: `🔗 رابط الدعوة الخاص بك:\n${link}`,
+        disable_web_page_preview: true,
+        reply_markup: { inline_keyboard: [[{ text: "📤 مشاركة الرابط", url: `https://t.me/share/url?url=${encodeURIComponent(link)}` }]] },
+      });
+      return;
+    }
+
+    if (data === "my_channels" || data === "available_channels") {
+      await tg(botToken, "answerCallbackQuery", { callback_query_id: cb.id });
+      const { data: sub } = await sb.from("telegram_subscribers").select("*")
+        .eq("owner_id", ownerId).eq("bot_token_id", botTokenId).eq("telegram_user_id", cbFromId).maybeSingle();
+      const active = sub && (sub.is_permanent || (sub.expires_at && new Date(sub.expires_at) > new Date()));
+      if (data === "available_channels") {
+        const { data: all } = await sb.from("telegram_channels").select("channel_name, channel_type")
+          .eq("owner_id", ownerId).eq("bot_token_id", botTokenId).neq("channel_type", "public");
+        const list = (all || []).map((c: any) => `${c.channel_type === "group" ? "👥" : "📺"} ${c.channel_name}`).join("\n");
+        await tg(botToken, "sendMessage", {
+          chat_id: chatId,
+          text: list ? `📋 القنوات المتاحة عند الاشتراك:\n\n${list}` : "📋 لا توجد قنوات متاحة حالياً.",
+        });
+        return;
+      }
+      if (!active) {
+        await tg(botToken, "sendMessage", { chat_id: chatId, text: "❌ ليس لديك اشتراك نشط." });
+        return;
+      }
+      const ids = await getSubscriberChannels(sub.id);
+      let q = sb.from("telegram_channels").select("channel_name, invite_link, channel_type");
+      q = ids.length > 0 ? q.in("id", ids) : q.eq("owner_id", ownerId).eq("bot_token_id", botTokenId).neq("channel_type", "public");
+      const { data: chs } = await q;
+      const btns = (chs || []).filter((c: any) => c.invite_link).map((c: any) => [{ text: `${c.channel_type === "group" ? "👥" : "📺"} ${c.channel_name}`, url: c.invite_link }]);
+      await tg(botToken, "sendMessage", {
+        chat_id: chatId,
+        text: btns.length ? "📺 قنواتك:" : "📺 لا توجد قنوات مرتبطة باشتراكك.",
+        ...(btns.length ? { reply_markup: { inline_keyboard: btns } } : {}),
+      });
       return;
     }
 
